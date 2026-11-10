@@ -1,0 +1,267 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color: #23334a;
+  background: #f4f6fa;
+  font-size: 14px;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+button,
+a {
+  cursor: pointer;
+}
+button,
+select,
+input,
+textarea {
+  border: 1px solid #ccd5e2;
+  border-radius: 6px;
+  padding: 8px;
+  background: white;
+  color: inherit;
+}
+button:hover,
+a:hover {
+  background: #edf1ff;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+button.active,
+button[type="submit"] {
+  background: #4338ca;
+  color: white;
+}
+header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  background: white;
+  padding: 16px;
+  border-bottom: 1px solid #dbe1eb;
+}
+header > div {
+  margin-right: auto;
+}
+small {
+  display: block;
+  color: #617187;
+  margin-top: 4px;
+}
+nav {
+  display: flex;
+  gap: 4px;
+}
+a {
+  color: #4338ca;
+  padding: 8px;
+}
+#message {
+  padding: 8px 16px;
+  color: #425573;
+  white-space: pre-wrap;
+}
+#message.error,
+#editError {
+  color: #a32424;
+}
+.filters {
+  display: flex;
+  gap: 14px;
+  align-items: end;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+}
+.filters label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.filters .search {
+  flex: 1;
+}
+.search input {
+  width: 100%;
+}
+main {
+  display: grid;
+  grid-template-columns: minmax(350px, 1.2fr) minmax(320px, 1fr);
+  gap: 16px;
+  padding: 0 16px 20px;
+}
+#list,
+aside {
+  background: white;
+  border: 1px solid #dbe1eb;
+  border-radius: 10px;
+  padding: 18px;
+  min-width: 0;
+}
+aside {
+  align-self: start;
+  position: sticky;
+  top: 12px;
+}
+.item {
+  display: block;
+  text-align: left;
+  width: 100%;
+  margin: 5px 0;
+  padding: 12px;
+  border-color: #e3e8ef;
+}
+.item.selected {
+  border-color: #4338ca;
+  background: #eef0ff;
+}
+.item strong {
+  display: block;
+}
+.item.level2 {
+  width: calc(100% - 18px);
+  margin-left: 18px;
+}
+.item.level3 {
+  width: calc(100% - 36px);
+  margin-left: 36px;
+}
+.badge {
+  display: inline-block;
+  background: #edf1f7;
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 12px;
+  margin: 4px 4px 0 0;
+}
+.late {
+  color: #a32424;
+  background: #fff0ed;
+}
+.text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.65;
+}
+.muted,
+.empty {
+  color: #66758a;
+}
+.empty {
+  padding: 20px;
+}
+h2 {
+  font-size: 20px;
+  margin-top: 0;
+}
+h3 {
+  font-size: 15px;
+  margin-top: 24px;
+}
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+progress {
+  width: 100%;
+  accent-color: #4338ca;
+}
+.meta {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+#mapping {
+  background: white;
+  padding: 18px;
+  margin: 0 16px;
+  border: 1px solid #ccd5e2;
+  border-radius: 8px;
+}
+#mapping .grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 12px;
+}
+fieldset {
+  border: 1px solid #dbe1eb;
+  border-radius: 6px;
+  min-width: 0;
+}
+fieldset label {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 6px 0;
+  align-items: center;
+}
+fieldset select {
+  width: 100%;
+}
+dialog {
+  width: min(700px, 95vw);
+  max-height: 90vh;
+  border: 1px solid #ccd5e2;
+  border-radius: 12px;
+  padding: 22px;
+}
+dialog::backdrop {
+  background: #17223b70;
+}
+.dialoghead {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+}
+#fields label {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+}
+textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+#fields input,
+#fields select,
+#fields textarea {
+  width: 100%;
+}
+select[multiple] {
+  min-height: 100px;
+}
+.mappingwarning {
+  color: #8e4810;
+}
+@media (max-width: 800px) {
+  main {
+    grid-template-columns: 1fr;
+  }
+  aside {
+    position: static;
+  }
+  .filters label {
+    flex-wrap: wrap;
+  }
+  header {
+    gap: 6px;
+  }
+}
+
+[hidden] {
+  display: none !important;
+}

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Projets, notes et actions — Grist</title>
+    <link rel="stylesheet" href="workspace.css" />
+    <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+  </head>
+  <body>
+    <header>
+      <div>
+        <strong>Projets, notes et actions</strong
+        ><small>Un suivi partagé, du chantier à la prochaine action</small>
+      </div>
+      <nav aria-label="Vues">
+        <button data-view="projects">Projets</button
+        ><button data-view="notes">Notes et réunions</button
+        ><button data-view="actions">À faire</button>
+      </nav>
+      <button id="mappingButton">Mapping</button
+      ><button id="refresh">Actualiser</button
+      ><a href="timeline.html">Timeline</a>
+    </header>
+    <div id="message" role="status"></div>
+    <section
+      id="mapping"
+      hidden
+      aria-label="Configuration des tables"
+    ></section>
+    <div class="filters">
+      <label
+        >Projet
+        <select id="projectFilter"></select></label
+      ><label
+        >Responsable
+        <select id="ownerFilter"></select></label
+      ><label
+        >Statut
+        <select id="statusFilter"></select></label
+      ><label class="search"
+        >Rechercher
+        <input
+          id="search"
+          type="search"
+          placeholder="Titre, notes, action…" /></label
+      ><label
+        ><input id="unlinked" type="checkbox" /> Actions sans
+        rattachement</label
+      ><label><input id="overdue" type="checkbox" /> Actions en retard</label>
+    </div>
+    <main>
+      <section id="list" aria-label="Liste des éléments"></section>
+      <aside id="detail" aria-label="Détail"></aside>
+    </main>
+    <dialog id="editor">
+      <form id="editForm">
+        <div class="dialoghead">
+          <h2 id="editorTitle"></h2>
+          <button type="button" id="cancel">Fermer</button>
+        </div>
+        <div id="fields"></div>
+        <p id="editError" role="alert"></p>
+        <button id="save" type="submit">Enregistrer</button>
+      </form>
+    </dialog>
+    <script src="workspace.js"></script>
+  </body>
+</html>

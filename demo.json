@@ -1,0 +1,667 @@
+{
+  "tables": [
+    {
+      "id": 1,
+      "tableId": "Projets",
+      "label": "Projets"
+    },
+    {
+      "id": 2,
+      "tableId": "Chantiers",
+      "label": "Chantiers"
+    },
+    {
+      "id": 3,
+      "tableId": "Taches",
+      "label": "Taches"
+    },
+    {
+      "id": 4,
+      "tableId": "Notes",
+      "label": "Notes"
+    },
+    {
+      "id": 5,
+      "tableId": "Actions",
+      "label": "Actions"
+    }
+  ],
+  "meta": [
+    {
+      "id": 1,
+      "parentId": 1,
+      "table": "Projets",
+      "colId": "Code",
+      "label": "Code",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 2,
+      "parentId": 1,
+      "table": "Projets",
+      "colId": "Titre",
+      "label": "Titre",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 3,
+      "parentId": 1,
+      "table": "Projets",
+      "colId": "Description",
+      "label": "Description",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 4,
+      "parentId": 1,
+      "table": "Projets",
+      "colId": "Responsable",
+      "label": "Responsable",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 5,
+      "parentId": 1,
+      "table": "Projets",
+      "colId": "DateDebut",
+      "label": "DateDebut",
+      "type": "Date",
+      "isFormula": false
+    },
+    {
+      "id": 6,
+      "parentId": 1,
+      "table": "Projets",
+      "colId": "DateFin",
+      "label": "DateFin",
+      "type": "Date",
+      "isFormula": false
+    },
+    {
+      "id": 7,
+      "parentId": 1,
+      "table": "Projets",
+      "colId": "Statut",
+      "label": "Statut",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 8,
+      "parentId": 1,
+      "table": "Projets",
+      "colId": "PointEtape",
+      "label": "PointEtape",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 9,
+      "parentId": 2,
+      "table": "Chantiers",
+      "colId": "Code",
+      "label": "Code",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 10,
+      "parentId": 2,
+      "table": "Chantiers",
+      "colId": "Projet",
+      "label": "Projet",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 11,
+      "parentId": 2,
+      "table": "Chantiers",
+      "colId": "Volet",
+      "label": "Volet",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 12,
+      "parentId": 2,
+      "table": "Chantiers",
+      "colId": "Nature",
+      "label": "Nature",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 13,
+      "parentId": 2,
+      "table": "Chantiers",
+      "colId": "Titre",
+      "label": "Titre",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 14,
+      "parentId": 2,
+      "table": "Chantiers",
+      "colId": "Responsable",
+      "label": "Responsable",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 15,
+      "parentId": 2,
+      "table": "Chantiers",
+      "colId": "DateDebut",
+      "label": "DateDebut",
+      "type": "Date",
+      "isFormula": false
+    },
+    {
+      "id": 16,
+      "parentId": 2,
+      "table": "Chantiers",
+      "colId": "DateFin",
+      "label": "DateFin",
+      "type": "Date",
+      "isFormula": false
+    },
+    {
+      "id": 17,
+      "parentId": 2,
+      "table": "Chantiers",
+      "colId": "Echeance",
+      "label": "Echeance",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 18,
+      "parentId": 2,
+      "table": "Chantiers",
+      "colId": "Statut",
+      "label": "Statut",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 19,
+      "parentId": 2,
+      "table": "Chantiers",
+      "colId": "Vigilance",
+      "label": "Vigilance",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 20,
+      "parentId": 2,
+      "table": "Chantiers",
+      "colId": "Avancement",
+      "label": "Avancement",
+      "type": "Numeric",
+      "isFormula": false
+    },
+    {
+      "id": 21,
+      "parentId": 2,
+      "table": "Chantiers",
+      "colId": "PointEtape",
+      "label": "PointEtape",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 22,
+      "parentId": 2,
+      "table": "Chantiers",
+      "colId": "Ordre",
+      "label": "Ordre",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 23,
+      "parentId": 3,
+      "table": "Taches",
+      "colId": "Code",
+      "label": "Code",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 24,
+      "parentId": 3,
+      "table": "Taches",
+      "colId": "Chantier",
+      "label": "Chantier",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 25,
+      "parentId": 3,
+      "table": "Taches",
+      "colId": "Titre",
+      "label": "Titre",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 26,
+      "parentId": 3,
+      "table": "Taches",
+      "colId": "Responsable",
+      "label": "Responsable",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 27,
+      "parentId": 3,
+      "table": "Taches",
+      "colId": "DateDebut",
+      "label": "DateDebut",
+      "type": "Date",
+      "isFormula": false
+    },
+    {
+      "id": 28,
+      "parentId": 3,
+      "table": "Taches",
+      "colId": "DateFin",
+      "label": "DateFin",
+      "type": "Date",
+      "isFormula": false
+    },
+    {
+      "id": 29,
+      "parentId": 3,
+      "table": "Taches",
+      "colId": "Echeance",
+      "label": "Echeance",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 30,
+      "parentId": 3,
+      "table": "Taches",
+      "colId": "Statut",
+      "label": "Statut",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 31,
+      "parentId": 3,
+      "table": "Taches",
+      "colId": "Vigilance",
+      "label": "Vigilance",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 32,
+      "parentId": 3,
+      "table": "Taches",
+      "colId": "Avancement",
+      "label": "Avancement",
+      "type": "Numeric",
+      "isFormula": false
+    },
+    {
+      "id": 33,
+      "parentId": 3,
+      "table": "Taches",
+      "colId": "PointEtape",
+      "label": "PointEtape",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 34,
+      "parentId": 3,
+      "table": "Taches",
+      "colId": "Ordre",
+      "label": "Ordre",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 35,
+      "parentId": 4,
+      "table": "Notes",
+      "colId": "Code",
+      "label": "Code",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 36,
+      "parentId": 4,
+      "table": "Notes",
+      "colId": "Titre",
+      "label": "Titre",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 37,
+      "parentId": 4,
+      "table": "Notes",
+      "colId": "Type",
+      "label": "Type",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 38,
+      "parentId": 4,
+      "table": "Notes",
+      "colId": "Date",
+      "label": "Date",
+      "type": "Date",
+      "isFormula": false
+    },
+    {
+      "id": 39,
+      "parentId": 4,
+      "table": "Notes",
+      "colId": "DateSource",
+      "label": "DateSource",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 40,
+      "parentId": 4,
+      "table": "Notes",
+      "colId": "Instance",
+      "label": "Instance",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 41,
+      "parentId": 4,
+      "table": "Notes",
+      "colId": "Participants",
+      "label": "Participants",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 42,
+      "parentId": 4,
+      "table": "Notes",
+      "colId": "Contenu",
+      "label": "Contenu",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 43,
+      "parentId": 4,
+      "table": "Notes",
+      "colId": "Etat",
+      "label": "Etat",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 44,
+      "parentId": 4,
+      "table": "Notes",
+      "colId": "Projet",
+      "label": "Projet",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 45,
+      "parentId": 4,
+      "table": "Notes",
+      "colId": "Chantiers",
+      "label": "Chantiers",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 46,
+      "parentId": 4,
+      "table": "Notes",
+      "colId": "Taches",
+      "label": "Taches",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 47,
+      "parentId": 5,
+      "table": "Actions",
+      "colId": "Code",
+      "label": "Code",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 48,
+      "parentId": 5,
+      "table": "Actions",
+      "colId": "Titre",
+      "label": "Titre",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 49,
+      "parentId": 5,
+      "table": "Actions",
+      "colId": "Responsable",
+      "label": "Responsable",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 50,
+      "parentId": 5,
+      "table": "Actions",
+      "colId": "Statut",
+      "label": "Statut",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 51,
+      "parentId": 5,
+      "table": "Actions",
+      "colId": "DateFin",
+      "label": "DateFin",
+      "type": "Date",
+      "isFormula": false
+    },
+    {
+      "id": 52,
+      "parentId": 5,
+      "table": "Actions",
+      "colId": "Echeance",
+      "label": "Echeance",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 53,
+      "parentId": 5,
+      "table": "Actions",
+      "colId": "Commentaire",
+      "label": "Commentaire",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 54,
+      "parentId": 5,
+      "table": "Actions",
+      "colId": "NoteOrigine",
+      "label": "NoteOrigine",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 55,
+      "parentId": 5,
+      "table": "Actions",
+      "colId": "Projet",
+      "label": "Projet",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 56,
+      "parentId": 5,
+      "table": "Actions",
+      "colId": "Chantier",
+      "label": "Chantier",
+      "type": "Text",
+      "isFormula": false
+    },
+    {
+      "id": 57,
+      "parentId": 5,
+      "table": "Actions",
+      "colId": "Tache",
+      "label": "Tache",
+      "type": "Text",
+      "isFormula": false
+    }
+  ],
+  "data": {
+    "projects": [
+      {
+        "id": 1,
+        "Code": "P001",
+        "Titre": "Projet exemple",
+        "Description": "",
+        "Responsable": "",
+        "DateDebut": "",
+        "DateFin": "",
+        "Statut": "En cours",
+        "PointEtape": ""
+      },
+      {
+        "id": 2,
+        "Code": "P002",
+        "Titre": "Autre projet",
+        "Description": "",
+        "Responsable": "",
+        "DateDebut": "",
+        "DateFin": "",
+        "Statut": "",
+        "PointEtape": ""
+      }
+    ],
+    "streams": [
+      {
+        "id": 1,
+        "Code": "C001",
+        "Projet": "P001",
+        "Volet": "Coordination",
+        "Nature": "",
+        "Titre": "Préparer le lancement",
+        "Responsable": "Équipe projet",
+        "DateDebut": "",
+        "DateFin": "",
+        "Echeance": "",
+        "Statut": "",
+        "Vigilance": "",
+        "Avancement": 0.5,
+        "PointEtape": "Invitations en préparation",
+        "Ordre": ""
+      }
+    ],
+    "tasks": [
+      {
+        "id": 1,
+        "Code": "T001",
+        "Chantier": "C001",
+        "Titre": "Confirmer les participants",
+        "Responsable": "",
+        "DateDebut": "",
+        "DateFin": "",
+        "Echeance": "",
+        "Statut": "En cours",
+        "Vigilance": "",
+        "Avancement": "",
+        "PointEtape": "",
+        "Ordre": ""
+      }
+    ],
+    "notes": [
+      {
+        "id": 1,
+        "Code": "N001",
+        "Titre": "Réunion de coordination",
+        "Type": "Réunion",
+        "Date": "2026-11-10",
+        "DateSource": "",
+        "Instance": "",
+        "Participants": "Alice, Camille",
+        "Contenu": "Points abordés\n• Préparer les invitations\n\nDécision : confirmer la liste des participants.",
+        "Etat": "Brouillon",
+        "Projet": "P001",
+        "Chantiers": "C001",
+        "Taches": ""
+      }
+    ],
+    "actions": [
+      {
+        "id": 1,
+        "Code": "A001",
+        "Titre": "Envoyer les invitations",
+        "Responsable": "Alice",
+        "Statut": "À faire",
+        "DateFin": "2020-01-01",
+        "Echeance": "",
+        "Commentaire": "",
+        "NoteOrigine": "N001",
+        "Projet": "P001",
+        "Chantier": "",
+        "Tache": "T001"
+      },
+      {
+        "id": 2,
+        "Code": "A002",
+        "Titre": "Réserver une salle",
+        "Responsable": "Camille",
+        "Statut": "En cours",
+        "DateFin": "",
+        "Echeance": "",
+        "Commentaire": "",
+        "NoteOrigine": "N001",
+        "Projet": "P001",
+        "Chantier": "C001",
+        "Tache": ""
+      },
+      {
+        "id": 3,
+        "Code": "A003",
+        "Titre": "Classer les documents",
+        "Responsable": "Alice",
+        "Statut": "À faire",
+        "DateFin": "",
+        "Echeance": "",
+        "Commentaire": "",
+        "NoteOrigine": "",
+        "Projet": "",
+        "Chantier": "",
+        "Tache": ""
+      }
+    ]
+  }
+}
