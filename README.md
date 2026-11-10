@@ -40,3 +40,9 @@ Un lien permet de revenir à la page principale. Les champs supplémentaires con
 `node tests/workspace.cjs` exécute des parcours navigateur avec Playwright et Chromium, sur un serveur local lancé dans le dossier. Playwright doit être installé dans l’environnement ; le test utilise `/usr/bin/chromium`. L’API Grist est simulée : ces tests couvrent les codes CSV, références natives, colonnes renommées, sauvegarde du mapping, édition des notes, création d’actions, filtres, protection des formules et erreurs d’accès.
 
 Une connexion à un vrai document Grist reste à vérifier lors de l’essai utilisateur. La V1 ne crée pas de tables/colonnes, ne supprime pas de données et ne traite pas la matrice « Avancement par dimension ». Les notes ne disposent pas d’un éditeur enrichi. La timeline reste une page séparée. Il n’y a pas encore de gestion des conflits entre deux éditeurs simultanés.
+
+## Édition dans le détail
+
+Le bouton **Modifier** transforme directement les informations affichées en champs préremplis dans le panneau de détail. **Enregistrer** applique les modifications ; **Annuler** restitue la lecture sans écrire dans Grist. Les autres champs et rattachements restent accessibles dans une section dépliable. Les créations utilisent encore un formulaire séparé.
+
+Le brouillon reste visible en cas d’erreur et lors des rafraîchissements. Il faut enregistrer ou annuler avant de changer de vue ou d’élément. Les colonnes calculées restent protégées et seules les valeurs modifiées sont envoyées (avec normalisation des parents d’une action).

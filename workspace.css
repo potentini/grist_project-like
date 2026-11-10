@@ -265,3 +265,37 @@ select[multiple] {
 [hidden] {
   display: none !important;
 }
+/* Editing keeps the selected record in its familiar detail layout. */
+#detail #editForm input,
+#detail #editForm select,
+#detail #editForm textarea {
+  width: 100%;
+  min-width: 0;
+}
+#detail #editForm label {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+}
+#detail #editForm textarea {
+  min-height: 180px;
+}
+#detail #editForm .dialoghead {
+  position: sticky;
+  top: 0;
+  background: white;
+  z-index: 1;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #dbe1eb;
+}
+#detail #editForm details {
+  margin: 20px 0;
+}
+#detail #editForm summary {
+  cursor: pointer;
+  color: #4338ca;
+}
+#detail #editForm [data-slot="Titre"] input {
+  font-size: 20px;
+  font-weight: 600;
+}

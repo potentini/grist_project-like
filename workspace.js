@@ -401,6 +401,7 @@
     );
   }
   function renderDetail() {
+    if (editing?.inline) return;
     const k = selection?.k,
       r = (data[k] || []).find((r) => r.id === selection.id);
     if (!r) {
@@ -408,7 +409,7 @@
         '<h2>Votre espace de suivi</h2><p class="text muted">Sélectionnez un projet, une réunion ou une action pour lire son contenu et retrouver ses liens.</p>';
       return;
     }
-    let html = `<small>${esc(schemas[k].label)}</small><h2>${esc(title(k, r))}</h2><button data-edit="1">Modifier</button>`;
+    let html = `<small>${esc(schemas[k].label)}</small><h2 data-slot="Titre">${esc(title(k, r))}</h2><button data-edit="1">Modifier</button>`;
     html +=
       '<dl class="meta">' +
       [
@@ -429,7 +430,7 @@
         .filter((f) => val(k, r, f) !== "")
         .map(
           (f) =>
-            `<dt>${esc(f)}</dt><dd>${esc(f.startsWith("Date") && f !== "DateSource" ? dateText(val(k, r, f)) : val(k, r, f))}</dd>`,
+            `<dt>${esc(f)}</dt><dd data-slot="${f}">${esc(f.startsWith("Date") && f !== "DateSource" ? dateText(val(k, r, f)) : val(k, r, f))}</dd>`,
         )
         .join("") +
       "</dl>";
@@ -446,7 +447,7 @@
     }
     for (const f of ["Description", "Contenu", "PointEtape", "Commentaire"])
       if (val(k, r, f))
-        html += `<h3>${esc(f === "Contenu" ? "Notes et décisions" : f)}</h3><div class="text">${esc(val(k, r, f))}</div>`;
+        html += `<h3>${esc(f === "Contenu" ? "Notes et décisions" : f)}</h3><div class="text" data-slot="${f}">${esc(val(k, r, f))}</div>`;
     if (["projects", "streams", "tasks"].includes(k))
       html += `<div class="actions">${k !== "tasks" ? `<button data-new="${k === "projects" ? "streams" : "tasks"}">+ ${k === "projects" ? "Chantier" : "Tâche"}</button>` : ""}<button data-new="notes">+ Note</button><button data-new="actions">+ Action</button></div>`;
     if (k === "notes")
@@ -597,7 +598,14 @@
       );
       return;
     }
-    editing = { k, r };
+    if (r && !Number.isFinite(Number(r.id))) {
+      message(
+        "La ligne sélectionnée n’est plus disponible. Actualisez les données.",
+        true,
+      );
+      return;
+    }
+    editing = { k, r: r ? structuredClone(r) : null };
     $("editorTitle").textContent =
       (r ? "Modifier — " : "Créer — ") + schemas[k].label;
     $("editError").textContent = "";
@@ -682,7 +690,45 @@
         return `<label>${esc(f)}${f === "Avancement" ? " (0 à 1 ; 0,5 = 50 %)" : ""}${input}</label>`;
       })
       .join("");
-    $("editor").showModal();
+    if (r) {
+      const controls = [...$("fields").children];
+      const form = $("editForm");
+      const display = document.createElement("div");
+      display.className = "inline-content";
+      while ($("detail").firstChild) display.append($("detail").firstChild);
+      display
+        .querySelectorAll("[data-edit], [data-new]")
+        .forEach((x) => x.remove());
+      const extras = document.createElement("details");
+      extras.innerHTML = "<summary>Autres champs et rattachements</summary>";
+      for (const label of controls) {
+        const control = label.querySelector("[name]");
+        const slot =
+          control && display.querySelector(`[data-slot="${control.name}"]`);
+        if (slot) {
+          slot.replaceChildren(control);
+          control.setAttribute("aria-label", control.name);
+        } else extras.append(label);
+      }
+      $("fields").replaceChildren(display);
+      if (extras.children.length > 1) $("fields").append(extras);
+      $("editorTitle").textContent = "Modification";
+      $("cancel").textContent = "Annuler";
+      $("detail").append(form);
+      editing.inline = true;
+      form.querySelector('[name="Titre"]')?.focus();
+    } else {
+      $("cancel").textContent = "Annuler";
+      $("editor").showModal();
+    }
+  }
+  function endEdit() {
+    if (busy) return;
+    const inline = editing?.inline;
+    editing = null;
+    $("editor").append($("editForm"));
+    $("editor").close();
+    if (inline) renderDetail();
   }
   async function save(e) {
     e.preventDefault();
@@ -758,10 +804,17 @@
             if (parentEl) parentEl.value = ancestor ? String(ancestor.id) : "";
           }
         }
+      if (r) {
+        for (const key of Object.keys(fields)) {
+          if (JSON.stringify(fields[key]) === JSON.stringify(r[key]))
+            delete fields[key];
+        }
+      }
       await grist.docApi.applyUserActions([
         [r ? "UpdateRecord" : "AddRecord", cfg(k).table, r?.id ?? null, fields],
       ]);
-      $("editor").close();
+      busy = false;
+      endEdit();
       await load();
     } catch (err) {
       $("editError").textContent = "Enregistrement impossible : " + err.message;
@@ -825,6 +878,12 @@
   document.querySelectorAll("[data-view]").forEach(
     (b) =>
       (b.onclick = () => {
+        if (editing) {
+          message(
+            "Enregistrez ou annulez les modifications avant de changer de vue.",
+          );
+          return;
+        }
         view = b.dataset.view;
         selection = null;
         $("ownerFilter").value = "";
@@ -865,17 +924,31 @@
     }
   };
   document.querySelector("main").onclick = (e) => {
+    if (editing && e.target.closest("[data-kind], [data-new], [data-edit]")) {
+      message(
+        "Enregistrez ou annulez les modifications avant de changer d’élément.",
+      );
+      return;
+    }
     const row = e.target.closest("[data-kind]"),
       add = e.target.closest("[data-new]");
     if (row) {
       selection = { k: row.dataset.kind, id: Number(row.dataset.id) };
       render();
     } else if (add) openEditor(add.dataset.new);
-    else if (e.target.closest("[data-edit]"))
-      openEditor(
-        selection.k,
-        data[selection.k].find((r) => r.id === selection.id),
+    else if (e.target.closest("[data-edit]")) {
+      const record = (data[selection?.k] || []).find(
+        (r) => Number(r.id) === Number(selection?.id),
       );
+      if (!record) {
+        message(
+          "La ligne n’est plus disponible. Actualisez les données avant de modifier.",
+          true,
+        );
+        return;
+      }
+      openEditor(selection.k, record);
+    }
   };
   $("mappingButton").onclick = () => {
     draft = structuredClone(mapping);
@@ -883,7 +956,10 @@
     $("mapping").hidden = !$("mapping").hidden;
   };
   $("refresh").onclick = () => (demo ? init() : load());
-  $("cancel").onclick = () => $("editor").close();
+  $("cancel").onclick = endEdit;
+  $("editor").addEventListener("cancel", () => {
+    editing = null;
+  });
   $("editForm").onsubmit = save;
   $("mapping").onchange = (e) => {
     const { map: k, field: f } = e.target.dataset;
