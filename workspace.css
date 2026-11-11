@@ -444,3 +444,9 @@ select[multiple] {
 .inline-content .detail-navigation {
   display: none;
 }
+
+.item[data-kind="points"] {
+  --level-color: #675095;
+  --level-bg: #f2eff8;
+  --level-hover: #e9e2f3;
+}

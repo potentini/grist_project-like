@@ -17,6 +17,55 @@ const fixture = require("../demo.json");
   );
   await page.addInitScript((fixture) => {
     const db = structuredClone(fixture);
+    if (location.search.includes("points=1")) {
+      db.tables.push({ id: 6, tableId: "Points", label: "Points" });
+      const fields = [
+        "Code",
+        "Titre",
+        "NoteOrigine",
+        "Contenu",
+        "Decision",
+        "Projets",
+        "Chantiers",
+        "Taches",
+        "Ordre",
+      ];
+      for (const field of fields)
+        db.meta.push({
+          id: db.meta.length + 1,
+          parentId: 6,
+          table: "Points",
+          colId: field,
+          label: field,
+          type: field === "Ordre" ? "Int" : "Text",
+          isFormula: false,
+        });
+      db.data.points = [
+        {
+          id: 1,
+          Code: "D001",
+          Titre: "Sujet transversal",
+          NoteOrigine: "N001",
+          Contenu: "Notes du sujet",
+          Decision: "Décision du sujet",
+          Projets: "P001, P002",
+          Chantiers: "",
+          Taches: "",
+          Ordre: 1,
+        },
+      ];
+      db.meta.push({
+        id: db.meta.length + 1,
+        parentId: 5,
+        table: "Actions",
+        colId: "PointOrigine",
+        label: "PointOrigine",
+        type: "Text",
+        isFormula: false,
+      });
+      for (const a of db.data.actions)
+        a.PointOrigine = a.id === 1 ? "D001" : "";
+    }
     if (location.search.includes("tree=1")) {
       db.data.streams.push({
         ...db.data.streams[0],
@@ -60,6 +109,15 @@ const fixture = require("../demo.json");
           NoteOrigine: "notes",
         },
       };
+      if (db.data.points) {
+        targets.points = {
+          NoteOrigine: "notes",
+          Projets: "projects",
+          Chantiers: "streams",
+          Taches: "tasks",
+        };
+        targets.actions.PointOrigine = "points";
+      }
       for (const [k, fields] of Object.entries(targets))
         for (const [f, target] of Object.entries(fields)) {
           const tableName = {
@@ -68,15 +126,21 @@ const fixture = require("../demo.json");
             tasks: "Taches",
             notes: "Notes",
             actions: "Actions",
+            points: "Points",
           };
           const m = db.meta.find(
             (m) => m.table === tableName[k] && m.colId === f,
           );
-          const multi = ["Chantiers", "Taches"].includes(f);
+          const multi = ["Projets", "Chantiers", "Taches"].includes(f);
           m.type = (multi ? "RefList:" : "Ref:") + tableName[target];
           for (const row of db.data[k]) {
-            const ref = db.data[target].find((t) => t.Code === row[f]);
-            row[f] = multi ? ["L", ...(ref ? [ref.id] : [])] : ref?.id || 0;
+            const refs = db.data[target].filter((t) =>
+              String(row[f] || "")
+                .split(",")
+                .map((s) => s.trim())
+                .includes(t.Code),
+            );
+            row[f] = multi ? ["L", ...refs.map((r) => r.id)] : refs[0]?.id || 0;
           }
         }
       const m = db.meta.find(
@@ -129,6 +193,7 @@ const fixture = require("../demo.json");
                       Taches: "tasks",
                       Notes: "notes",
                       Actions: "actions",
+                      Points: "points",
                     }[id]
                   ],
                 ),
@@ -142,6 +207,7 @@ const fixture = require("../demo.json");
               Taches: "tasks",
               Notes: "notes",
               Actions: "actions",
+              Points: "points",
             }[t];
             if (op === "UpdateRecord")
               Object.assign(
@@ -537,6 +603,72 @@ const fixture = require("../demo.json");
     console.log(
       "PASS visible inline links, consistent action parents, task-parent propagation and note multiselect (" +
         (refs ? "references" : "CSV codes") +
+        ")",
+    );
+  }
+
+  for (const refs of [false, true]) {
+    await page.goto(
+      "http://127.0.0.1:8766/?points=1&tree=1" + (refs ? "&refs=1" : ""),
+    );
+    await page.locator("#list [data-kind=projects]").first().waitFor();
+    await page.locator('#list [data-kind=projects][data-id="2"]').click();
+    assert.equal(await page.locator("#detail [data-kind=points]").count(), 1);
+    await page.locator("#detail [data-kind=points]").click();
+    assert.match(
+      await page.locator("#detail").innerText(),
+      /Décision du sujet/,
+    );
+    await page.locator("#editionButton").click();
+    await page
+      .getByRole("button", { name: "+ Action issue de ce point", exact: true })
+      .click();
+    assert.equal(await page.locator("[name=PointOrigine]").inputValue(), "1");
+    await page.locator("[name=Titre]").fill("Action du sujet");
+    await page
+      .getByRole("button", { name: "Enregistrer", exact: true })
+      .click();
+    await page.waitForFunction(() => window.testDb.data.actions.length === 4);
+    let a = (await page.evaluate(() => window.testDb)).data.actions[3];
+    assert.equal(a.PointOrigine, refs ? 1 : "D001");
+    assert.equal(a.NoteOrigine, refs ? 1 : "N001");
+    await page
+      .getByRole("button", { name: "Notes et réunions", exact: true })
+      .click();
+    await page.locator('#list [data-kind=notes][data-id="1"]').click();
+    await page
+      .getByRole("button", { name: "+ Point de discussion", exact: true })
+      .click();
+    await page.locator("[name=Titre]").fill("Nouveau sujet");
+    await page
+      .locator("[name=Contenu]")
+      .fill("Texte du sujet\nDeuxième paragraphe");
+    await page.locator("[name=Projets]").selectOption(["1", "2"]);
+    await page
+      .getByRole("button", { name: "Enregistrer", exact: true })
+      .click();
+    await page.waitForFunction(() => window.testDb.data.points.length === 2);
+    const point = (await page.evaluate(() => window.testDb)).data.points[1];
+    assert.equal(point.NoteOrigine, refs ? 1 : "N001");
+    assert.deepEqual(point.Projets, refs ? ["L", 1, 2] : "P001, P002");
+    await page.locator('#list [data-kind=points][data-id="1"]').click();
+    await page.getByRole("button", { name: "Modifier", exact: true }).click();
+    await page.locator("#detail [name=NoteOrigine]").selectOption("2");
+    await page
+      .getByRole("button", { name: "Enregistrer", exact: true })
+      .click();
+    await page.waitForFunction(
+      (refs) =>
+        window.testDb.data.actions[3].NoteOrigine === (refs ? 2 : "N002"),
+      refs,
+    );
+    assert.equal(
+      (await page.evaluate(() => window.testDb)).data.actions[0].NoteOrigine,
+      refs ? 2 : "N002",
+    );
+    console.log(
+      "PASS optional discussion points, cross-project visibility, creation and action provenance (" +
+        (refs ? "references" : "codes") +
         ")",
     );
   }

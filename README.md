@@ -79,3 +79,11 @@ Une nouvelle navigation après un retour remplace la branche « Suivant ». Les 
 En mode Édition, **Modifier** transforme directement les rattachements affichés en listes de sélection, y compris ceux encore vides. Les actions proposent Projet, Chantier, Tâche et Note / réunion d’origine ; les chantiers proposent leur Projet, les tâches leur Chantier, et les notes leurs associations à un projet, des chantiers et des tâches. Les champs doivent être mappés et non calculés pour être modifiables. Les autres champs facultatifs restent dans « Autres champs ».
 
 Choisir une tâche renseigne immédiatement son chantier et son projet. Changer de chantier ou de projet retire les rattachements inférieurs devenus incompatibles. Les choix ne sont écrits dans Grist qu’avec **Enregistrer** ; **Annuler** conserve les anciens liens. Changer le parent d’une tâche ou d’un chantier actualise également les rattachements redondants des actions dépendantes dans la même sauvegarde. Les notes peuvent sélectionner plusieurs chantiers ou tâches.
+
+## Réunions et points de discussion transversaux
+
+Une réunion reste une ligne de Notes avec sa date, ses participants et son texte général. La table facultative **Points** ajoute des sujets ordonnés : titre, contenu, décision, réunion d’origine, plusieurs projets/chantiers/tâches. Dans « Notes et réunions », la réunion se déplie en points puis en actions. Un projet, chantier ou tâche affiche les points qui le concernent ; ouvrir un point donne accès à ses notes et à la réunion complète.
+
+Chaque action peut avoir une référence **PointOrigine**, en plus de NoteOrigine. Le point détermine sa réunion d’origine, mais ne choisit pas arbitrairement un projet parmi plusieurs. Ses rattachements opérationnels restent facultatifs et indépendants. Réaffecter un point à une réunion met à jour la réunion d’origine de ses actions. Déplacer une action vers une autre réunion retire un lien au point devenu incompatible.
+
+Cette évolution est compatible avec les documents sans table Points. Pour l’activer, suivre [imports/README.md](imports/README.md), importer [Points.csv](imports/Points.csv), ajouter Actions.PointOrigine et enregistrer le mapping. Aucun document Grist n’est modifié automatiquement par la mise à jour du widget.

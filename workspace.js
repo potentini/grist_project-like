@@ -91,6 +91,21 @@
         "Taches",
       ],
     },
+    points: {
+      label: "Points de discussion",
+      aliases: ["Points", "PointsDiscussion", "PointsDeDiscussion"],
+      fields: [
+        "Code",
+        "Titre",
+        "NoteOrigine",
+        "Contenu",
+        "Decision",
+        "Projets",
+        "Chantiers",
+        "Taches",
+        "Ordre",
+      ],
+    },
     actions: {
       label: "Actions",
       aliases: ["Actions", "Action", "Todos"],
@@ -103,6 +118,7 @@
         "Echeance",
         "Commentaire",
         "NoteOrigine",
+        "PointOrigine",
         "Projet",
         "Chantier",
         "Tache",
@@ -123,16 +139,24 @@
     streams: { Projet: "projects" },
     tasks: { Chantier: "streams" },
     notes: { Projet: "projects", Chantiers: "streams", Taches: "tasks" },
+    points: {
+      NoteOrigine: "notes",
+      Projets: "projects",
+      Chantiers: "streams",
+      Taches: "tasks",
+    },
     actions: {
+      PointOrigine: "points",
       Projet: "projects",
       Chantier: "streams",
       Tache: "tasks",
       NoteOrigine: "notes",
     },
   };
-  const multi = new Set(["Chantiers", "Taches"]);
+  const multi = new Set(["Projets", "Chantiers", "Taches"]);
   const textareas = new Set([
     "Contenu",
+    "Decision",
     "Description",
     "PointEtape",
     "Commentaire",
@@ -206,7 +230,18 @@
   function has(k, r, f, target) {
     return !!target && targets(k, r, f).some((x) => x.id === target.id);
   }
+  function pointProjects(r) {
+    const projects = targets("points", r, "Projets");
+    for (const stream of targets("points", r, "Chantiers"))
+      projects.push(...targets("streams", stream, "Projet"));
+    for (const task of targets("points", r, "Taches")) {
+      const p = projectOf("tasks", task);
+      if (p) projects.push(p);
+    }
+    return [...new Map(projects.map((p) => [p.id, p])).values()];
+  }
   function projectOf(k, r) {
+    if (k === "points") return pointProjects(r)[0];
     if (k === "projects") return r;
     if (k === "tasks") {
       const s = targets(k, r, "Chantier")[0];
@@ -262,7 +297,10 @@
       s = $("statusFilter").value,
       q = norm($("search").value);
     return (
-      (!p || projectOf(k, r)?.id === Number(p)) &&
+      (!p ||
+        (k === "points"
+          ? pointProjects(r).some((x) => x.id === Number(p))
+          : projectOf(k, r)?.id === Number(p))) &&
       (!o || String(val(k, r, "Responsable")) === o) &&
       (!s || String(val(k, r, k === "notes" ? "Etat" : "Statut")) === s) &&
       (!q ||
@@ -285,6 +323,7 @@
     tasks: "Tâche",
     actions: "Action",
     notes: "Note / réunion",
+    points: "Point de discussion",
   };
   function item(k, r, level = 0) {
     return `<button class="item level${level} ${selection?.k === k && selection.id === r.id ? "selected" : ""}" data-kind="${k}" data-id="${r.id}"><span class="item-kind">${kindLabels[k]}</span><strong>${esc(title(k, r))}</strong><small>${esc([val(k, r, "Volet"), val(k, r, "Responsable"), dateText(val(k, r, "Date")) || val(k, r, "Echeance") || dateText(val(k, r, "DateFin"))].filter(Boolean).join(" · "))}</small>${[
@@ -371,8 +410,24 @@
       );
     if (k === "notes")
       result.push(
+        ...ordered("points")
+          .filter((x) => has("points", x, "NoteOrigine", r))
+          .map((x) => ["points", x]),
+      );
+    if (k === "points")
+      result.push(
         ...ordered("actions")
-          .filter((x) => has("actions", x, "NoteOrigine", r))
+          .filter((x) => has("actions", x, "PointOrigine", r))
+          .map((x) => ["actions", x]),
+      );
+    if (k === "notes")
+      result.push(
+        ...ordered("actions")
+          .filter(
+            (x) =>
+              has("actions", x, "NoteOrigine", r) &&
+              !targets("actions", x, "PointOrigine").length,
+          )
           .map((x) => ["actions", x]),
       );
     return result;
@@ -386,7 +441,9 @@
       (view === "actions" ? k === "actions" && matches(k, r) : matches(k, r));
     return visible ||
       kids.length ||
-      (filtered && editionEnabled && !["notes", "actions"].includes(k))
+      (filtered &&
+        editionEnabled &&
+        !["notes", "points", "actions"].includes(k))
       ? { k, r, kids }
       : null;
   }
@@ -583,9 +640,12 @@
         set("tasks", row, "Chantier", "streams", target, true);
         for (const a of data.actions || [])
           if (has("actions", a, "Tache", row)) normalizeAction(a);
-      } else if (destination.k === "notes")
+      } else if (destination.k === "notes") {
         set("actions", row, "NoteOrigine", "notes", target, true);
-      else {
+        const point = targets("actions", row, "PointOrigine")[0];
+        if (point && !has("points", point, "NoteOrigine", target))
+          set("actions", row, "PointOrigine", "points", null, true);
+      } else {
         if (destination.k === "tasks")
           set("actions", row, "Tache", "tasks", target, true);
         else {
@@ -798,6 +858,22 @@
   };
 
   function linkedTo(k, r, kind, row) {
+    if (kind === "points") {
+      if (k === "notes") return has("points", row, "NoteOrigine", r);
+      if (k === "projects")
+        return pointProjects(row).some((p) => p.id === r.id);
+      if (k === "streams")
+        return (
+          has("points", row, "Chantiers", r) ||
+          targets("points", row, "Taches").some((t) =>
+            has("tasks", t, "Chantier", r),
+          )
+        );
+      if (k === "tasks") return has("points", row, "Taches", r);
+      return false;
+    }
+    if (k === "points")
+      return kind === "actions" && has("actions", row, "PointOrigine", r);
     if (k === "projects") return projectOf(kind, row)?.id === r.id;
     if (k === "streams")
       return (
@@ -925,6 +1001,8 @@
         Tache: "Tâche",
         Taches: "Tâches",
         NoteOrigine: "Note / réunion d’origine",
+        PointOrigine: "Point de discussion d’origine",
+        Projets: "Projets",
       }[field] || field
     );
   }
@@ -978,15 +1056,41 @@
       const percent = Math.round(Number(progress) * 100);
       html += `<p>Avancement : ${percent} %</p><progress max="100" value="${percent}"></progress>`;
     }
-    for (const f of ["Description", "Contenu", "PointEtape", "Commentaire"])
+    for (const f of [
+      "Description",
+      "Contenu",
+      "Decision",
+      "PointEtape",
+      "Commentaire",
+    ])
       if (val(k, r, f))
         html += `<h3>${esc(f === "Contenu" ? "Notes et décisions" : f)}</h3><div class="text" data-slot="${f}">${esc(val(k, r, f))}</div>`;
     if (["projects", "streams", "tasks"].includes(k))
       html += `<div class="actions">${k !== "tasks" ? `<button data-new="${k === "projects" ? "streams" : "tasks"}">+ ${k === "projects" ? "Chantier" : "Tâche"}</button>` : ""}<button data-new="notes">+ Note</button><button data-new="actions">+ Action</button></div>`;
     if (k === "notes")
+      html += cfg("points").table
+        ? '<div class="actions"><button data-new="points">+ Point de discussion</button></div>'
+        : '<p class="muted">Pour structurer cette réunion en points, importez la table Points puis configurez son mapping.</p>';
+    if (k === "points")
+      html +=
+        '<div class="actions"><button data-new="actions">+ Action issue de ce point</button></div>';
+    if (["projects", "streams", "tasks", "notes"].includes(k)) {
+      const related = ordered("points").filter((x) =>
+        linkedTo(k, r, "points", x),
+      );
+      if (related.length)
+        html +=
+          "<h3>Points de discussion</h3>" +
+          related
+            .map((x) => branch(tree("points", x), "right-points"))
+            .join("");
+    }
+    if (k === "notes")
       html +=
         '<div class="actions"><button data-new="actions">+ Action issue de cette note</button></div>';
-    const deps = children(k, r).filter(([kind]) => kind !== "actions");
+    const deps = children(k, r).filter(
+      ([kind]) => !["actions", "points"].includes(kind),
+    );
     if (deps.length)
       html +=
         "<h3>Éléments dépendants</h3>" +
@@ -1033,7 +1137,8 @@
         demo
           ? "Démonstration : données fictives, édition désactivée."
           : Object.keys(schemas).filter(
-                (k) => !cfg(k).table || !cfg(k).fields?.Titre,
+                (k) =>
+                  k !== "points" && (!cfg(k).table || !cfg(k).fields?.Titre),
               ).length
             ? "Mapping incomplet : choisissez les tables et leurs champs."
             : `Données actualisées — ${Object.values(data).reduce((n, r) => n + r.length, 0)} lignes chargées.`,
@@ -1125,6 +1230,18 @@
     return code;
   }
   function openEditor(k, r = null) {
+    if (
+      k === "actions" &&
+      !r &&
+      selection?.k === "points" &&
+      !cfg("actions").fields?.PointOrigine
+    ) {
+      message(
+        "Ajoutez la colonne PointOrigine dans Actions puis mappez-la pour créer une action issue d’un point.",
+        true,
+      );
+      return;
+    }
     if (!editionEnabled || moving) {
       message("Activez le mode Édition pour modifier les données.");
       return;
@@ -1171,6 +1288,7 @@
             streams: "C",
             tasks: "T",
             notes: "N",
+            points: "D",
             actions: "A",
           }[k];
           const used = new Set(
@@ -1273,6 +1391,9 @@
       $("cancel").textContent = "Annuler";
       $("editor").showModal();
     }
+    const origin = $("editForm").elements.namedItem("PointOrigine");
+    if (k === "actions" && origin?.value)
+      origin.dispatchEvent(new Event("change", { bubbles: true }));
   }
   function endEdit() {
     if (busy) return;
@@ -1283,6 +1404,39 @@
     if (inline) renderDetail();
   }
   function dependentLinkUpdates(k, record, fields) {
+    if (
+      k === "points" &&
+      record &&
+      cfg(k).fields?.NoteOrigine &&
+      Object.hasOwn(fields, cfg(k).fields.NoteOrigine)
+    ) {
+      const changed = { ...record, ...fields },
+        note = targets("points", changed, "NoteOrigine")[0];
+      return (data.actions || [])
+        .filter((a) => has("actions", a, "PointOrigine", record))
+        .map((a) => {
+          if (
+            !cfg("actions").fields?.NoteOrigine ||
+            col("actions", "NoteOrigine")?.isFormula
+          )
+            throw Error(
+              "Le lien NoteOrigine des actions doit être mappé et modifiable.",
+            );
+          return [
+            "UpdateRecord",
+            cfg("actions").table,
+            a.id,
+            {
+              [cfg("actions").fields.NoteOrigine]: encodeLink(
+                "actions",
+                "NoteOrigine",
+                "notes",
+                note,
+              ),
+            },
+          ];
+        });
+    }
     const parentField =
       k === "tasks" ? "Chantier" : k === "streams" ? "Projet" : null;
     const column = parentField && cfg(k).fields?.[parentField];
@@ -1375,6 +1529,34 @@
           v = v === "" ? null : Number(v);
         fields[cfg(k).fields[f]] = v;
       }
+      if (
+        k === "points" &&
+        !$("editForm").elements.namedItem("NoteOrigine")?.value
+      )
+        throw Error(
+          "Choisissez la réunion ou note à laquelle appartient ce point (champ NoteOrigine à mapper).",
+        );
+      if (k === "actions") {
+        const pointId = $("editForm").elements.namedItem("PointOrigine")?.value;
+        const point = (data.points || []).find((x) => x.id === Number(pointId));
+        if (point) {
+          const note = targets("points", point, "NoteOrigine")[0];
+          if (
+            !note ||
+            !cfg(k).fields?.NoteOrigine ||
+            col(k, "NoteOrigine")?.isFormula
+          )
+            throw Error(
+              "Mappez un champ NoteOrigine modifiable pour conserver la réunion d’origine de l’action.",
+            );
+          fields[cfg(k).fields.NoteOrigine] = encodeLink(
+            k,
+            "NoteOrigine",
+            "notes",
+            note,
+          );
+        }
+      }
       // A precise target determines its ancestors, avoiding contradictory links.
       if (k === "actions")
         for (const [child, target, parent] of [
@@ -1463,7 +1645,11 @@
       mappingUI();
       grist.onRecords(() => load());
       await load();
-      if (Object.keys(schemas).some((k) => !cfg(k).table))
+      if (
+        Object.keys(schemas)
+          .filter((k) => k !== "points")
+          .some((k) => !cfg(k).table)
+      )
         $("mapping").hidden = false;
     } catch (e) {
       message(e.message, true);
@@ -1625,6 +1811,24 @@
     editing = null;
   });
   $("editForm").onchange = (e) => {
+    if (editing?.k === "actions" && e.target.name === "PointOrigine") {
+      const point = (data.points || []).find(
+          (x) => x.id === Number(e.target.value),
+        ),
+        note = point && targets("points", point, "NoteOrigine")[0];
+      const field = $("editForm").elements.namedItem("NoteOrigine");
+      if (note && field) field.value = String(note.id);
+    }
+    if (editing?.k === "actions" && e.target.name === "NoteOrigine") {
+      const field = $("editForm").elements.namedItem("PointOrigine"),
+        point = (data.points || []).find((x) => x.id === Number(field?.value));
+      if (
+        point &&
+        !has("points", point, "NoteOrigine", { id: Number(e.target.value) })
+      )
+        field.value = "";
+    }
+
     if (
       editing?.k !== "actions" ||
       !["Projet", "Chantier", "Tache"].includes(e.target.name)
