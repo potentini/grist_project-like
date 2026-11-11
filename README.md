@@ -101,3 +101,9 @@ Avant utilisation, ajouter et mapper les quatre colonnes décrites dans [imports
 Les commandes **Archiver…**, **Restaurer…** et **Supprimer…** sont accessibles dans le détail en mode Édition. L’archivage nécessite une colonne de données booléenne Archive dans chaque table concernée ; la suppression peut être utilisée sans cette colonne. Les données archivées sont conservées et retrouvables avec **Afficher les archivés**. Les parents archivés restent visibles comme contexte de leurs dépendants actifs.
 
 La suppression ne se fait pas en cascade et est bloquée en présence de références à l’élément. L’aperçu liste les liens à réaffecter et exige une confirmation explicite. Voir [les consignes détaillées](imports/ARCHIVAGE_SUPPRESSION.md).
+
+## Réunions associées à un élément
+
+La section **Notes et réunions associées** réunit les liens directs, les réunions d’origine des points concernant l’élément (même sans action), et celles des actions rattachées. Une réunion apparaît une seule fois, avec ses raisons d’association : lien direct, point(s) ou action(s). Les liens hérités de la hiérarchie sont également signalés.
+
+Dans cette section, le dépliage n’affiche que les points et actions expliquant l’association à l’élément courant. Cliquer sur la réunion ouvre son compte rendu complet. Ces associations sont calculées depuis les liens existants, sans nouvelle colonne ni duplication de note. Les réunions archivées restent soumises au filtre d’affichage des archives.

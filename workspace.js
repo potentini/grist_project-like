@@ -839,7 +839,7 @@
     return title("notes", note) + " · " + date;
   }
   function item(k, r, level = 0) {
-    return `<button class="item level${level} ${selection?.k === k && selection.id === r.id ? "selected" : ""}" data-kind="${k}" data-id="${r.id}"><span class="item-kind">${kindLabels[k]}</span><strong>${esc(title(k, r))}</strong>${k === "points" ? `<small class="point-origin">${esc(pointMeetingContext(r))}</small>` : ""}${archived(k, r) ? '<span class="badge">Archivé</span>' : ""}${transformed(k, r) ? '<span class="badge">Transformé</span>' : ""}<small>${esc([val(k, r, "Volet"), val(k, r, "Responsable"), dateText(val(k, r, "Date")) || val(k, r, "Echeance") || dateText(val(k, r, "DateFin"))].filter(Boolean).join(" · "))}</small>${[
+    return `<button class="item level${level} ${selection?.k === k && selection.id === r.id ? "selected" : ""}" data-kind="${k}" data-id="${r.id}"><span class="item-kind">${kindLabels[k]}</span><strong>${esc(title(k, r))}</strong>${k === "points" ? `<small class="point-origin">${esc(pointMeetingContext(r))}</small>` : ""}${archived(k, r) ? '<span class="badge">Archivé</span>' : ""}${transformed(k, r) ? '<span class="badge">Transformé</span>' : ""}<small>${esc([val(k, r, "Volet"), val(k, r, "Responsable"), dateText(val(k, r, "Date")) || (k === "notes" ? val(k, r, "DateSource") : "") || val(k, r, "Echeance") || dateText(val(k, r, "DateFin"))].filter(Boolean).join(" · "))}</small>${[
       val(k, r, "Statut") || val(k, r, "Etat"),
       val(k, r, "Vigilance"),
     ]
@@ -1533,6 +1533,67 @@
     $("detail").scrollLeft = 0;
   }
 
+  function associatedMeetings(k, record, actions) {
+    const meetings = new Map();
+    const add = (note, reason) => {
+      if (!note || (archived("notes", note) && !$("showArchived").checked))
+        return;
+      if (!meetings.has(note.id))
+        meetings.set(note.id, {
+          note,
+          reasons: new Set(),
+          pointIds: new Set(),
+          actionIds: new Set(),
+        });
+      meetings.get(note.id).reasons.add(reason);
+      return meetings.get(note.id);
+    };
+    for (const note of ordered("notes"))
+      if (linkedTo(k, record, "notes", note)) {
+        const direct =
+          k === "projects"
+            ? has("notes", note, "Projet", record)
+            : k === "streams"
+              ? has("notes", note, "Chantiers", record)
+              : k === "tasks"
+                ? has("notes", note, "Taches", record)
+                : false;
+        add(note, direct ? "Lien direct" : "Via un élément lié");
+      }
+    for (const point of k === "points"
+      ? [record]
+      : ordered("points").filter((p) => linkedTo(k, record, "points", p))) {
+      for (const note of targets("points", point, "NoteOrigine")) {
+        const entry = add(note, "Via le point : " + title("points", point));
+        if (entry) entry.pointIds.add(point.id);
+      }
+    }
+    for (const action of actions) {
+      const notes = targets("actions", action, "NoteOrigine");
+      for (const point of targets("actions", action, "PointOrigine"))
+        notes.push(...targets("points", point, "NoteOrigine"));
+      for (const note of notes) {
+        const entry = add(note, "Via l’action : " + title("actions", action));
+        if (entry) entry.actionIds.add(action.id);
+      }
+    }
+    return [...meetings.values()].sort((a, b) =>
+      dateText(val("notes", b.note, "Date")).localeCompare(
+        dateText(val("notes", a.note, "Date")),
+      ),
+    );
+  }
+  function meetingAssociationCard(entry) {
+    const node = tree("notes", entry.note);
+    // Only show points/actions explaining this association, not unrelated agenda items.
+    node.kids = node.kids.filter((child) =>
+      child.k === "points"
+        ? entry.pointIds.has(child.r.id) ||
+          child.kids.some((a) => entry.actionIds.has(a.r.id))
+        : entry.actionIds.has(child.r.id),
+    );
+    return `<div class="associated-meeting" data-meeting-id="${entry.note.id}">${branch(node, "right-notes").replace("</strong>", '</strong><small class="meeting-reasons">' + esc([...entry.reasons].join(" · ")) + "</small>")}</div>`;
+  }
   function relationLabel(field) {
     return (
       {
@@ -1654,20 +1715,24 @@
           (!archived("actions", x) || $("showArchived").checked) &&
           (["notes", "points"].includes(k) || !transformed("actions", x)),
       );
-      let notes = (data.notes || []).filter(
-        (x) =>
-          (!archived("notes", x) && linkedTo(k, r, "notes", x)) ||
-          actions.some((a) => has("actions", a, "NoteOrigine", x)),
-      );
-      if (k !== "notes")
+      if (k !== "notes") {
+        const meetings = associatedMeetings(k, r, actions);
         html +=
           "<h3>Notes et réunions associées</h3>" +
-          (notes.map((x) => branch(tree("notes", x), "right-notes")).join("") ||
+          (meetings.map(meetingAssociationCard).join("") ||
             '<p class="muted">Aucune note liée.</p>');
+      }
       html +=
         "<h3>Actions associées</h3>" +
         (actions.map((x) => item("actions", x)).join("") ||
           '<p class="muted">Aucune action liée.</p>');
+    }
+    if (k === "actions") {
+      const meetings = associatedMeetings(k, r, [r]);
+      html +=
+        "<h3>Notes et réunions associées</h3>" +
+        (meetings.map(meetingAssociationCard).join("") ||
+          '<p class="muted">Aucune note liée.</p>');
     }
     $("detail").innerHTML = html;
     syncEdition();

@@ -725,14 +725,17 @@ const fixture = require("../demo.json");
     );
     await page.locator("#list [data-kind=projects]").first().waitFor();
     await page.locator('#list [data-kind=projects][data-id="2"]').click();
-    assert.equal(await page.locator("#detail [data-kind=points]").count(), 1);
+    assert.equal(
+      await page.locator("#detail [data-kind=points]:visible").count(),
+      1,
+    );
     assert.match(
       await page
-        .locator("#detail [data-kind=points] .point-origin")
+        .locator("#detail [data-kind=points]:visible .point-origin")
         .innerText(),
       /Réunion de coordination · 10\/11\/2026/,
     );
-    await page.locator("#detail [data-kind=points]").click();
+    await page.locator("#detail [data-kind=points]:visible").click();
     assert.match(
       await page.locator("#detail").innerText(),
       /Décision du sujet/,
@@ -1011,6 +1014,83 @@ const fixture = require("../demo.json");
     );
     console.log(
       "PASS archive/restore, retained descendants, blocked parent deletion and confirmed leaf deletion (" +
+        (refs ? "references" : "codes") +
+        ")",
+    );
+  }
+
+  for (const refs of [false, true]) {
+    await page.goto(
+      "http://127.0.0.1:8766/?points=1&tree=1" + (refs ? "&refs=1" : ""),
+    );
+    await page.locator('#list [data-kind=projects][data-id="2"]').click();
+    const meeting = page.locator('.associated-meeting[data-meeting-id="1"]');
+    assert.equal(await meeting.count(), 1);
+    assert.match(await meeting.innerText(), /Via le point : Sujet transversal/);
+    // This project has no action and no direct meeting link: the point alone supplies the association.
+    await page.evaluate((refs) => {
+      const db = window.testDb;
+      db.data.points.push({
+        ...db.data.points[0],
+        id: 2,
+        Code: "D002",
+        Titre: "Autre point du projet",
+      });
+      db.data.points.push({
+        ...db.data.points[0],
+        id: 3,
+        Code: "D003",
+        Titre: "Sujet sans rapport",
+        Projets: refs ? ["L", 1] : "P001",
+      });
+    }, refs);
+    await page.locator("#refresh").click();
+    await page.waitForFunction(() =>
+      document
+        .querySelector('.associated-meeting[data-meeting-id="1"]')
+        ?.textContent.includes("Autre point du projet"),
+    );
+    assert.equal(await meeting.count(), 1);
+    await meeting.locator(":scope > .tree-node > .tree-row > .fold").click();
+    assert.equal(
+      await meeting.getByText("Sujet sans rapport", { exact: true }).count(),
+      0,
+    );
+    await page.locator('#list [data-kind=projects][data-id="1"]').click();
+    const combined = page.locator('.associated-meeting[data-meeting-id="1"]');
+    assert.equal(await combined.count(), 1);
+    assert.match(await combined.innerText(), /Lien direct/);
+    assert.match(await combined.innerText(), /Via le point/);
+    assert.match(await combined.innerText(), /Via l’action/);
+    assert.equal(await page.evaluate(() => window.writes.length), 0);
+    // Moving the only relevant points to another project removes the inferred association.
+    await page.evaluate((refs) => {
+      for (const p of window.testDb.data.points)
+        p.Projets = refs ? ["L", 1] : "P001";
+    }, refs);
+    await page.locator("#refresh").click();
+    await page.locator('#list [data-kind=projects][data-id="2"]').click();
+    assert.equal(
+      await page.locator('.associated-meeting[data-meeting-id="1"]').count(),
+      0,
+    );
+    await page.evaluate((refs) => {
+      window.testDb.data.points[0].Taches = refs ? ["L", 1] : "T001";
+    }, refs);
+    await page.locator("#refresh").click();
+    for (const kind of ["streams", "tasks"]) {
+      await page
+        .locator('#list [data-kind="' + kind + '"][data-id="1"]')
+        .click();
+      assert.match(
+        await page
+          .locator('.associated-meeting[data-meeting-id="1"]')
+          .innerText(),
+        /Via le point : Sujet transversal/,
+      );
+    }
+    console.log(
+      "PASS point-only meeting association, deduplication, reasons, scoped subjects and live reassignment (" +
         (refs ? "references" : "codes") +
         ")",
     );
