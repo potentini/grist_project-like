@@ -299,3 +299,67 @@ select[multiple] {
   font-size: 20px;
   font-weight: 600;
 }
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 7px;
+  min-width: 0;
+}
+.tree-row > .item {
+  flex: 1;
+  min-width: 0;
+}
+.fold,
+.fold-spacer {
+  width: 28px;
+  flex: 0 0 28px;
+  text-align: center;
+}
+.fold {
+  padding: 6px 3px;
+  border-color: transparent;
+  background: transparent;
+}
+.tree-children {
+  padding-left: 18px;
+  border-left: 1px solid #e5eaf2;
+  margin-left: 14px;
+}
+.move-button {
+  padding: 6px;
+}
+.tree-row[draggable="true"] {
+  cursor: grab;
+}
+.tree-row[draggable="true"]:active {
+  cursor: grabbing;
+}
+.tree-row.dragging {
+  opacity: 0.45;
+}
+.drop-target {
+  outline: 2px solid #4338ca;
+  background: #eef0ff;
+}
+.unassigned {
+  border: 1px dashed #ccd5e2;
+  border-radius: 8px;
+  margin-top: 16px;
+  padding: 10px;
+}
+#editionButton[aria-pressed="true"] {
+  background: #4338ca;
+  color: white;
+}
+#moveTarget {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+}
+#detail .tree-row .item {
+  padding: 9px;
+}
+#moveError {
+  color: #a32424;
+}

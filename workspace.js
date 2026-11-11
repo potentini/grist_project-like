@@ -148,6 +148,11 @@
     busy = false,
     loaded = false,
     request = 0;
+  let editionEnabled = false,
+    moving = false,
+    dragged = null;
+  const folded = new Set();
+  const knownBranches = new Set();
   const optionKey = "projectWorkspaceMappingV1";
   const demo = new URLSearchParams(location.search).has("demo");
   function message(s, error = false) {
@@ -326,60 +331,464 @@
       $(id).value = old;
     }
   }
+  function actionParent(r) {
+    const task = targets("actions", r, "Tache")[0];
+    if (task) return ["tasks", task];
+    const stream = targets("actions", r, "Chantier")[0];
+    if (stream) return ["streams", stream];
+    const project = targets("actions", r, "Projet")[0];
+    return project ? ["projects", project] : null;
+  }
+  function children(k, r) {
+    const result = [];
+    if (k === "projects")
+      result.push(
+        ...ordered("streams")
+          .filter((x) => has("streams", x, "Projet", r))
+          .map((x) => ["streams", x]),
+      );
+    if (k === "streams")
+      result.push(
+        ...ordered("tasks")
+          .filter((x) => has("tasks", x, "Chantier", r))
+          .map((x) => ["tasks", x]),
+      );
+    if (["projects", "streams", "tasks"].includes(k))
+      result.push(
+        ...ordered("actions")
+          .filter((x) => {
+            const p = actionParent(x);
+            return p && p[0] === k && p[1].id === r.id;
+          })
+          .map((x) => ["actions", x]),
+      );
+    if (k === "notes")
+      result.push(
+        ...ordered("actions")
+          .filter((x) => has("actions", x, "NoteOrigine", r))
+          .map((x) => ["actions", x]),
+      );
+    return result;
+  }
+  function tree(k, r, filtered = false) {
+    const kids = children(k, r)
+      .map(([kind, row]) => tree(kind, row, filtered))
+      .filter(Boolean);
+    const visible =
+      !filtered ||
+      (view === "actions" ? k === "actions" && matches(k, r) : matches(k, r));
+    return visible ||
+      kids.length ||
+      (filtered && editionEnabled && !["notes", "actions"].includes(k))
+      ? { k, r, kids }
+      : null;
+  }
+  function branch(node, context) {
+    if (!node) return "";
+    const { k, r, kids } = node,
+      key = `${context}:${k}:${r.id}`;
+    if (!knownBranches.has(key)) {
+      knownBranches.add(key);
+      if (context.startsWith("right-")) folded.add(key);
+    }
+    const open = !folded.has(key);
+    const movable = ["streams", "tasks", "actions"].includes(k);
+    return `<div class="tree-node" data-tree-kind="${k}" data-tree-id="${r.id}"><div class="tree-row" data-drop-kind="${k}" data-drop-id="${r.id}" ${movable ? `draggable="${editionEnabled && !editing && !moving && !demo}" data-drag-kind="${k}" data-drag-id="${r.id}"` : ""}>${kids.length ? `<button class="fold" type="button" data-fold="${key}" aria-expanded="${open}" aria-label="${open ? "Plier" : "Déplier"} ${esc(title(k, r))}">${open ? "▾" : "▸"}</button>` : '<span class="fold-spacer"></span>'}${item(k, r)}${editionEnabled && movable ? `<button class="move-button" type="button" data-move-kind="${k}" data-move-id="${r.id}" aria-label="Déplacer ${esc(title(k, r))}" title="Déplacer"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20 20 4M7 4h13v13"/></svg></button>` : ""}</div>${kids.length ? `<div class="tree-children" ${open ? "" : "hidden"}>${kids.map((n) => branch(n, context)).join("")}</div>` : ""}</div>`;
+  }
+  function syncEdition() {
+    $("editionButton").setAttribute("aria-pressed", String(editionEnabled));
+    $("editionButton").textContent = editionEnabled
+      ? "Édition activée"
+      : "Édition désactivée";
+    document
+      .querySelectorAll("[data-view], #mappingButton, #refresh, #editionButton")
+      .forEach((b) => (b.disabled = moving));
+    document
+      .querySelectorAll("[data-new], [data-edit]")
+      .forEach((b) => (b.disabled = !editionEnabled || moving));
+  }
   function render() {
     document
       .querySelectorAll("[data-view]")
       .forEach((b) => b.classList.toggle("active", b.dataset.view === view));
     $("unlinked").closest("label").hidden = view !== "actions";
     $("overdue").closest("label").hidden = view !== "actions";
+    const context = "left-" + view;
     let html = "";
-    if (view === "projects") {
-      const seenS = new Set(),
-        seenT = new Set();
-      for (const p of ordered("projects")) {
-        const streams = ordered("streams").filter((s) =>
-          has("streams", s, "Projet", p),
-        );
-        const branches = streams
-          .map((s) => {
-            seenS.add(s.id);
-            const tasks = ordered("tasks").filter((t) =>
-              has("tasks", t, "Chantier", s),
-            );
-            tasks.forEach((t) => seenT.add(t.id));
-            const matching = tasks.filter((t) => matches("tasks", t));
-            return matches("streams", s) || matching.length
-              ? item("streams", s, 2) +
-                  matching.map((t) => item("tasks", t, 3)).join("")
-              : "";
-          })
-          .join("");
-        if (branches || matches("projects", p))
-          html += item("projects", p, 1) + branches;
-      }
+    if (view === "notes")
+      html = ordered("notes")
+        .map((r) => branch(tree("notes", r, true), context))
+        .join("");
+    else {
+      html = ordered("projects")
+        .map((r) => branch(tree("projects", r, true), context))
+        .join("");
       const orphans = [
         ...ordered("streams")
-          .filter((r) => !seenS.has(r.id))
+          .filter((r) => !targets("streams", r, "Projet").length)
           .map((r) => ["streams", r]),
         ...ordered("tasks")
-          .filter((r) => !seenT.has(r.id))
+          .filter((r) => !targets("tasks", r, "Chantier").length)
           .map((r) => ["tasks", r]),
-      ].filter(([k, r]) => matches(k, r));
-      if (orphans.length)
-        html +=
-          "<h3>Éléments sans parent reconnu</h3>" +
-          orphans.map(([k, r]) => item(k, r)).join("");
-    } else
-      html = ordered(view)
-        .filter((r) => matches(view, r))
-        .map((r) => item(view, r))
+      ]
+        .map(([k, r]) => branch(tree(k, r, true), context))
         .join("");
+      if (orphans) html += "<h3>Éléments sans parent reconnu</h3>" + orphans;
+      const standalone = ordered("actions")
+        .filter((r) => !actionParent(r))
+        .map((r) => branch(tree("actions", r, true), context))
+        .join("");
+      html += `<section class="unassigned" data-drop-kind="unassigned" data-drop-id="0"><h3>Actions sans rattachement au projet</h3>${standalone || '<p class="muted">Aucune action autonome.</p>'}</section>`;
+    }
     $("list").innerHTML =
-      `<div class="actions"><button data-new="${view === "projects" ? "projects" : view}">+ ${view === "projects" ? "Projet" : view === "notes" ? "Note / réunion" : "Action"}</button></div>` +
+      `<div class="actions"><button data-new="${view === "projects" ? "projects" : view}">+ ${view === "projects" ? "Projet" : view === "notes" ? "Note / réunion" : "Action"}</button><button data-fold-all="close">Tout plier</button><button data-fold-all="open">Tout déplier</button></div>` +
       (html ||
         '<p class="empty">Aucun élément. Vérifiez le mapping ou ajustez les filtres.</p>');
     renderDetail();
+    syncEdition();
   }
+  function canDrop(sourceKind, targetKind) {
+    return (
+      (sourceKind === "streams" && targetKind === "projects") ||
+      (sourceKind === "tasks" && targetKind === "streams") ||
+      (sourceKind === "actions" &&
+        ["projects", "streams", "tasks", "notes", "unassigned"].includes(
+          targetKind,
+        ))
+    );
+  }
+  function encodeLink(k, field, targetKind, targetRow) {
+    const meta = col(k, field),
+      type = meta?.type || "";
+    if (
+      /^Ref(List)?:/.test(type) &&
+      type.split(":")[1] !== cfg(targetKind).table
+    )
+      throw Error(
+        "La référence " + field + " ne pointe pas vers la table attendue.",
+      );
+    let value = null;
+    if (targetRow) {
+      value = linkValue(targetKind, targetRow, k, field);
+      if (
+        !/^Ref/.test(type) &&
+        (data[targetKind] || []).filter(
+          (r) => String(val(targetKind, r, "Code")) === String(value),
+        ).length !== 1
+      )
+        throw Error(
+          "Le code cible n’est pas unique. Corrigez les codes dans Grist.",
+        );
+    }
+    return /^RefList:/.test(type)
+      ? ["L", ...(targetRow ? [value] : [])]
+      : /^Ref:/.test(type)
+        ? value || 0
+        : (value ?? "");
+  }
+  async function performMove(source, destination) {
+    if (!editionEnabled || editing || moving || demo) {
+      message(
+        "Activez le mode Édition et terminez le formulaire en cours pour déplacer un élément.",
+        true,
+      );
+      return false;
+    }
+    if (!canDrop(source.k, destination.k)) {
+      message("Ce niveau ne peut pas être déplacé sous cet élément.", true);
+      return false;
+    }
+    moving = true;
+    ++request;
+    syncEdition();
+    const previous = data;
+    try {
+      // Work from fresh rows so subtree updates do not reuse an old parent.
+      const fresh = await Promise.all(
+        Object.keys(schemas).map(async (k) => [
+          k,
+          cfg(k).table ? rows(await grist.docApi.fetchTable(cfg(k).table)) : [],
+        ]),
+      );
+      data = Object.fromEntries(fresh);
+      const row = (data[source.k] || []).find((r) => r.id === source.id);
+      const target = (data[destination.k] || []).find(
+        (r) => r.id === destination.id,
+      );
+      if (!row || (destination.k !== "unassigned" && !target))
+        throw Error(
+          "L’élément ou sa destination n’existe plus. Actualisez la liste.",
+        );
+      const updates = new Map();
+      const set = (k, r, f, targetKind, targetRow, required = false) => {
+        const column = cfg(k).fields?.[f];
+        if (!column) {
+          if (required)
+            throw Error(
+              "Mappez le champ " +
+                schemas[k].label +
+                "." +
+                f +
+                " avant ce déplacement.",
+            );
+          return;
+        }
+        if (col(k, f)?.isFormula) {
+          if (required)
+            throw Error(
+              "Le parent est calculé : ce déplacement doit être effectué dans Grist.",
+            );
+          return;
+        }
+        const value = encodeLink(k, f, targetKind, targetRow);
+        if (JSON.stringify(r[column]) === JSON.stringify(value)) return;
+        const key = `${k}:${r.id}`;
+        if (!updates.has(key)) updates.set(key, { k, r, fields: {} });
+        updates.get(key).fields[column] = value;
+        r[column] = value;
+      };
+      const normalizeAction = (r) => {
+        const task = targets("actions", r, "Tache")[0];
+        if (task)
+          set(
+            "actions",
+            r,
+            "Chantier",
+            "streams",
+            targets("tasks", task, "Chantier")[0],
+          );
+        const stream = targets("actions", r, "Chantier")[0];
+        if (task || stream)
+          set(
+            "actions",
+            r,
+            "Projet",
+            "projects",
+            stream && targets("streams", stream, "Projet")[0],
+          );
+      };
+      if (source.k === "streams") {
+        set("streams", row, "Projet", "projects", target, true);
+        for (const a of data.actions || [])
+          if (linkedTo("streams", row, "actions", a)) normalizeAction(a);
+      } else if (source.k === "tasks") {
+        set("tasks", row, "Chantier", "streams", target, true);
+        for (const a of data.actions || [])
+          if (has("actions", a, "Tache", row)) normalizeAction(a);
+      } else if (destination.k === "notes")
+        set("actions", row, "NoteOrigine", "notes", target, true);
+      else {
+        if (destination.k === "tasks")
+          set("actions", row, "Tache", "tasks", target, true);
+        else {
+          set(
+            "actions",
+            row,
+            "Tache",
+            "tasks",
+            null,
+            targets("actions", row, "Tache").length > 0,
+          );
+          if (destination.k === "streams")
+            set("actions", row, "Chantier", "streams", target, true);
+          else {
+            set(
+              "actions",
+              row,
+              "Chantier",
+              "streams",
+              null,
+              targets("actions", row, "Chantier").length > 0,
+            );
+            set(
+              "actions",
+              row,
+              "Projet",
+              "projects",
+              target,
+              destination.k === "projects" ||
+                (destination.k === "unassigned" &&
+                  targets("actions", row, "Projet").length > 0),
+            );
+          }
+        }
+        if (
+          destination.k === "unassigned" &&
+          !["Projet", "Chantier", "Tache"].some(
+            (f) => cfg("actions").fields?.[f],
+          )
+        )
+          throw Error(
+            "Mappez les rattachements des actions avant ce déplacement.",
+          );
+        if (destination.k !== "unassigned") normalizeAction(row);
+      }
+      if (updates.size)
+        await grist.docApi.applyUserActions(
+          [...updates.values()].map((u) => [
+            "UpdateRecord",
+            cfg(u.k).table,
+            u.r.id,
+            u.fields,
+          ]),
+        );
+      let refreshWarning = "";
+      if (updates.size) {
+        try {
+          data = Object.fromEntries(
+            await Promise.all(
+              Object.keys(schemas).map(async (k) => [
+                k,
+                cfg(k).table
+                  ? rows(await grist.docApi.fetchTable(cfg(k).table))
+                  : [],
+              ]),
+            ),
+          );
+        } catch {
+          refreshWarning =
+            " Déplacement enregistré, mais les valeurs calculées n’ont pas pu être rechargées. Utilisez Actualiser.";
+        }
+      }
+      // Reveal the new parent's branch; the selection and other folds stay intact.
+      for (const context of [
+        "left-projects",
+        "left-actions",
+        "left-notes",
+        "right-dependents",
+        "right-notes",
+      ])
+        folded.delete(`${context}:${destination.k}:${destination.id}`);
+      filterOptions();
+      message(
+        updates.size
+          ? refreshWarning || "Déplacement enregistré."
+          : "Cet élément est déjà rattaché à cette destination.",
+      );
+      return true;
+    } catch (err) {
+      data = previous;
+      $("moveError").textContent = "Déplacement impossible : " + err.message;
+      message("Déplacement impossible : " + err.message, true);
+      return false;
+    } finally {
+      moving = false;
+      dragged = null;
+      render();
+    }
+  }
+  function openMove(k, id) {
+    if (!editionEnabled || editing || moving || demo) return;
+    const source = (data[k] || []).find((r) => r.id === id);
+    if (!source) return;
+    const dialog = $("moveDialog");
+    $("moveError").textContent = "";
+    dialog.dataset.kind = k;
+    dialog.dataset.id = String(id);
+    $("moveTitle").textContent = "Déplacer « " + title(k, source) + " »";
+    $("moveTarget").innerHTML =
+      Object.keys(schemas)
+        .filter((target) => canDrop(k, target))
+        .map(
+          (target) =>
+            `<optgroup label="${esc(schemas[target].label)}">${ordered(target)
+              .map(
+                (r) =>
+                  `<option value="${target}:${r.id}">${esc(title(target, r))}</option>`,
+              )
+              .join("")}</optgroup>`,
+        )
+        .join("") +
+      (k === "actions"
+        ? '<option value="unassigned:0">Sans rattachement au projet (réunion conservée)</option>'
+        : "");
+    dialog.showModal();
+  }
+  $("moveCancel").onclick = () => $("moveDialog").close();
+  $("moveForm").onsubmit = async (e) => {
+    e.preventDefault();
+    const [k, id] = $("moveTarget").value.split(":");
+    if (!k) return;
+    $("moveSubmit").disabled = true;
+    try {
+      if (
+        await performMove(
+          {
+            k: $("moveDialog").dataset.kind,
+            id: Number($("moveDialog").dataset.id),
+          },
+          { k, id: Number(id) },
+        )
+      )
+        $("moveDialog").close();
+    } finally {
+      $("moveSubmit").disabled = false;
+    }
+  };
+  const main = document.querySelector("main");
+  main.ondragstart = (e) => {
+    const row = e.target.closest("[data-drag-kind]");
+    if (
+      !row ||
+      !editionEnabled ||
+      editing ||
+      moving ||
+      demo ||
+      e.target.closest("input,textarea,select")
+    ) {
+      e.preventDefault();
+      return;
+    }
+    dragged = { k: row.dataset.dragKind, id: Number(row.dataset.dragId) };
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData(
+      "text/plain",
+      title(
+        dragged.k,
+        (data[dragged.k] || []).find((r) => r.id === dragged.id),
+      ),
+    );
+    row.classList.add("dragging");
+  };
+  main.ondragover = (e) => {
+    const row = e.target.closest("[data-drop-kind]");
+    document
+      .querySelectorAll(".drop-target")
+      .forEach((x) => x.classList.remove("drop-target"));
+    if (
+      editionEnabled &&
+      !editing &&
+      !moving &&
+      dragged &&
+      row &&
+      canDrop(dragged.k, row.dataset.dropKind)
+    ) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      row.classList.add("drop-target");
+    }
+  };
+  main.ondrop = (e) => {
+    const row = e.target.closest("[data-drop-kind]");
+    e.preventDefault();
+    document
+      .querySelectorAll(".drop-target,.dragging")
+      .forEach((x) => x.classList.remove("drop-target", "dragging"));
+    if (!dragged || !row) return;
+    const source = dragged;
+    dragged = null;
+    performMove(source, {
+      k: row.dataset.dropKind,
+      id: Number(row.dataset.dropId),
+    });
+  };
+  main.ondragend = () => {
+    dragged = null;
+    document
+      .querySelectorAll(".drop-target,.dragging")
+      .forEach((x) => x.classList.remove("drop-target", "dragging"));
+  };
+
   function linkedTo(k, r, kind, row) {
     if (k === "projects") return projectOf(kind, row)?.id === r.id;
     if (k === "streams")
@@ -453,6 +862,13 @@
     if (k === "notes")
       html +=
         '<div class="actions"><button data-new="actions">+ Action issue de cette note</button></div>';
+    const deps = children(k, r).filter(([kind]) => kind !== "actions");
+    if (deps.length)
+      html +=
+        "<h3>Éléments dépendants</h3>" +
+        deps
+          .map(([kind, row]) => branch(tree(kind, row), "right-dependents"))
+          .join("");
     if (k !== "actions") {
       let actions = (data.actions || []).filter((x) =>
         linkedTo(k, r, "actions", x),
@@ -465,7 +881,7 @@
       if (k !== "notes")
         html +=
           "<h3>Notes et réunions associées</h3>" +
-          (notes.map((x) => item("notes", x)).join("") ||
+          (notes.map((x) => branch(tree("notes", x), "right-notes")).join("") ||
             '<p class="muted">Aucune note liée.</p>');
       html +=
         "<h3>Actions associées</h3>" +
@@ -473,8 +889,10 @@
           '<p class="muted">Aucune action liée.</p>');
     }
     $("detail").innerHTML = html;
+    syncEdition();
   }
   async function load() {
+    if (moving) return;
     const token = ++request;
     try {
       const pairs = await Promise.all(
@@ -583,6 +1001,10 @@
     return code;
   }
   function openEditor(k, r = null) {
+    if (!editionEnabled || moving) {
+      message("Activez le mode Édition pour modifier les données.");
+      return;
+    }
     if (demo) {
       message(
         "La démonstration est en lecture seule. Connectez le widget à Grist pour modifier les données.",
@@ -732,7 +1154,7 @@
   }
   async function save(e) {
     e.preventDefault();
-    if (busy) return;
+    if (busy || !editionEnabled || moving) return;
     busy = true;
     $("save").disabled = true;
     try {
@@ -924,10 +1346,55 @@
     }
   };
   document.querySelector("main").onclick = (e) => {
-    if (editing && e.target.closest("[data-kind], [data-new], [data-edit]")) {
+    if (
+      (editing || moving) &&
+      e.target.closest(
+        "[data-kind], [data-new], [data-edit], [data-fold], [data-fold-all], [data-move-kind]",
+      )
+    ) {
       message(
         "Enregistrez ou annulez les modifications avant de changer d’élément.",
       );
+      return;
+    }
+    const fold = e.target.closest("[data-fold]");
+    if (fold) {
+      folded.has(fold.dataset.fold)
+        ? folded.delete(fold.dataset.fold)
+        : folded.add(fold.dataset.fold);
+      const wrapper = fold.closest(".tree-node");
+      const kids = wrapper.querySelector(":scope > .tree-children");
+      const open = !folded.has(fold.dataset.fold);
+      kids.hidden = !open;
+      fold.setAttribute("aria-expanded", String(open));
+      fold.setAttribute(
+        "aria-label",
+        (open ? "Plier " : "Déplier ") +
+          title(
+            wrapper.dataset.treeKind,
+            (data[wrapper.dataset.treeKind] || []).find(
+              (r) => r.id === Number(wrapper.dataset.treeId),
+            ),
+          ),
+      );
+      fold.textContent = open ? "▾" : "▸";
+      return;
+    }
+    const all = e.target.closest("[data-fold-all]");
+    if (all) {
+      $("list")
+        .querySelectorAll("[data-fold]")
+        .forEach((b) =>
+          all.dataset.foldAll === "close"
+            ? folded.add(b.dataset.fold)
+            : folded.delete(b.dataset.fold),
+        );
+      render();
+      return;
+    }
+    const move = e.target.closest("[data-move-kind]");
+    if (move) {
+      openMove(move.dataset.moveKind, Number(move.dataset.moveId));
       return;
     }
     const row = e.target.closest("[data-kind]"),
@@ -950,7 +1417,26 @@
       openEditor(selection.k, record);
     }
   };
+  $("editionButton").onclick = () => {
+    if (editing || moving) {
+      message(
+        "Enregistrez ou annulez l’opération en cours avant de quitter le mode Édition.",
+      );
+      return;
+    }
+    editionEnabled = !editionEnabled;
+    render();
+    message(
+      editionEnabled
+        ? "Édition activée : glissez un sous-élément sur son nouveau parent ou utilisez le bouton Déplacer."
+        : "Lecture seule : vous pouvez plier et déplier les éléments.",
+    );
+  };
   $("mappingButton").onclick = () => {
+    if (editing || moving) {
+      message("Terminez l’opération en cours avant de modifier le mapping.");
+      return;
+    }
     draft = structuredClone(mapping);
     mappingUI();
     $("mapping").hidden = !$("mapping").hidden;

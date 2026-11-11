@@ -37,7 +37,7 @@ Un lien permet de revenir à la page principale. Les champs supplémentaires con
 
 ## Validation et limites
 
-`node tests/workspace.cjs` exécute des parcours navigateur avec Playwright et Chromium, sur un serveur local lancé dans le dossier. Playwright doit être installé dans l’environnement ; le test utilise `/usr/bin/chromium`. L’API Grist est simulée : ces tests couvrent les codes CSV, références natives, colonnes renommées, sauvegarde du mapping, édition des notes, création d’actions, filtres, protection des formules et erreurs d’accès.
+Lancer le serveur avec `python -m http.server 8766 --bind 127.0.0.1`, puis `node tests/workspace.cjs`. Cette commande exécute des parcours navigateur avec Playwright et Chromium, sur un serveur local lancé dans le dossier. Playwright doit être installé dans l’environnement ; le test utilise `/usr/bin/chromium`. L’API Grist est simulée : ces tests couvrent les codes CSV, références natives, colonnes renommées, sauvegarde du mapping, édition des notes, création d’actions, filtres, protection des formules et erreurs d’accès.
 
 Une connexion à un vrai document Grist reste à vérifier lors de l’essai utilisateur. La V1 ne crée pas de tables/colonnes, ne supprime pas de données et ne traite pas la matrice « Avancement par dimension ». Les notes ne disposent pas d’un éditeur enrichi. La timeline reste une page séparée. Il n’y a pas encore de gestion des conflits entre deux éditeurs simultanés.
 
@@ -46,3 +46,18 @@ Une connexion à un vrai document Grist reste à vérifier lors de l’essai uti
 Le bouton **Modifier** transforme directement les informations affichées en champs préremplis dans le panneau de détail. **Enregistrer** applique les modifications ; **Annuler** restitue la lecture sans écrire dans Grist. Les autres champs et rattachements restent accessibles dans une section dépliable. Les créations utilisent encore un formulaire séparé.
 
 Le brouillon reste visible en cas d’erreur et lors des rafraîchissements. Il faut enregistrer ou annuler avant de changer de vue ou d’élément. Les colonnes calculées restent protégées et seules les valeurs modifiées sont envoyées (avec normalisation des parents d’une action).
+
+## Plier les niveaux et déplacer des sous-éléments
+
+Le bouton **Édition** est désactivé à l’ouverture. En lecture, les flèches et les boutons **Tout plier / Tout déplier** restent accessibles ; les créations, modifications et déplacements sont bloqués.
+
+- **Projets** : chaque projet contient ses chantiers, leurs tâches et les actions rattachées au niveau le plus précis.
+- **Notes et réunions** : chaque note peut se déplier pour afficher ses actions.
+- **À faire** : les actions sont regroupées dans la hiérarchie projet / chantier / tâche, avec une zone pour les actions sans rattachement au projet.
+- Dans le panneau droit, les éléments dépendants et les actions des notes associées sont dépliables (repliés par défaut). Les liens vers les parents restent des liens simples.
+
+En mode Édition, glisser un chantier sur un projet, une tâche sur un chantier, ou une action sur un projet, chantier, tâche ou réunion. La cible compatible est mise en évidence. Le bouton **Déplacer** fournit la même opération au clavier ou sur écran tactile. Un déplacement est enregistré immédiatement, sans passer par le bouton Enregistrer du formulaire.
+
+Changer le parent d’un chantier ou d’une tâche conserve ses descendants et met à jour les rattachements redondants des actions liées dans une seule opération Grist. Déplacer une action sur une réunion change seulement sa réunion d’origine : son lien au projet est conservé. La destination **Sans rattachement au projet** conserve aussi la réunion d’origine. Aucun réordonnancement manuel entre frères n’est ajouté.
+
+Les parents calculés ou les champs de liaison non mappés peuvent empêcher un déplacement ; le widget affiche alors l’explication. Les droits Grist restent applicables. Un refus d’écriture conserve le parent d’origine. Le pliage est indépendant dans chaque volet et reste conservé pendant la navigation de la session (réinitialisé au rechargement).

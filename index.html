@@ -18,7 +18,8 @@
         ><button data-view="notes">Notes et réunions</button
         ><button data-view="actions">À faire</button>
       </nav>
-      <button id="mappingButton">Mapping</button
+      <button id="editionButton" aria-pressed="false">Édition désactivée</button
+      ><button id="mappingButton">Mapping</button
       ><button id="refresh">Actualiser</button
       ><a href="timeline.html">Timeline</a>
     </header>
@@ -62,6 +63,20 @@
         <div id="fields"></div>
         <p id="editError" role="alert"></p>
         <button id="save" type="submit">Enregistrer</button>
+      </form>
+    </dialog>
+    <dialog id="moveDialog" aria-labelledby="moveTitle">
+      <form id="moveForm">
+        <h2 id="moveTitle"></h2>
+        <label
+          >Nouveau rattachement
+          <select id="moveTarget" required></select
+        ></label>
+        <p id="moveError" role="alert"></p>
+        <div class="actions">
+          <button id="moveSubmit" type="submit">Déplacer</button
+          ><button id="moveCancel" type="button">Annuler</button>
+        </div>
       </form>
     </dialog>
     <script src="workspace.js"></script>
