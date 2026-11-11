@@ -61,3 +61,9 @@ En mode Édition, glisser un chantier sur un projet, une tâche sur un chantier,
 Changer le parent d’un chantier ou d’une tâche conserve ses descendants et met à jour les rattachements redondants des actions liées dans une seule opération Grist. Déplacer une action sur une réunion change seulement sa réunion d’origine : son lien au projet est conservé. La destination **Sans rattachement au projet** conserve aussi la réunion d’origine. Aucun réordonnancement manuel entre frères n’est ajouté.
 
 Les parents calculés ou les champs de liaison non mappés peuvent empêcher un déplacement ; le widget affiche alors l’explication. Les droits Grist restent applicables. Un refus d’écriture conserve le parent d’origine. Le pliage est indépendant dans chaque volet et reste conservé pendant la navigation de la session (réinitialisé au rechargement).
+
+## Défilement et repères visuels
+
+La liste et le détail disposent de défilements verticaux indépendants dans la hauteur disponible du widget. Sur petit écran, les deux volets sont empilés et restent défilables séparément. Le mapping possède aussi une hauteur limitée avec son propre défilement. Chaque volet peut recevoir le focus au clavier.
+
+Une bordure et un fond discret distinguent les projets (bleu), chantiers (ocre), tâches (vert bleuté), actions (mauve) et notes (gris bleuté). La palette s’inspire d’Okabe–Ito ; les libellés de type et l’indentation permettent également de reconnaître les niveaux sans distinguer les couleurs. Les contrastes du texte et des bordures sur leurs fonds sont vérifiés (respectivement ≥ 4,5:1 et ≥ 3:1).

@@ -34,6 +34,19 @@ const fixture = require("../demo.json");
         Chantiers: "C002",
       });
     }
+    if (location.search.includes("layout=1")) {
+      for (let i = 2; i <= 30; i++)
+        db.data.streams.push({
+          ...db.data.streams[0],
+          id: i,
+          Code: `C${i}`,
+          Titre: `Chantier ${i}`,
+        });
+      db.data.projects[0].PointEtape = Array.from(
+        { length: 80 },
+        (_, i) => `Point de suivi ${i + 1} : compte rendu détaillé.`,
+      ).join("\n\n");
+    }
     window.testDb = db;
     if (location.search.includes("refs=1")) {
       const targets = {
@@ -424,6 +437,85 @@ const fixture = require("../demo.json");
         ")",
     );
   }
+
+  await page.goto("http://127.0.0.1:8766/?layout=1");
+  await page.locator("#list [data-kind=projects]").first().click();
+  async function checkPaneScroll() {
+    await page.evaluate(() => {
+      document.querySelector("#list").scrollTop = 0;
+      document.querySelector("#detail").scrollTop = 0;
+    });
+    for (const id of ["list", "detail"]) {
+      const geometry = await page
+        .locator("#" + id)
+        .evaluate((el) => ({
+          height: el.clientHeight,
+          content: el.scrollHeight,
+          bottom: el.getBoundingClientRect().bottom,
+        }));
+      assert.ok(geometry.height > 60 && geometry.content > geometry.height);
+      assert.ok(geometry.bottom <= (await page.evaluate(() => innerHeight)));
+    }
+    await page.locator("#list").hover();
+    await page.mouse.wheel(0, 350);
+    await page.waitForFunction(
+      () => document.querySelector("#list").scrollTop > 0,
+    );
+    assert.equal(
+      await page.locator("#detail").evaluate((el) => el.scrollTop),
+      0,
+    );
+    const left = await page.locator("#list").evaluate((el) => el.scrollTop);
+    await page.locator("#detail").hover();
+    await page.mouse.wheel(0, 350);
+    await page.waitForFunction(
+      () => document.querySelector("#detail").scrollTop > 0,
+    );
+    assert.equal(
+      await page.locator("#list").evaluate((el) => el.scrollTop),
+      left,
+    );
+    assert.equal(await page.evaluate(() => window.scrollY), 0);
+    assert.equal(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+      true,
+    );
+  }
+  await checkPaneScroll();
+  const levels = await page
+    .locator("#list [data-kind]")
+    .evaluateAll((items) =>
+      Object.fromEntries(
+        items.map((el) => [
+          el.dataset.kind,
+          {
+            color: getComputedStyle(el).borderLeftColor,
+            label: el.querySelector(".item-kind")?.textContent,
+          },
+        ]),
+      ),
+    );
+  assert.equal(
+    new Set(Object.values(levels).map((x) => x.color)).size,
+    Object.keys(levels).length,
+  );
+  assert.ok(Object.values(levels).every((x) => x.label));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await checkPaneScroll();
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.locator("#mappingButton").click();
+  assert.ok(
+    await page
+      .locator("#mapping")
+      .evaluate((el) => el.scrollHeight > el.clientHeight),
+  );
+  assert.equal(await page.evaluate(() => window.scrollY), 0);
+  await page.locator("#mappingButton").click();
+  console.log(
+    "PASS independent wheel scrolling on desktop/mobile, bounded mapping and distinct labelled levels",
+  );
   await page.goto("http://127.0.0.1:8766/?demo=1");
   await page
     .getByRole("button", { name: "Confirmer les participants", exact: false })

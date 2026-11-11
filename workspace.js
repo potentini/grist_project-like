@@ -279,8 +279,15 @@
           (!$("overdue").checked || overdue(r))))
     );
   }
+  const kindLabels = {
+    projects: "Projet",
+    streams: "Chantier",
+    tasks: "Tâche",
+    actions: "Action",
+    notes: "Note / réunion",
+  };
   function item(k, r, level = 0) {
-    return `<button class="item level${level} ${selection?.k === k && selection.id === r.id ? "selected" : ""}" data-kind="${k}" data-id="${r.id}"><strong>${esc(title(k, r))}</strong><small>${esc([val(k, r, "Volet"), val(k, r, "Responsable"), dateText(val(k, r, "Date")) || val(k, r, "Echeance") || dateText(val(k, r, "DateFin"))].filter(Boolean).join(" · "))}</small>${[
+    return `<button class="item level${level} ${selection?.k === k && selection.id === r.id ? "selected" : ""}" data-kind="${k}" data-id="${r.id}"><span class="item-kind">${kindLabels[k]}</span><strong>${esc(title(k, r))}</strong><small>${esc([val(k, r, "Volet"), val(k, r, "Responsable"), dateText(val(k, r, "Date")) || val(k, r, "Echeance") || dateText(val(k, r, "DateFin"))].filter(Boolean).join(" · "))}</small>${[
       val(k, r, "Statut") || val(k, r, "Etat"),
       val(k, r, "Vigilance"),
     ]
