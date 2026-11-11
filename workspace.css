@@ -458,3 +458,13 @@ select[multiple] {
   width: 100%;
   margin-top: 8px;
 }
+#removalError {
+  color: #a32424;
+}
+#removalPreview ul {
+  max-height: 30vh;
+  overflow: auto;
+}
+button[data-removal="delete"] {
+  color: #a32424;
+}

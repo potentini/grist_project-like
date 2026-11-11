@@ -129,6 +129,7 @@
       ],
     },
   };
+  for (const schema of Object.values(schemas)) schema.fields.push("Archive");
   const aliases = {
     Titre: ["Titre", "Nom", "Name", "Title", "Tache"],
     Responsable: ["Responsable", "Owner", "AssignedTo"],
@@ -309,11 +310,11 @@
       parent = (data[parentKind] || []).find((r) => r.id === parentId);
     if (
       !source ||
-      transformed(sourceKind, source) ||
+      inactive(sourceKind, source) ||
       conversionTarget(sourceKind, source).length
     )
       throw Error("Cet élément est absent ou a déjà été transformé.");
-    if (!parent || transformed(parentKind, parent))
+    if (!parent || inactive(parentKind, parent))
       throw Error("Choisissez un parent actif pour le nouvel élément.");
     const requireField = (k, f, type) => {
       const m = col(k, f);
@@ -573,9 +574,217 @@
     }
   };
 
+  function archived(k, r) {
+    return [true, 1, "true"].includes(val(k, r, "Archive"));
+  }
+  function inactive(k, r) {
+    return archived(k, r) || transformed(k, r);
+  }
+  function outlineRows(k) {
+    return (data[k] || []).filter(
+      (r) =>
+        !transformed(k, r) &&
+        (!archived(k, r) ||
+          $("showArchived").checked ||
+          children(k, r).some(
+            ([kind, row]) => !inactive(kind, row) || children(kind, row).length,
+          )),
+    );
+  }
+  let removal = null;
+  async function incomingLinks(k, row) {
+    const result = new Map(),
+      add = (table, r, col) => {
+        const key = table + ":" + r.id;
+        if (!result.has(key))
+          result.set(key, {
+            table,
+            id: r.id,
+            cols: [],
+            title: (() => {
+              const kind = Object.keys(schemas).find(
+                (x) => cfg(x).table === table,
+              );
+              return kind ? title(kind, r) : table + " #" + r.id;
+            })(),
+          });
+        if (!result.get(key).cols.includes(col)) result.get(key).cols.push(col);
+      };
+    const columns = meta.filter(
+      (c) =>
+        /^Ref(List)?:/.test(c.type || "") &&
+        c.type.split(":")[1] === cfg(k).table &&
+        !c.table.startsWith("_grist_"),
+    );
+    const tablesToRead = [...new Set(columns.map((c) => c.table))];
+    const raw = Object.fromEntries(
+      await Promise.all(
+        tablesToRead.map(async (t) => [
+          t,
+          rows(await grist.docApi.fetchTable(t)),
+        ]),
+      ),
+    );
+    for (const c of columns)
+      for (const r of raw[c.table])
+        if (values(r[c.colId]).some((x) => Number(x) === row.id))
+          add(c.table, r, c.colId);
+    for (const [kind, fields] of Object.entries(links))
+      for (const [f, target] of Object.entries(fields))
+        if (target === k && cfg(kind).fields?.[f])
+          for (const r of data[kind] || [])
+            if (has(kind, r, f, row))
+              add(cfg(kind).table, r, cfg(kind).fields[f]);
+    return [...result.values()];
+  }
+  async function openRemoval(k, id, mode) {
+    if (!editionEnabled || editing || moving || demo) return;
+    const operation = { k, id, mode };
+    removal = operation;
+    $("removalTitle").textContent =
+      mode === "delete"
+        ? "Supprimer un élément"
+        : mode === "restore"
+          ? "Restaurer un élément"
+          : "Archiver un élément";
+    $("removalError").textContent = "";
+    $("removalPreview").textContent = "Vérification des liens…";
+    $("removalSubmit").disabled = true;
+    $("removalConfirm").checked = false;
+    $("removalDialog").showModal();
+    try {
+      await refreshMetadata();
+      data = Object.fromEntries(
+        await Promise.all(
+          Object.keys(schemas).map(async (kind) => [
+            kind,
+            cfg(kind).table
+              ? rows(await grist.docApi.fetchTable(cfg(kind).table))
+              : [],
+          ]),
+        ),
+      );
+      const row = (data[k] || []).find((r) => r.id === id);
+      if (!row) throw Error("Cet élément n’existe plus.");
+      const deps = await incomingLinks(k, row);
+      if (removal !== operation || !$("removalDialog").open) return;
+      removal.row = row;
+      removal.deps = deps;
+      const verb =
+        mode === "delete"
+          ? "Supprimer"
+          : mode === "restore"
+            ? "Restaurer"
+            : "Archiver";
+      $("removalPreview").innerHTML =
+        `<p><strong>${esc(title(k, row))}</strong></p><p>${deps.length} élément(s) référencent cette ligne.</p>${deps.length ? "<ul>" + deps.map((d) => `<li>${esc(d.title)} — ${esc(d.table)} (${esc(d.cols.join(", "))})</li>`).join("") + "</ul>" : ""}<p>${mode === "delete" ? (deps.length ? "Suppression bloquée : réaffectez ou retirez ces liens auparavant. Vous pouvez archiver cet élément pour conserver ses références." : "Seule cette ligne sera supprimée définitivement. Aucun autre élément ne sera supprimé.") : mode === "restore" ? "Cet élément réapparaîtra dans le suivi actif." : "Les données et les liens seront conservés. Les dépendants ne seront pas archivés ; ils resteront accessibles sous le parent affiché comme contexte archivé."}</p>`;
+      $("removalSubmit").textContent = verb;
+      if (mode === "delete" && deps.length) return;
+      if (mode !== "delete") {
+        const m = col(k, "Archive");
+        if (!m || m.type !== "Bool" || m.isFormula)
+          throw Error(
+            `Ajoutez et mappez ${schemas[k].label}.Archive : colonne de données Booléen / Case à cocher.`,
+          );
+        if (transformed(k, row))
+          throw Error(
+            "Une origine transformée ne se restaure pas comme un élément actif.",
+          );
+      }
+      $("removalSubmit").disabled = false;
+    } catch (err) {
+      $("removalError").textContent = err.message;
+    }
+  }
+  $("removalCancel").onclick = () => {
+    if (!moving) {
+      removal = null;
+      $("removalDialog").close();
+    }
+  };
+  $("removalDialog").addEventListener("cancel", (e) => {
+    if (moving) e.preventDefault();
+    else removal = null;
+  });
+  $("removalForm").onsubmit = async (e) => {
+    e.preventDefault();
+    if (
+      !editionEnabled ||
+      editing ||
+      moving ||
+      !removal?.row ||
+      !$("removalConfirm").checked
+    )
+      return;
+    moving = true;
+    syncEdition();
+    $("removalSubmit").disabled = true;
+    ++request;
+    try {
+      const { k, id, mode } = removal;
+      if (mode === "delete") {
+        const fresh = rows(await grist.docApi.fetchTable(cfg(k).table)).find(
+          (r) => r.id === id,
+        );
+        if (!fresh) throw Error("Cette ligne n’existe plus.");
+        if (JSON.stringify(fresh) !== JSON.stringify(removal.row))
+          throw Error(
+            "La ligne a changé. Fermez puis rouvrez cet aperçu avant de confirmer.",
+          );
+        // Refresh mapped text links as well as native Grist references before deleting.
+        data = Object.fromEntries(
+          await Promise.all(
+            Object.keys(schemas).map(async (kind) => [
+              kind,
+              cfg(kind).table
+                ? rows(await grist.docApi.fetchTable(cfg(kind).table))
+                : [],
+            ]),
+          ),
+        );
+        if ((await incomingLinks(k, fresh)).length)
+          throw Error(
+            "Des liens référencent encore cet élément. Fermez puis rouvrez cet aperçu pour les consulter.",
+          );
+        await grist.docApi.applyUserActions([
+          ["RemoveRecord", cfg(k).table, id],
+        ]);
+        if (selection?.k === k && selection.id === id) selection = null;
+      } else
+        await grist.docApi.applyUserActions([
+          [
+            "UpdateRecord",
+            cfg(k).table,
+            id,
+            { [cfg(k).fields.Archive]: mode !== "restore" },
+          ],
+        ]);
+      $("removalDialog").close();
+      moving = false;
+      await load();
+      message(
+        mode === "delete"
+          ? "Élément supprimé."
+          : mode === "restore"
+            ? "Élément restauré."
+            : "Élément archivé.",
+      );
+    } catch (err) {
+      $("removalError").textContent = "Opération impossible : " + err.message;
+    } finally {
+      moving = false;
+      syncEdition();
+      $("removalSubmit").disabled =
+        removal.mode === "delete" && removal.deps?.length > 0;
+    }
+  };
+
   function ordered(k) {
     return [...(data[k] || [])]
-      .filter((r) => !transformed(k, r))
+      .filter(
+        (r) =>
+          !transformed(k, r) && (!archived(k, r) || $("showArchived").checked),
+      )
       .sort((a, b) =>
         k === "notes"
           ? dateText(val(k, b, "Date")).localeCompare(
@@ -591,6 +800,7 @@
       s = $("statusFilter").value,
       q = norm($("search").value);
     return (
+      (!archived(k, r) || $("showArchived").checked) &&
       (!p ||
         (k === "points"
           ? pointProjects(r).some((x) => x.id === Number(p))
@@ -620,7 +830,7 @@
     points: "Point de discussion",
   };
   function item(k, r, level = 0) {
-    return `<button class="item level${level} ${selection?.k === k && selection.id === r.id ? "selected" : ""}" data-kind="${k}" data-id="${r.id}"><span class="item-kind">${kindLabels[k]}</span><strong>${esc(title(k, r))}</strong>${transformed(k, r) ? '<span class="badge">Transformé</span>' : ""}<small>${esc([val(k, r, "Volet"), val(k, r, "Responsable"), dateText(val(k, r, "Date")) || val(k, r, "Echeance") || dateText(val(k, r, "DateFin"))].filter(Boolean).join(" · "))}</small>${[
+    return `<button class="item level${level} ${selection?.k === k && selection.id === r.id ? "selected" : ""}" data-kind="${k}" data-id="${r.id}"><span class="item-kind">${kindLabels[k]}</span><strong>${esc(title(k, r))}</strong>${archived(k, r) ? '<span class="badge">Archivé</span>' : ""}${transformed(k, r) ? '<span class="badge">Transformé</span>' : ""}<small>${esc([val(k, r, "Volet"), val(k, r, "Responsable"), dateText(val(k, r, "Date")) || val(k, r, "Echeance") || dateText(val(k, r, "DateFin"))].filter(Boolean).join(" · "))}</small>${[
       val(k, r, "Statut") || val(k, r, "Etat"),
       val(k, r, "Vigilance"),
     ]
@@ -683,13 +893,13 @@
     const result = [];
     if (k === "projects")
       result.push(
-        ...ordered("streams")
+        ...outlineRows("streams")
           .filter((x) => has("streams", x, "Projet", r))
           .map((x) => ["streams", x]),
       );
     if (k === "streams")
       result.push(
-        ...ordered("tasks")
+        ...outlineRows("tasks")
           .filter((x) => has("tasks", x, "Chantier", r))
           .map((x) => ["tasks", x]),
       );
@@ -704,14 +914,18 @@
       );
     if (k === "notes")
       result.push(
-        ...ordered("points")
+        ...outlineRows("points")
           .filter((x) => has("points", x, "NoteOrigine", r))
           .map((x) => ["points", x]),
       );
     if (k === "points")
       result.push(
         ...(data.actions || [])
-          .filter((x) => has("actions", x, "PointOrigine", r))
+          .filter(
+            (x) =>
+              has("actions", x, "PointOrigine", r) &&
+              (!archived("actions", x) || $("showArchived").checked),
+          )
           .map((x) => ["actions", x]),
       );
     if (k === "notes")
@@ -720,6 +934,7 @@
           .filter(
             (x) =>
               has("actions", x, "NoteOrigine", r) &&
+              (!archived("actions", x) || $("showArchived").checked) &&
               !targets("actions", x, "PointOrigine").length,
           )
           .map((x) => ["actions", x]),
@@ -751,7 +966,7 @@
     }
     const open = !folded.has(key);
     const movable =
-      ["streams", "tasks", "actions"].includes(k) && !transformed(k, r);
+      ["streams", "tasks", "actions"].includes(k) && !inactive(k, r);
     return `<div class="tree-node" data-tree-kind="${k}" data-tree-id="${r.id}"><div class="tree-row" data-drop-kind="${k}" data-drop-id="${r.id}" ${movable ? `draggable="${editionEnabled && !editing && !moving && !demo}" data-drag-kind="${k}" data-drag-id="${r.id}"` : ""}>${kids.length ? `<button class="fold" type="button" data-fold="${key}" aria-expanded="${open}" aria-label="${open ? "Plier" : "Déplier"} ${esc(title(k, r))}">${open ? "▾" : "▸"}</button>` : '<span class="fold-spacer"></span>'}${item(k, r)}${editionEnabled && movable ? `<button class="move-button" type="button" data-move-kind="${k}" data-move-id="${r.id}" aria-label="Déplacer ${esc(title(k, r))}" title="Déplacer"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20 20 4M7 4h13v13"/></svg></button>` : ""}</div>${kids.length ? `<div class="tree-children" ${open ? "" : "hidden"}>${kids.map((n) => branch(n, context)).join("")}</div>` : ""}</div>`;
   }
   function syncEdition() {
@@ -764,14 +979,17 @@
       .querySelectorAll("[data-view], #mappingButton, #refresh, #editionButton")
       .forEach((b) => (b.disabled = moving));
     document
-      .querySelectorAll("[data-new], [data-edit], [data-convert]")
+      .querySelectorAll(
+        "[data-new], [data-edit], [data-convert], [data-removal]",
+      )
       .forEach(
         (b) =>
           (b.disabled =
             !editionEnabled ||
             moving ||
             (b.closest("#detail") &&
-              transformed(
+              !b.matches("[data-removal]") &&
+              inactive(
                 selection?.k,
                 (data[selection?.k] || []).find((r) => r.id === selection?.id),
               ))),
@@ -786,18 +1004,18 @@
     const context = "left-" + view;
     let html = "";
     if (view === "notes")
-      html = ordered("notes")
+      html = outlineRows("notes")
         .map((r) => branch(tree("notes", r, true), context))
         .join("");
     else {
-      html = ordered("projects")
+      html = outlineRows("projects")
         .map((r) => branch(tree("projects", r, true), context))
         .join("");
       const orphans = [
-        ...ordered("streams")
+        ...outlineRows("streams")
           .filter((r) => !targets("streams", r, "Projet").length)
           .map((r) => ["streams", r]),
-        ...ordered("tasks")
+        ...outlineRows("tasks")
           .filter((r) => !targets("tasks", r, "Chantier").length)
           .map((r) => ["tasks", r]),
       ]
@@ -887,9 +1105,9 @@
       );
       if (
         !row ||
-        transformed(source.k, row) ||
+        inactive(source.k, row) ||
         (destination.k !== "unassigned" &&
-          (!target || transformed(destination.k, target)))
+          (!target || inactive(destination.k, target)))
       )
         throw Error(
           "L’élément ou sa destination n’existe plus. Actualisez la liste.",
@@ -1211,6 +1429,7 @@
     "statusFilter",
     "search",
     "unlinked",
+    "showArchived",
     "overdue",
   ];
   function captureLocation(source = null) {
@@ -1330,15 +1549,16 @@
     let html =
       historyToolbar() +
       `<small>${esc(schemas[k].label)}</small><h2 data-slot="Titre">${esc(title(k, r))}</h2><button data-edit="1">Modifier</button>`;
-    if (transformed(k, r)) {
+    if (inactive(k, r)) {
       html = html.replace('<button data-edit="1">Modifier</button>', "");
       html +=
-        '<p class="muted">Transformé — conservé pour l’historique.</p>' +
+        `<p class="muted">${transformed(k, r) ? "Transformé" : "Archivé"} — conservé pour l’historique.</p>` +
         conversionTarget(k, r)
           .map(([kind, row]) => item(kind, row))
           .join("");
     } else if (["actions", "tasks"].includes(k))
       html += `<button type="button" data-convert="${k}" data-convert-id="${r.id}">Faire évoluer en ${k === "actions" ? "tâche" : "chantier"}…</button>`;
+    html += `<div class="actions">${!transformed(k, r) ? `<button type="button" data-removal="${archived(k, r) ? "restore" : "archive"}">${archived(k, r) ? "Restaurer" : "Archiver"}…</button>` : ""}<button type="button" data-removal="delete">Supprimer…</button></div>`;
     html +=
       '<dl class="meta">' +
       [
@@ -1420,11 +1640,12 @@
       let actions = (data.actions || []).filter(
         (x) =>
           linkedTo(k, r, "actions", x) &&
+          (!archived("actions", x) || $("showArchived").checked) &&
           (["notes", "points"].includes(k) || !transformed("actions", x)),
       );
       let notes = (data.notes || []).filter(
         (x) =>
-          linkedTo(k, r, "notes", x) ||
+          (!archived("notes", x) && linkedTo(k, r, "notes", x)) ||
           actions.some((a) => has("actions", a, "NoteOrigine", x)),
       );
       if (k !== "notes")
@@ -1551,6 +1772,10 @@
     return code;
   }
   function openEditor(k, r = null) {
+    if (r && archived(k, r)) {
+      message("Restaurez cet élément avant de le modifier.");
+      return;
+    }
     if (
       k === "actions" &&
       !r &&
@@ -1606,7 +1831,9 @@
           cfg(k).fields?.[f] &&
           !col(k, f)?.isFormula &&
           !(r && f === "Code") &&
-          !["Transforme", "ActionOrigine", "TacheOrigine"].includes(f),
+          !["Archive", "Transforme", "ActionOrigine", "TacheOrigine"].includes(
+            f,
+          ),
       )
       .map((f) => {
         let v = r ? val(k, r, f) : "";
@@ -1633,7 +1860,7 @@
         if (target) {
           const rows = (data[target] || []).filter(
             (x) =>
-              !transformed(target, x) ||
+              !inactive(target, x) ||
               (r && targets(k, r, f).some((t) => t.id === x.id)),
           );
           let selected = r ? targets(k, r, f).map((x) => x.id) : [];
@@ -1694,7 +1921,9 @@
       display.className = "inline-content";
       while ($("detail").firstChild) display.append($("detail").firstChild);
       display
-        .querySelectorAll("[data-edit], [data-new]")
+        .querySelectorAll(
+          "[data-edit], [data-new], [data-removal], [data-convert]",
+        )
         .forEach((x) => x.remove());
       const extras = document.createElement("details");
       extras.innerHTML = "<summary>Autres champs</summary>";
@@ -2015,6 +2244,7 @@
     "statusFilter",
     "unlinked",
     "overdue",
+    "showArchived",
   ])
     $(id).onchange = render;
   $("search").oninput = render;
@@ -2044,7 +2274,7 @@
     if (
       (editing || moving) &&
       e.target.closest(
-        "[data-kind], [data-new], [data-edit], [data-fold], [data-fold-all], [data-move-kind], [data-convert], [data-history]",
+        "[data-kind], [data-new], [data-edit], [data-fold], [data-fold-all], [data-move-kind], [data-convert], [data-removal], [data-history]",
       )
     ) {
       message(
@@ -2090,6 +2320,11 @@
             : folded.delete(b.dataset.fold),
         );
       render();
+      return;
+    }
+    const removalButton = e.target.closest("[data-removal]");
+    if (removalButton) {
+      openRemoval(selection.k, selection.id, removalButton.dataset.removal);
       return;
     }
     const convert = e.target.closest("[data-convert]");
@@ -2283,6 +2518,7 @@
             responsibleCol: c.fields.Responsable || "",
             progressCol: c.fields.Avancement || "",
             archivedCol: c.fields.Transforme || "",
+            manualArchivedCol: c.fields.Archive || "",
           };
         }
         await grist.setOption("directMapping", old);

@@ -49,6 +49,10 @@
         ><input id="unlinked" type="checkbox" /> Actions sans
         rattachement</label
       ><label><input id="overdue" type="checkbox" /> Actions en retard</label>
+      <label
+        ><input id="showArchived" type="checkbox" /> Afficher les
+        archivés</label
+      >
     </div>
     <main>
       <section id="list" tabindex="0" aria-label="Liste des éléments"></section>
@@ -92,6 +96,21 @@
           <button id="conversionSubmit" type="submit">
             Confirmer la transformation</button
           ><button id="conversionCancel" type="button">Annuler</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="removalDialog" aria-labelledby="removalTitle">
+      <form id="removalForm">
+        <h2 id="removalTitle"></h2>
+        <div id="removalPreview"></div>
+        <p id="removalError" role="alert"></p>
+        <label
+          ><input id="removalConfirm" type="checkbox" required /> Je confirme
+          cette opération sur l’élément indiqué.</label
+        >
+        <div class="actions">
+          <button id="removalSubmit" type="submit">Confirmer</button
+          ><button id="removalCancel" type="button">Annuler</button>
         </div>
       </form>
     </dialog>

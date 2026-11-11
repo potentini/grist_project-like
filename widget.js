@@ -1497,7 +1497,7 @@
   }
 
   async function directRowsForLevel(cfg, refresh = {}) {
-    const sourceRows = (await fetchDirectTableRows(cfg.tableId, refresh)).filter(row => !cfg.archivedCol || ![true,1,"true"].includes(row[cfg.archivedCol]));
+    const sourceRows = (await fetchDirectTableRows(cfg.tableId, refresh)).filter(row => (!cfg.archivedCol || ![true,1,"true"].includes(row[cfg.archivedCol])) && (!cfg.manualArchivedCol || ![true,1,"true"].includes(row[cfg.manualArchivedCol])));
     if (!isDirectLevelDrivenByCurrentView(cfg)) return { rows: sourceRows, sourceRows, isConstrained: false };
 
     const sourceRowsById = new Map();

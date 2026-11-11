@@ -95,3 +95,9 @@ En mode Édition, une action peut devenir une tâche et une tâche devenir un ch
 Les liens d’origine restent consultables, mais ne sont pas éditables par le formulaire normal. Les notes/points gardent l’accès aux actions transformées. Une tâche transformée en chantier rejoint le projet choisi ; elle ne devient pas un chantier imbriqué dans son ancien chantier. Aucun pourcentage d’avancement n’est inventé.
 
 Avant utilisation, ajouter et mapper les quatre colonnes décrites dans [imports/TRANSFORMATIONS.md](imports/TRANSFORMATIONS.md). Le widget ne crée pas ces colonnes automatiquement. Les listes actives du widget filtrent les origines ; pour les vues Grist natives, appliquer aussi le filtre Transforme=false si nécessaire.
+
+## Archivage et suppression
+
+Les commandes **Archiver…**, **Restaurer…** et **Supprimer…** sont accessibles dans le détail en mode Édition. L’archivage nécessite une colonne de données booléenne Archive dans chaque table concernée ; la suppression peut être utilisée sans cette colonne. Les données archivées sont conservées et retrouvables avec **Afficher les archivés**. Les parents archivés restent visibles comme contexte de leurs dépendants actifs.
+
+La suppression ne se fait pas en cascade et est bloquée en présence de références à l’élément. L’aperçu liste les liens à réaffecter et exige une confirmation explicite. Voir [les consignes détaillées](imports/ARCHIVAGE_SUPPRESSION.md).

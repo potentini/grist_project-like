@@ -129,6 +129,28 @@ const fixture = require("../demo.json");
       db.data.notes[0].Taches = "T001";
       if (db.data.points) db.data.points[0].Taches = "T001";
     }
+    if (location.search.includes("manage=1")) {
+      for (const t of db.tables) {
+        const k = {
+          Projets: "projects",
+          Chantiers: "streams",
+          Taches: "tasks",
+          Notes: "notes",
+          Points: "points",
+          Actions: "actions",
+        }[t.tableId];
+        db.meta.push({
+          id: db.meta.length + 1,
+          parentId: t.id,
+          table: t.tableId,
+          colId: "Archive",
+          label: "Archive",
+          type: "Bool",
+          isFormula: false,
+        });
+        for (const r of db.data[k] || []) r.Archive = false;
+      }
+    }
     window.testDb = db;
     if (location.search.includes("refs=1")) {
       const targets = {
@@ -239,22 +261,24 @@ const fixture = require("../demo.json");
       },
       docApi: {
         fetchTable: async (id) =>
-          id === "_grist_Tables"
-            ? encode(db.tables)
-            : id === "_grist_Tables_column"
-              ? encode(db.meta)
-              : encode(
-                  db.data[
-                    {
-                      Projets: "projects",
-                      Chantiers: "streams",
-                      Taches: "tasks",
-                      Notes: "notes",
-                      Actions: "actions",
-                      Points: "points",
-                    }[id]
-                  ],
-                ),
+          id === "Externes"
+            ? encode(db.external || [])
+            : id === "_grist_Tables"
+              ? encode(db.tables)
+              : id === "_grist_Tables_column"
+                ? encode(db.meta)
+                : encode(
+                    db.data[
+                      {
+                        Projets: "projects",
+                        Chantiers: "streams",
+                        Taches: "tasks",
+                        Notes: "notes",
+                        Actions: "actions",
+                        Points: "points",
+                      }[id]
+                    ],
+                  ),
         applyUserActions: async (actions) => {
           if (window.rejectWrite) throw Error("Accès refusé");
           window.writes.push(...actions);
@@ -272,6 +296,11 @@ const fixture = require("../demo.json");
               Object.assign(
                 db.data[k].find((r) => r.id === id),
                 fields,
+              );
+            else if (op === "RemoveRecord")
+              db.data[k].splice(
+                db.data[k].findIndex((r) => r.id === id),
+                1,
               );
             else
               db.data[k].push({
@@ -867,6 +896,104 @@ const fixture = require("../demo.json");
   console.log(
     "PASS timeline excludes transformed task while retaining active tasks",
   );
+
+  for (const refs of [false, true]) {
+    await page.goto(
+      "http://127.0.0.1:8766/?manage=1" + (refs ? "&refs=1" : ""),
+    );
+    await page.locator('#list [data-kind=actions][data-id="3"]').click();
+    assert.equal(
+      await page.locator("[data-removal=archive]").isDisabled(),
+      true,
+    );
+    await page.locator("#editionButton").click();
+    await page.locator("[data-removal=archive]").click();
+    await page.locator("#removalSubmit:enabled").waitFor();
+    await page.locator("#removalCancel").click();
+    assert.equal(await page.evaluate(() => window.writes.length), 0);
+    await page.locator("[data-removal=archive]").click();
+    await page.locator("#removalConfirm").check();
+    await page.locator("#removalSubmit").click();
+    await page.locator("#removalDialog").waitFor({ state: "hidden" });
+    assert.equal(
+      (await page.evaluate(() => window.testDb)).data.actions[2].Archive,
+      true,
+    );
+    assert.equal(
+      await page.locator('#list [data-kind=actions][data-id="3"]').count(),
+      0,
+    );
+    await page.locator("#showArchived").check();
+    await page.locator('#list [data-kind=actions][data-id="3"]').click();
+    await page.locator("[data-removal=restore]").click();
+    await page.locator("#removalConfirm").check();
+    await page.locator("#removalSubmit").click();
+    await page.locator("#removalDialog").waitFor({ state: "hidden" });
+    assert.equal(
+      (await page.evaluate(() => window.testDb)).data.actions[2].Archive,
+      false,
+    );
+    await page.locator("#showArchived").uncheck();
+    await page.evaluate(() => {
+      const db = window.testDb;
+      db.tables.push({ id: 77, tableId: "Externes", label: "Externes" });
+      db.meta.push({
+        id: 777,
+        parentId: 77,
+        table: "Externes",
+        colId: "Action",
+        label: "Action",
+        type: "Ref:Actions",
+        isFormula: false,
+      });
+      db.external = [{ id: 1, Action: 3 }];
+    });
+    await page.locator("[data-removal=delete]").click();
+    await page.getByText(/Suppression bloquée/).waitFor();
+    assert.equal(await page.locator("#removalSubmit").isDisabled(), true);
+    assert.match(await page.locator("#removalPreview").innerText(), /Externes/);
+    await page.locator("#removalCancel").click();
+    await page.evaluate(() => (window.testDb.external = []));
+    await page.locator('#list [data-kind=projects][data-id="1"]').click();
+    await page.locator("[data-removal=delete]").click();
+    await page.getByText(/Suppression bloquée/).waitFor();
+    assert.equal(await page.locator("#removalSubmit").isDisabled(), true);
+    await page.locator("#removalCancel").click();
+    await page.locator("[data-removal=archive]").click();
+    await page.locator("#removalConfirm").check();
+    await page.locator("#removalSubmit").click();
+    await page.locator("#removalDialog").waitFor({ state: "hidden" });
+    // Archiving a parent must not make its active descendants disappear.
+    assert.equal(
+      await page.locator('#list [data-kind=tasks][data-id="1"]').isVisible(),
+      true,
+    );
+    await page.locator('#list [data-kind=actions][data-id="3"]').click();
+    await page.locator("[data-removal=delete]").click();
+    await page.locator("#removalSubmit:enabled").waitFor();
+    await page.locator("#removalConfirm").check();
+    await page.evaluate(() => (window.rejectWrite = true));
+    await page.locator("#removalSubmit").click();
+    await page
+      .getByText("Opération impossible : Accès refusé", { exact: true })
+      .waitFor();
+    assert.equal(
+      (await page.evaluate(() => window.testDb)).data.actions.length,
+      3,
+    );
+    await page.evaluate(() => (window.rejectWrite = false));
+    await page.locator("#removalSubmit").click();
+    await page.locator("#removalDialog").waitFor({ state: "hidden" });
+    assert.equal(
+      (await page.evaluate(() => window.testDb)).data.actions.length,
+      2,
+    );
+    console.log(
+      "PASS archive/restore, retained descendants, blocked parent deletion and confirmed leaf deletion (" +
+        (refs ? "references" : "codes") +
+        ")",
+    );
+  }
   await page.goto("http://127.0.0.1:8766/?layout=1");
   await page.locator("#list [data-kind=projects]").first().click();
   async function checkPaneScroll() {
