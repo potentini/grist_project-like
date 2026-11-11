@@ -403,6 +403,30 @@ const fixture = require("../demo.json");
     "PASS native references, alias detection, formula protection and action creation",
   );
 
+  await page.goto("http://127.0.0.1:8766");
+  await page.locator("#list [data-kind=projects]").first().waitFor();
+  await page.evaluate(() =>
+    window.testDb.meta.push({
+      id: 9999,
+      parentId: 5,
+      table: "Actions",
+      colId: "Transforme",
+      label: "Transforme",
+      type: "Bool",
+      isFormula: false,
+    }),
+  );
+  await page.locator("#mappingButton").click();
+  assert.equal(
+    await page
+      .locator("[data-map=actions][data-field=Transforme]")
+      .inputValue(),
+    "Transforme",
+  );
+  await page.locator("#mappingButton").click();
+  console.log(
+    "PASS mapping refresh detects a Boolean column created after widget startup",
+  );
   for (const refs of [false, true]) {
     await page.goto("http://127.0.0.1:8766/?tree=1" + (refs ? "&refs=1" : ""));
     await page.locator("#list [data-kind=tasks]").waitFor();

@@ -317,7 +317,15 @@
       throw Error("Choisissez un parent actif pour le nouvel élément.");
     const requireField = (k, f, type) => {
       const m = col(k, f);
-      if (!cfg(k).fields?.[f] || !m || m.isFormula || (type && m.type !== type))
+      if (cfg(k).fields?.[f] && m && type && m.type !== type)
+        throw Error(
+          `${schemas[k].label}.${f} est mappé vers ${m.colId} de type ${m.type} ; type attendu : ${type}.`,
+        );
+      if (m?.isFormula)
+        throw Error(
+          `${schemas[k].label}.${f} est identifié comme une colonne de formule par Grist. Utilisez une colonne de données modifiable.`,
+        );
+      if (!cfg(k).fields?.[f] || !m)
         throw Error(
           `Ajoutez et mappez ${schemas[k].label}.${f}${type ? " de type " + type : ""} (modifiable).`,
         );
@@ -1923,6 +1931,17 @@
       $("save").disabled = false;
     }
   }
+  async function refreshMetadata() {
+    const [ts, cs] = await Promise.all([
+      grist.docApi.fetchTable("_grist_Tables"),
+      grist.docApi.fetchTable("_grist_Tables_column"),
+    ]);
+    tables = rows(ts).filter((t) => !t.tableId.startsWith("_grist_"));
+    const ids = new Map(tables.map((t) => [t.id, t.tableId]));
+    meta = rows(cs)
+      .map((c) => ({ ...c, table: ids.get(c.parentId) }))
+      .filter((c) => c.table);
+  }
   async function init() {
     try {
       if (demo) {
@@ -1954,15 +1973,7 @@
           }
         }
       });
-      const [ts, cs] = await Promise.all([
-        grist.docApi.fetchTable("_grist_Tables"),
-        grist.docApi.fetchTable("_grist_Tables_column"),
-      ]);
-      tables = rows(ts).filter((t) => !t.tableId.startsWith("_grist_"));
-      const ids = new Map(tables.map((t) => [t.id, t.tableId]));
-      meta = rows(cs)
-        .map((c) => ({ ...c, table: ids.get(c.parentId) }))
-        .filter((c) => c.table);
+      await refreshMetadata();
       mapping = detect(mapping);
       draft = structuredClone(mapping);
       loaded = true;
@@ -2128,14 +2139,23 @@
         : "Lecture seule : vous pouvez plier et déplier les éléments.",
     );
   };
-  $("mappingButton").onclick = () => {
+  $("mappingButton").onclick = async () => {
     if (editing || moving) {
       message("Terminez l’opération en cours avant de modifier le mapping.");
       return;
     }
-    draft = structuredClone(mapping);
-    mappingUI();
-    $("mapping").hidden = !$("mapping").hidden;
+    if (!$("mapping").hidden) {
+      $("mapping").hidden = true;
+      return;
+    }
+    try {
+      if (!demo) await refreshMetadata();
+      draft = detect(structuredClone(mapping));
+      mappingUI();
+      $("mapping").hidden = false;
+    } catch (err) {
+      message("Impossible d’actualiser les colonnes : " + err.message, true);
+    }
   };
   $("refresh").onclick = () => (demo ? init() : load());
   $("cancel").onclick = endEdit;
