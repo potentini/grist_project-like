@@ -403,6 +403,7 @@
     return `<div class="tree-node" data-tree-kind="${k}" data-tree-id="${r.id}"><div class="tree-row" data-drop-kind="${k}" data-drop-id="${r.id}" ${movable ? `draggable="${editionEnabled && !editing && !moving && !demo}" data-drag-kind="${k}" data-drag-id="${r.id}"` : ""}>${kids.length ? `<button class="fold" type="button" data-fold="${key}" aria-expanded="${open}" aria-label="${open ? "Plier" : "Déplier"} ${esc(title(k, r))}">${open ? "▾" : "▸"}</button>` : '<span class="fold-spacer"></span>'}${item(k, r)}${editionEnabled && movable ? `<button class="move-button" type="button" data-move-kind="${k}" data-move-id="${r.id}" aria-label="Déplacer ${esc(title(k, r))}" title="Déplacer"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20 20 4M7 4h13v13"/></svg></button>` : ""}</div>${kids.length ? `<div class="tree-children" ${open ? "" : "hidden"}>${kids.map((n) => branch(n, context)).join("")}</div>` : ""}</div>`;
   }
   function syncEdition() {
+    updateHistoryControls();
     $("editionButton").setAttribute("aria-pressed", String(editionEnabled));
     $("editionButton").textContent = editionEnabled
       ? "Édition activée"
@@ -816,16 +817,122 @@
       k === "notes" && kind === "actions" && has(kind, row, "NoteOrigine", r)
     );
   }
+  const previousLocations = [],
+    nextLocations = [];
+  const filterIds = [
+    "projectFilter",
+    "ownerFilter",
+    "statusFilter",
+    "search",
+    "unlinked",
+    "overdue",
+  ];
+  function captureLocation(source = null) {
+    let focus = null;
+    if (source) {
+      const pane = source.closest("#list, #detail");
+      if (pane)
+        focus = {
+          pane: pane.id,
+          index: [...pane.querySelectorAll("[data-kind]")].indexOf(source),
+        };
+    }
+    return {
+      selection: selection ? { ...selection } : null,
+      view,
+      filters: Object.fromEntries(
+        filterIds.map((id) => [
+          id,
+          $(id).type === "checkbox" ? $(id).checked : $(id).value,
+        ]),
+      ),
+      folded: [...folded],
+      known: [...knownBranches],
+      scroll: Object.fromEntries(
+        ["list", "detail"].map((id) => [
+          id,
+          { top: $(id).scrollTop, left: $(id).scrollLeft },
+        ]),
+      ),
+      focus,
+    };
+  }
+  function rememberLocation(source) {
+    previousLocations.push(captureLocation(source));
+    if (previousLocations.length > 100) previousLocations.shift();
+    nextLocations.length = 0;
+  }
+  function updateHistoryControls() {
+    document
+      .querySelectorAll('[data-history="back"]')
+      .forEach(
+        (b) => (b.disabled = !previousLocations.length || !!editing || moving),
+      );
+    document
+      .querySelectorAll('[data-history="forward"]')
+      .forEach(
+        (b) => (b.disabled = !nextLocations.length || !!editing || moving),
+      );
+  }
+  function historyToolbar() {
+    return '<nav class="detail-navigation" aria-label="Historique du panneau"><button type="button" data-history="back">← Retour</button><button type="button" data-history="forward">Suivant →</button></nav>';
+  }
+  function restoreLocation(location) {
+    selection = location.selection;
+    view = location.view;
+    folded.clear();
+    location.folded.forEach((key) => folded.add(key));
+    knownBranches.clear();
+    location.known.forEach((key) => knownBranches.add(key));
+    filterOptions();
+    for (const [id, value] of Object.entries(location.filters)) {
+      if ($(id).type === "checkbox") $(id).checked = value;
+      else $(id).value = value;
+    }
+    render();
+    if (location.focus?.index >= 0)
+      $(location.focus.pane)
+        .querySelectorAll("[data-kind]")
+        [location.focus.index]?.focus({ preventScroll: true });
+    for (const [id, position] of Object.entries(location.scroll)) {
+      $(id).scrollTop = position.top;
+      $(id).scrollLeft = position.left;
+    }
+  }
+  function travel(direction) {
+    if (editing || moving) return;
+    const from = direction === "back" ? previousLocations : nextLocations;
+    const to = direction === "back" ? nextLocations : previousLocations;
+    if (!from.length) return;
+    to.push(captureLocation());
+    restoreLocation(from.pop());
+  }
+  function selectRecord(k, id, source) {
+    if (selection?.k === k && selection.id === id) return;
+    rememberLocation(source);
+    const left = { top: $("list").scrollTop, left: $("list").scrollLeft };
+    selection = { k, id };
+    render();
+    $("list").scrollTop = left.top;
+    $("list").scrollLeft = left.left;
+    $("detail").scrollTop = 0;
+    $("detail").scrollLeft = 0;
+  }
+
   function renderDetail() {
     if (editing?.inline) return;
     const k = selection?.k,
       r = (data[k] || []).find((r) => r.id === selection.id);
     if (!r) {
       $("detail").innerHTML =
+        historyToolbar() +
         '<h2>Votre espace de suivi</h2><p class="text muted">Sélectionnez un projet, une réunion ou une action pour lire son contenu et retrouver ses liens.</p>';
+      updateHistoryControls();
       return;
     }
-    let html = `<small>${esc(schemas[k].label)}</small><h2 data-slot="Titre">${esc(title(k, r))}</h2><button data-edit="1">Modifier</button>`;
+    let html =
+      historyToolbar() +
+      `<small>${esc(schemas[k].label)}</small><h2 data-slot="Titre">${esc(title(k, r))}</h2><button data-edit="1">Modifier</button>`;
     html +=
       '<dl class="meta">' +
       [
@@ -1035,6 +1142,7 @@
       return;
     }
     editing = { k, r: r ? structuredClone(r) : null };
+    updateHistoryControls();
     $("editorTitle").textContent =
       (r ? "Modifier — " : "Créer — ") + schemas[k].label;
     $("editError").textContent = "";
@@ -1313,6 +1421,8 @@
           );
           return;
         }
+        if (view === b.dataset.view) return;
+        rememberLocation();
         view = b.dataset.view;
         selection = null;
         $("ownerFilter").value = "";
@@ -1356,12 +1466,17 @@
     if (
       (editing || moving) &&
       e.target.closest(
-        "[data-kind], [data-new], [data-edit], [data-fold], [data-fold-all], [data-move-kind]",
+        "[data-kind], [data-new], [data-edit], [data-fold], [data-fold-all], [data-move-kind], [data-history]",
       )
     ) {
       message(
         "Enregistrez ou annulez les modifications avant de changer d’élément.",
       );
+      return;
+    }
+    const history = e.target.closest("[data-history]");
+    if (history) {
+      travel(history.dataset.history);
       return;
     }
     const fold = e.target.closest("[data-fold]");
@@ -1407,8 +1522,7 @@
     const row = e.target.closest("[data-kind]"),
       add = e.target.closest("[data-new]");
     if (row) {
-      selection = { k: row.dataset.kind, id: Number(row.dataset.id) };
-      render();
+      selectRecord(row.dataset.kind, Number(row.dataset.id), row);
     } else if (add) openEditor(add.dataset.new);
     else if (e.target.closest("[data-edit]")) {
       const record = (data[selection?.k] || []).find(

@@ -67,3 +67,9 @@ Les parents calculés ou les champs de liaison non mappés peuvent empêcher un 
 La liste et le détail disposent de défilements verticaux indépendants dans la hauteur disponible du widget. Sur petit écran, les deux volets sont empilés et restent défilables séparément. Le mapping possède aussi une hauteur limitée avec son propre défilement. Chaque volet peut recevoir le focus au clavier.
 
 Une bordure et un fond discret distinguent les projets (bleu), chantiers (ocre), tâches (vert bleuté), actions (mauve) et notes (gris bleuté). La palette s’inspire d’Okabe–Ito ; les libellés de type et l’indentation permettent également de reconnaître les niveaux sans distinguer les couleurs. Les contrastes du texte et des bordures sur leurs fonds sont vérifiés (respectivement ≥ 4,5:1 et ≥ 3:1).
+
+## Revenir à l’endroit précédent
+
+Les boutons **Retour** et **Suivant**, en haut du panneau de détail, parcourent l’historique de navigation du widget. Cliquer sur un élément ouvre son détail en haut du panneau ; revenir restaure la sélection précédente, les positions de défilement des deux volets, les niveaux pliés/dépliés, la vue et ses filtres. Les clics dans la liste et dans le détail, ainsi que les changements d’onglet, alimentent cet historique.
+
+Une nouvelle navigation après un retour remplace la branche « Suivant ». Les commandes restent bloquées tant qu’un formulaire n’a pas été enregistré ou annulé. Cet historique conserve jusqu’à 100 étapes pendant la session, ne modifie aucune donnée Grist et se réinitialise au rechargement du widget. Il ne sert pas à annuler les modifications de données.

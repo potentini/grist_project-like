@@ -446,13 +446,11 @@ const fixture = require("../demo.json");
       document.querySelector("#detail").scrollTop = 0;
     });
     for (const id of ["list", "detail"]) {
-      const geometry = await page
-        .locator("#" + id)
-        .evaluate((el) => ({
-          height: el.clientHeight,
-          content: el.scrollHeight,
-          bottom: el.getBoundingClientRect().bottom,
-        }));
+      const geometry = await page.locator("#" + id).evaluate((el) => ({
+        height: el.clientHeight,
+        content: el.scrollHeight,
+        bottom: el.getBoundingClientRect().bottom,
+      }));
       assert.ok(geometry.height > 60 && geometry.content > geometry.height);
       assert.ok(geometry.bottom <= (await page.evaluate(() => innerHeight)));
     }
@@ -484,19 +482,17 @@ const fixture = require("../demo.json");
     );
   }
   await checkPaneScroll();
-  const levels = await page
-    .locator("#list [data-kind]")
-    .evaluateAll((items) =>
-      Object.fromEntries(
-        items.map((el) => [
-          el.dataset.kind,
-          {
-            color: getComputedStyle(el).borderLeftColor,
-            label: el.querySelector(".item-kind")?.textContent,
-          },
-        ]),
-      ),
-    );
+  const levels = await page.locator("#list [data-kind]").evaluateAll((items) =>
+    Object.fromEntries(
+      items.map((el) => [
+        el.dataset.kind,
+        {
+          color: getComputedStyle(el).borderLeftColor,
+          label: el.querySelector(".item-kind")?.textContent,
+        },
+      ]),
+    ),
+  );
   assert.equal(
     new Set(Object.values(levels).map((x) => x.color)).size,
     Object.keys(levels).length,
@@ -515,6 +511,67 @@ const fixture = require("../demo.json");
   await page.locator("#mappingButton").click();
   console.log(
     "PASS independent wheel scrolling on desktop/mobile, bounded mapping and distinct labelled levels",
+  );
+
+  await page.goto("http://127.0.0.1:8766/?layout=1");
+  await page.locator('#list [data-kind=projects][data-id="1"]').click();
+  const dependency = page.locator(
+    '#detail [data-tree-kind=streams][data-tree-id="1"]',
+  );
+  await dependency.locator(":scope > .tree-row > .fold").click();
+  const child = dependency.locator('[data-kind=tasks][data-id="1"]');
+  await child.scrollIntoViewIfNeeded();
+  await page.locator("#list").evaluate((el) => (el.scrollTop = 210));
+  const snapshot = () =>
+    page.evaluate(() => ({
+      title: document.querySelector("#detail h2").textContent,
+      left: document.querySelector("#list").scrollTop,
+      right: document.querySelector("#detail").scrollTop,
+      folds: [...document.querySelectorAll("main [data-fold]")].map((b) => [
+        b.dataset.fold,
+        b.getAttribute("aria-expanded"),
+      ]),
+    }));
+  const projectLocation = await snapshot();
+  assert.ok(projectLocation.right > 0);
+  await child.click();
+  assert.equal(await page.locator("#detail").evaluate((el) => el.scrollTop), 0);
+  assert.equal(
+    await page.locator("#list").evaluate((el) => el.scrollTop),
+    projectLocation.left,
+  );
+  await page
+    .locator('#detail [data-kind=actions][data-id="1"]')
+    .last()
+    .scrollIntoViewIfNeeded();
+  const taskLocation = await snapshot();
+  await page.locator('#detail [data-kind=actions][data-id="1"]').last().click();
+  assert.match(await page.locator("#detail h2").innerText(), /Envoyer/);
+  await page.locator("[data-history=back]").click();
+  assert.deepEqual(await snapshot(), taskLocation);
+  await page.locator("[data-history=back]").click();
+  assert.deepEqual(await snapshot(), projectLocation);
+  await page.locator("[data-history=forward]").click();
+  assert.deepEqual(await snapshot(), taskLocation);
+  await page.locator("[data-history=back]").click();
+  assert.deepEqual(await snapshot(), projectLocation);
+  await dependency.locator('[data-kind=streams][data-id="1"]').first().click();
+  assert.equal(await page.locator("[data-history=forward]").isDisabled(), true);
+  // Returning across tabs restores the old view's filters as well as its location.
+  await page.locator("#projectFilter").selectOption("1");
+  await page.locator("#search").fill("Préparer");
+  await page.locator("#list").evaluate((el) => (el.scrollTop = 0));
+  const beforeTab = await snapshot();
+  await page
+    .getByRole("button", { name: "Notes et réunions", exact: true })
+    .click();
+  await page.locator("[data-history=back]").click();
+  assert.deepEqual(await snapshot(), beforeTab);
+  assert.equal(await page.locator("#projectFilter").inputValue(), "1");
+  assert.equal(await page.locator("#search").inputValue(), "Préparer");
+  assert.equal(await page.evaluate(() => window.writes.length), 0);
+  console.log(
+    "PASS multi-step back/forward restores exact pane scrolls, fold states, filters and view without writes",
   );
   await page.goto("http://127.0.0.1:8766/?demo=1");
   await page
