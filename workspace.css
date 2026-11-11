@@ -450,3 +450,11 @@ select[multiple] {
   --level-bg: #f2eff8;
   --level-hover: #e9e2f3;
 }
+#conversionError {
+  color: #a32424;
+}
+#conversionParent {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+}

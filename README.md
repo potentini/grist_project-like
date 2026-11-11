@@ -87,3 +87,11 @@ Une réunion reste une ligne de Notes avec sa date, ses participants et son text
 Chaque action peut avoir une référence **PointOrigine**, en plus de NoteOrigine. Le point détermine sa réunion d’origine, mais ne choisit pas arbitrairement un projet parmi plusieurs. Ses rattachements opérationnels restent facultatifs et indépendants. Réaffecter un point à une réunion met à jour la réunion d’origine de ses actions. Déplacer une action vers une autre réunion retire un lien au point devenu incompatible.
 
 Cette évolution est compatible avec les documents sans table Points. Pour l’activer, suivre [imports/README.md](imports/README.md), importer [Points.csv](imports/Points.csv), ajouter Actions.PointOrigine et enregistrer le mapping. Aucun document Grist n’est modifié automatiquement par la mise à jour du widget.
+
+## Faire évoluer un travail
+
+En mode Édition, une action peut devenir une tâche et une tâche devenir un chantier. Le bouton **Faire évoluer en…** ouvre un aperçu : parent choisi, champs repris ou non repris, actions et notes/points à réaffecter. La confirmation crée la destination, conserve la filiation et marque l’origine Transforme, hors du suivi actif. Le statut d’exécution de l’origine n’est pas changé en Fait.
+
+Les liens d’origine restent consultables, mais ne sont pas éditables par le formulaire normal. Les notes/points gardent l’accès aux actions transformées. Une tâche transformée en chantier rejoint le projet choisi ; elle ne devient pas un chantier imbriqué dans son ancien chantier. Aucun pourcentage d’avancement n’est inventé.
+
+Avant utilisation, ajouter et mapper les quatre colonnes décrites dans [imports/TRANSFORMATIONS.md](imports/TRANSFORMATIONS.md). Le widget ne crée pas ces colonnes automatiquement. Les listes actives du widget filtrent les origines ; pour les vues Grist natives, appliquer aussi le filtre Transforme=false si nécessaire.

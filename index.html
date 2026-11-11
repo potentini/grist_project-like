@@ -79,6 +79,22 @@
         </div>
       </form>
     </dialog>
+    <dialog id="conversionDialog" aria-labelledby="conversionTitle">
+      <form id="conversionForm">
+        <h2 id="conversionTitle"></h2>
+        <label
+          ><span id="conversionParentLabel"></span
+          ><select id="conversionParent" required></select
+        ></label>
+        <div id="conversionPreview"></div>
+        <p id="conversionError" role="alert"></p>
+        <div class="actions">
+          <button id="conversionSubmit" type="submit">
+            Confirmer la transformation</button
+          ><button id="conversionCancel" type="button">Annuler</button>
+        </div>
+      </form>
+    </dialog>
     <script src="workspace.js"></script>
   </body>
 </html>

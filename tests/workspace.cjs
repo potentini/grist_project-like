@@ -96,6 +96,39 @@ const fixture = require("../demo.json");
         (_, i) => `Point de suivi ${i + 1} : compte rendu détaillé.`,
       ).join("\n\n");
     }
+    if (location.search.includes("convert=1")) {
+      db.data.actions.push({
+        ...db.data.actions[0],
+        id: 4,
+        Code: "A004",
+        Titre: "Action dépendante active",
+      });
+      for (const [k, f, type] of [
+        ["actions", "Transforme", "Bool"],
+        ["tasks", "Transforme", "Bool"],
+        ["tasks", "ActionOrigine", "Ref:Actions"],
+        ["streams", "TacheOrigine", "Ref:Taches"],
+      ]) {
+        const table = {
+          actions: "Actions",
+          tasks: "Taches",
+          streams: "Chantiers",
+        }[k];
+        db.meta.push({
+          id: db.meta.length + 1,
+          parentId: db.tables.find((t) => t.tableId === table).id,
+          table,
+          colId: f,
+          label: f,
+          type,
+          isFormula: false,
+        });
+        for (const r of db.data[k]) r[f] = type === "Bool" ? false : 0;
+      }
+      // Context links to the original task exercise both multireference rewrites.
+      db.data.notes[0].Taches = "T001";
+      if (db.data.points) db.data.points[0].Taches = "T001";
+    }
     window.testDb = db;
     if (location.search.includes("refs=1")) {
       const targets = {
@@ -157,7 +190,30 @@ const fixture = require("../demo.json");
       ).isFormula = true;
     }
     window.testOptions = {};
+    if (location.pathname.endsWith("timeline.html")) {
+      db.data.tasks[0].Transforme = true;
+      db.data.tasks.push({
+        ...db.data.tasks[0],
+        id: 2,
+        Code: "T002",
+        Titre: "Tâche conservée",
+        Transforme: false,
+      });
+      window.testOptions.directMapping = {
+        levels: {
+          1: { tableId: "Projets", nameCol: "Titre" },
+          2: { tableId: "Chantiers", nameCol: "Titre", parentCol: "Projet" },
+          3: {
+            tableId: "Taches",
+            nameCol: "Titre",
+            parentCol: "Chantier",
+            archivedCol: "Transforme",
+          },
+        },
+      };
+    }
     window.writes = [];
+    window.batches = [];
     const table = (k) => db.tables.find((t) => t.tableId === k);
     const encode = (rs) =>
       Object.fromEntries(
@@ -173,7 +229,9 @@ const fixture = require("../demo.json");
         optionsCallback = cb;
         cb(window.testOptions);
       },
-      onRecords() {},
+      onRecords(cb) {
+        if (location.pathname.endsWith("timeline.html")) cb([]);
+      },
       getOption: async (k) => window.testOptions[k],
       setOption: async (k, v) => {
         window.testOptions[k] = structuredClone(v);
@@ -200,6 +258,7 @@ const fixture = require("../demo.json");
         applyUserActions: async (actions) => {
           if (window.rejectWrite) throw Error("Accès refusé");
           window.writes.push(...actions);
+          window.batches.push(structuredClone(actions));
           for (const [op, t, id, fields] of actions) {
             const k = {
               Projets: "projects",
@@ -672,6 +731,118 @@ const fixture = require("../demo.json");
         ")",
     );
   }
+
+  for (const refs of [false, true]) {
+    await page.goto(
+      "http://127.0.0.1:8766/?convert=1&points=1" + (refs ? "&refs=1" : ""),
+    );
+    await page.locator('#list [data-kind=actions][data-id="1"]').waitFor();
+    await page.locator('#list [data-kind=actions][data-id="1"]').click();
+    assert.equal(await page.locator("[data-convert]").isDisabled(), true);
+    await page.locator("#editionButton").click();
+    await page.locator("[data-convert]").click();
+    assert.equal(await page.locator("#conversionSubmit").isEnabled(), true);
+    const before = await page.evaluate(() => window.writes.length);
+    await page.locator("#conversionCancel").click();
+    assert.equal(await page.evaluate(() => window.writes.length), before);
+    await page.locator("[data-convert]").click();
+    await page.evaluate(
+      () => (window.testDb.data.actions[0].Titre = "Action actualisée"),
+    );
+    await page.locator("#conversionSubmit").click();
+    await page
+      .locator("#conversionError")
+      .getByText(/Les données ont changé/)
+      .waitFor();
+    assert.equal(await page.evaluate(() => window.writes.length), before);
+    await page.evaluate(() => (window.rejectWrite = true));
+    await page.locator("#conversionSubmit").click();
+    await page
+      .locator("#conversionError")
+      .getByText("Transformation impossible : Accès refusé", { exact: true })
+      .waitFor();
+    assert.equal(
+      (await page.evaluate(() => window.testDb)).data.actions[0].Transforme,
+      false,
+    );
+    assert.equal(
+      (await page.evaluate(() => window.testDb)).data.tasks.length,
+      1,
+    );
+    await page.evaluate(() => (window.rejectWrite = false));
+    await page.locator("#conversionSubmit").click();
+    await page.locator("#conversionDialog").waitFor({ state: "hidden" });
+    let db = await page.evaluate(() => window.testDb);
+    assert.equal(db.data.actions[0].Transforme, true);
+    assert.equal(db.data.tasks.length, 2);
+    assert.equal(db.data.tasks[1].ActionOrigine, 1);
+    assert.equal(db.data.tasks[1].Titre, db.data.actions[0].Titre);
+    assert.equal(
+      await page.locator('#list [data-kind=actions][data-id="1"]').count(),
+      0,
+    );
+    assert.equal((await page.evaluate(() => window.batches.at(-1))).length, 2);
+    // The source remains reachable from the new task, with a link to its replacement.
+    await page.locator('#detail [data-kind=actions][data-id="1"]').click();
+    assert.match(await page.locator("#detail").innerText(), /Transformé/);
+    assert.equal(await page.locator("#detail [data-edit]").count(), 0);
+    await page.getByRole("button", { name: "Projets", exact: true }).click();
+    await page.locator('#list [data-kind=tasks][data-id="1"]').click();
+    await page.locator("[data-convert]").click();
+    assert.match(
+      await page.locator("#conversionPreview").innerText(),
+      /1 action/,
+    );
+    await page.locator("#conversionSubmit").click();
+    await page.locator("#conversionDialog").waitFor({ state: "hidden" });
+    db = await page.evaluate(() => window.testDb);
+    assert.equal(db.data.tasks[0].Transforme, true);
+    assert.equal(db.data.streams[1].TacheOrigine, 1);
+    assert.equal(db.data.actions[0].Transforme, true);
+    assert.equal(db.data.actions[3].Tache, refs ? 0 : "");
+    assert.equal(db.data.actions[3].Chantier, refs ? 2 : "C002");
+    assert.equal(db.data.actions[3].Projet, refs ? 1 : "P001");
+    assert.deepEqual(db.data.notes[0].Taches, refs ? ["L"] : "");
+    assert.ok(
+      refs
+        ? db.data.notes[0].Chantiers.includes(2)
+        : db.data.notes[0].Chantiers.includes("C002"),
+    );
+    assert.deepEqual(db.data.points[0].Taches, refs ? ["L"] : "");
+    // Only active actions are reparented; archived origins retain their original history.
+    assert.equal(
+      await page.locator('#list [data-kind=tasks][data-id="1"]').count(),
+      0,
+    );
+    console.log(
+      "PASS conversion preview, cancellation, atomic rejection, promotion and context rewrites (" +
+        (refs ? "references" : "codes") +
+        ")",
+    );
+  }
+
+  await page.goto("http://127.0.0.1:8766/timeline.html?refs=1&convert=1");
+  await page.locator(".hierarchy-table").waitFor();
+  if (
+    (await page.locator("#tableExpandAllBtn").innerText())
+      .toLowerCase()
+      .includes("déplier")
+  )
+    await page.locator("#tableExpandAllBtn").click();
+  await page
+    .locator(".hierarchy-table tbody")
+    .getByText("Tâche conservée", { exact: true })
+    .waitFor();
+  assert.equal(
+    await page
+      .locator(".hierarchy-table")
+      .getByText("Confirmer les participants", { exact: true })
+      .count(),
+    0,
+  );
+  console.log(
+    "PASS timeline excludes transformed task while retaining active tasks",
+  );
   await page.goto("http://127.0.0.1:8766/?layout=1");
   await page.locator("#list [data-kind=projects]").first().click();
   async function checkPaneScroll() {

@@ -53,6 +53,7 @@
         "Avancement",
         "PointEtape",
         "Ordre",
+        "TacheOrigine",
       ],
     },
     tasks: {
@@ -71,6 +72,8 @@
         "Avancement",
         "PointEtape",
         "Ordre",
+        "ActionOrigine",
+        "Transforme",
       ],
     },
     notes: {
@@ -122,6 +125,7 @@
         "Projet",
         "Chantier",
         "Tache",
+        "Transforme",
       ],
     },
   };
@@ -136,8 +140,8 @@
     Echeance: ["Echeance", "DeadlineTexte"],
   };
   const links = {
-    streams: { Projet: "projects" },
-    tasks: { Chantier: "streams" },
+    streams: { Projet: "projects", TacheOrigine: "tasks" },
+    tasks: { Chantier: "streams", ActionOrigine: "actions" },
     notes: { Projet: "projects", Chantiers: "streams", Taches: "tasks" },
     points: {
       NoteOrigine: "notes",
@@ -283,13 +287,295 @@
       !["fait", "abandonne"].includes(norm(val("actions", r, "Statut")))
     );
   }
-  function ordered(k) {
-    return [...(data[k] || [])].sort((a, b) =>
-      k === "notes"
-        ? dateText(val(k, b, "Date")).localeCompare(dateText(val(k, a, "Date")))
-        : Number(val(k, a, "Ordre") || a.id) -
-          Number(val(k, b, "Ordre") || b.id),
+  function transformed(k, r) {
+    return [true, 1, "true"].includes(val(k, r, "Transforme"));
+  }
+  function conversionTarget(k, r) {
+    const dest = k === "actions" ? "tasks" : k === "tasks" ? "streams" : null;
+    const field = k === "actions" ? "ActionOrigine" : "TacheOrigine";
+    return dest
+      ? (data[dest] || [])
+          .filter((x) => has(dest, x, field, r))
+          .map((x) => [dest, x])
+      : [];
+  }
+  let conversion = null;
+  function conversionPlan(sourceKind, id, parentId) {
+    const destKind = sourceKind === "actions" ? "tasks" : "streams",
+      parentKind = sourceKind === "actions" ? "streams" : "projects";
+    const parentField = sourceKind === "actions" ? "Chantier" : "Projet",
+      originField = sourceKind === "actions" ? "ActionOrigine" : "TacheOrigine";
+    const source = (data[sourceKind] || []).find((r) => r.id === id),
+      parent = (data[parentKind] || []).find((r) => r.id === parentId);
+    if (
+      !source ||
+      transformed(sourceKind, source) ||
+      conversionTarget(sourceKind, source).length
+    )
+      throw Error("Cet élément est absent ou a déjà été transformé.");
+    if (!parent || transformed(parentKind, parent))
+      throw Error("Choisissez un parent actif pour le nouvel élément.");
+    const requireField = (k, f, type) => {
+      const m = col(k, f);
+      if (!cfg(k).fields?.[f] || !m || m.isFormula || (type && m.type !== type))
+        throw Error(
+          `Ajoutez et mappez ${schemas[k].label}.${f}${type ? " de type " + type : ""} (modifiable).`,
+        );
+    };
+    requireField(sourceKind, "Transforme", "Bool");
+    requireField(destKind, "Code", "Text");
+    requireField(destKind, "Titre", "Text");
+    for (const f of ["Code", "Titre", parentField, originField])
+      requireField(destKind, f);
+    const nextId = Math.max(0, ...(data[destKind] || []).map((r) => r.id)) + 1;
+    let n = 1,
+      code;
+    const prefix = destKind === "tasks" ? "T" : "C",
+      used = new Set(
+        (data[destKind] || []).map((r) => String(val(destKind, r, "Code"))),
+      );
+    do {
+      code = prefix + String(n++).padStart(3, "0");
+    } while (used.has(code));
+    for (const f of [parentField, originField])
+      if (!/^(Text|Ref:|RefList:)/.test(col(destKind, f)?.type || ""))
+        throw Error("Utilisez une référence Grist ou Texte pour " + f);
+    const fields = {
+      [cfg(destKind).fields.Code]: code,
+      [cfg(destKind).fields.Titre]: title(sourceKind, source),
+    };
+    fields[cfg(destKind).fields[parentField]] = encodeLink(
+      destKind,
+      parentField,
+      parentKind,
+      parent,
     );
+    fields[cfg(destKind).fields[originField]] = encodeLink(
+      destKind,
+      originField,
+      sourceKind,
+      source,
+    );
+    const skipped = [],
+      copied = ["Titre"];
+    for (const [from, to] of [
+      ["Responsable", "Responsable"],
+      ["DateDebut", "DateDebut"],
+      ["DateFin", "DateFin"],
+      ["Echeance", "Echeance"],
+      ["Statut", "Statut"],
+      ["Vigilance", "Vigilance"],
+      ["Avancement", "Avancement"],
+      [sourceKind === "actions" ? "Commentaire" : "PointEtape", "PointEtape"],
+    ]) {
+      const value = val(sourceKind, source, from);
+      if (value === "" || value == null) continue;
+      const a = col(sourceKind, from),
+        b = col(destKind, to);
+      let supported = b && !b.isFormula && a?.type === b.type;
+      if (supported && b.type === "Choice") {
+        let choices = [];
+        try {
+          choices = JSON.parse(b.widgetOptions || "{}").choices || [];
+        } catch {}
+        supported = choices.includes(value);
+      }
+      if (supported) {
+        fields[cfg(destKind).fields[to]] = value;
+        copied.push(to);
+      } else skipped.push(from);
+    }
+    const newRow = { id: nextId, ...fields },
+      updates = [];
+    let actionCount = 0,
+      contextCount = 0;
+    const setLink = (k, r, delta, f, targetKind, targetRow) => {
+      requireField(k, f);
+      delta[cfg(k).fields[f]] =
+        targetRow === newRow && col(k, f)?.type === "Text"
+          ? code
+          : encodeLink(k, f, targetKind, targetRow);
+    };
+    if (sourceKind === "tasks") {
+      for (const a of data.actions || [])
+        if (!transformed("actions", a) && has("actions", a, "Tache", source)) {
+          const delta = {};
+          setLink("actions", a, delta, "Tache", "tasks", null);
+          setLink("actions", a, delta, "Chantier", "streams", newRow);
+          if (
+            cfg("actions").fields?.Projet &&
+            !col("actions", "Projet")?.isFormula
+          )
+            setLink("actions", a, delta, "Projet", "projects", parent);
+          updates.push(["UpdateRecord", cfg("actions").table, a.id, delta]);
+          actionCount++;
+        }
+      for (const k of ["notes", "points"])
+        for (const r of data[k] || [])
+          if (has(k, r, "Taches", source)) {
+            requireField(k, "Taches");
+            requireField(k, "Chantiers");
+            const delta = {};
+            const others = targets(k, r, "Taches").filter(
+                (t) => t.id !== source.id,
+              ),
+              streams = targets(k, r, "Chantiers");
+            const encodeList = (f, target, rows) => {
+              const m = col(k, f);
+              if (m.type.startsWith("RefList:")) {
+                if (m.type.split(":")[1] !== cfg(target).table)
+                  throw Error("Référence incompatible : " + f);
+                return ["L", ...rows.map((r) => r.id)];
+              }
+              if (m.type !== "Text")
+                throw Error(
+                  "Utilisez une liste de références ou Texte pour " + f,
+                );
+              return rows.map((r) => linkValue(target, r, k, f)).join(", ");
+            };
+            delta[cfg(k).fields.Taches] = encodeList("Taches", "tasks", others);
+            delta[cfg(k).fields.Chantiers] = encodeList(
+              "Chantiers",
+              "streams",
+              [...streams, newRow],
+            );
+            updates.push(["UpdateRecord", cfg(k).table, r.id, delta]);
+            contextCount++;
+          }
+    }
+    return {
+      destKind,
+      parentKind,
+      parent,
+      source,
+      newRow,
+      copied,
+      skipped,
+      actionCount,
+      contextCount,
+      actions: [
+        ["AddRecord", cfg(destKind).table, nextId, fields],
+        ...updates,
+        [
+          "UpdateRecord",
+          cfg(sourceKind).table,
+          id,
+          { [cfg(sourceKind).fields.Transforme]: true },
+        ],
+      ],
+    };
+  }
+  function previewConversion() {
+    $("conversionError").textContent = "";
+    $("conversionSubmit").disabled = true;
+    try {
+      const plan = conversionPlan(
+        conversion.k,
+        conversion.id,
+        Number($("conversionParent").value),
+      );
+      conversion.plan = plan;
+      $("conversionPreview").innerHTML =
+        `<p><strong>${esc(title(conversion.k, plan.source))}</strong> deviendra un élément de ${esc(schemas[plan.destKind].label)} sous <strong>${esc(title(plan.parentKind, plan.parent))}</strong>.</p><p>Informations reprises : ${esc(plan.copied.join(", "))}. ${plan.skipped.length ? "Non reprises (conservées dans l’origine) : " + esc(plan.skipped.join(", ")) + "." : ""}</p><p>${plan.actionCount} action(s) et ${plan.contextCount} note(s) / point(s) seront rattachés au nouveau chantier.</p><p>L’origine restera consultable avec la mention « Transformé », hors du suivi actif. Son statut ne sera pas marqué « Fait ». La filiation et l’accès à la réunion seront conservés.</p>`;
+      $("conversionSubmit").disabled = false;
+    } catch (e) {
+      conversion.plan = null;
+      $("conversionError").textContent = e.message;
+      $("conversionPreview").textContent =
+        "Aucune donnée ne sera modifiée tant que la préparation n’est pas complète.";
+    }
+  }
+  async function openConversion(k, id) {
+    if (
+      !editionEnabled ||
+      editing ||
+      moving ||
+      demo ||
+      !["actions", "tasks"].includes(k)
+    )
+      return;
+    conversion = { k, id };
+    const parentKind = k === "actions" ? "streams" : "projects";
+    $("conversionTitle").textContent =
+      k === "actions" ? "Faire évoluer en tâche" : "Faire évoluer en chantier";
+    $("conversionParentLabel").textContent =
+      k === "actions" ? "Chantier parent" : "Projet parent";
+    $("conversionParent").innerHTML = ordered(parentKind)
+      .map(
+        (r) => `<option value="${r.id}">${esc(title(parentKind, r))}</option>`,
+      )
+      .join("");
+    $("conversionDialog").showModal();
+    previewConversion();
+  }
+  $("conversionParent").onchange = previewConversion;
+  $("conversionCancel").onclick = () => {
+    if (!moving) $("conversionDialog").close();
+  };
+  $("conversionDialog").addEventListener("cancel", (e) => {
+    if (moving) e.preventDefault();
+  });
+  $("conversionForm").onsubmit = async (e) => {
+    e.preventDefault();
+    if (!editionEnabled || moving || editing || !conversion?.plan) return;
+    moving = true;
+    ++request;
+    syncEdition();
+    $("conversionSubmit").disabled = true;
+    try {
+      data = Object.fromEntries(
+        await Promise.all(
+          Object.keys(schemas).map(async (k) => [
+            k,
+            cfg(k).table
+              ? rows(await grist.docApi.fetchTable(cfg(k).table))
+              : [],
+          ]),
+        ),
+      );
+      const fresh = conversionPlan(
+        conversion.k,
+        conversion.id,
+        Number($("conversionParent").value),
+      );
+      if (
+        JSON.stringify(fresh.actions) !==
+        JSON.stringify(conversion.plan.actions)
+      ) {
+        previewConversion();
+        throw Error(
+          "Les données ont changé. Vérifiez l’aperçu actualisé puis confirmez à nouveau.",
+        );
+      }
+      await grist.docApi.applyUserActions(fresh.actions);
+      $("conversionDialog").close();
+      moving = false;
+      await load();
+      selectRecord(fresh.destKind, fresh.newRow.id, null);
+      message(
+        "Transformation enregistrée. L’origine reste consultable depuis le nouvel élément.",
+      );
+    } catch (err) {
+      $("conversionError").textContent =
+        "Transformation impossible : " + err.message;
+    } finally {
+      moving = false;
+      syncEdition();
+      $("conversionSubmit").disabled = !conversion?.plan;
+    }
+  };
+
+  function ordered(k) {
+    return [...(data[k] || [])]
+      .filter((r) => !transformed(k, r))
+      .sort((a, b) =>
+        k === "notes"
+          ? dateText(val(k, b, "Date")).localeCompare(
+              dateText(val(k, a, "Date")),
+            )
+          : Number(val(k, a, "Ordre") || a.id) -
+            Number(val(k, b, "Ordre") || b.id),
+      );
   }
   function matches(k, r) {
     const p = $("projectFilter").value,
@@ -326,7 +612,7 @@
     points: "Point de discussion",
   };
   function item(k, r, level = 0) {
-    return `<button class="item level${level} ${selection?.k === k && selection.id === r.id ? "selected" : ""}" data-kind="${k}" data-id="${r.id}"><span class="item-kind">${kindLabels[k]}</span><strong>${esc(title(k, r))}</strong><small>${esc([val(k, r, "Volet"), val(k, r, "Responsable"), dateText(val(k, r, "Date")) || val(k, r, "Echeance") || dateText(val(k, r, "DateFin"))].filter(Boolean).join(" · "))}</small>${[
+    return `<button class="item level${level} ${selection?.k === k && selection.id === r.id ? "selected" : ""}" data-kind="${k}" data-id="${r.id}"><span class="item-kind">${kindLabels[k]}</span><strong>${esc(title(k, r))}</strong>${transformed(k, r) ? '<span class="badge">Transformé</span>' : ""}<small>${esc([val(k, r, "Volet"), val(k, r, "Responsable"), dateText(val(k, r, "Date")) || val(k, r, "Echeance") || dateText(val(k, r, "DateFin"))].filter(Boolean).join(" · "))}</small>${[
       val(k, r, "Statut") || val(k, r, "Etat"),
       val(k, r, "Vigilance"),
     ]
@@ -416,13 +702,13 @@
       );
     if (k === "points")
       result.push(
-        ...ordered("actions")
+        ...(data.actions || [])
           .filter((x) => has("actions", x, "PointOrigine", r))
           .map((x) => ["actions", x]),
       );
     if (k === "notes")
       result.push(
-        ...ordered("actions")
+        ...(data.actions || [])
           .filter(
             (x) =>
               has("actions", x, "NoteOrigine", r) &&
@@ -456,7 +742,8 @@
       if (context.startsWith("right-")) folded.add(key);
     }
     const open = !folded.has(key);
-    const movable = ["streams", "tasks", "actions"].includes(k);
+    const movable =
+      ["streams", "tasks", "actions"].includes(k) && !transformed(k, r);
     return `<div class="tree-node" data-tree-kind="${k}" data-tree-id="${r.id}"><div class="tree-row" data-drop-kind="${k}" data-drop-id="${r.id}" ${movable ? `draggable="${editionEnabled && !editing && !moving && !demo}" data-drag-kind="${k}" data-drag-id="${r.id}"` : ""}>${kids.length ? `<button class="fold" type="button" data-fold="${key}" aria-expanded="${open}" aria-label="${open ? "Plier" : "Déplier"} ${esc(title(k, r))}">${open ? "▾" : "▸"}</button>` : '<span class="fold-spacer"></span>'}${item(k, r)}${editionEnabled && movable ? `<button class="move-button" type="button" data-move-kind="${k}" data-move-id="${r.id}" aria-label="Déplacer ${esc(title(k, r))}" title="Déplacer"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20 20 4M7 4h13v13"/></svg></button>` : ""}</div>${kids.length ? `<div class="tree-children" ${open ? "" : "hidden"}>${kids.map((n) => branch(n, context)).join("")}</div>` : ""}</div>`;
   }
   function syncEdition() {
@@ -469,8 +756,18 @@
       .querySelectorAll("[data-view], #mappingButton, #refresh, #editionButton")
       .forEach((b) => (b.disabled = moving));
     document
-      .querySelectorAll("[data-new], [data-edit]")
-      .forEach((b) => (b.disabled = !editionEnabled || moving));
+      .querySelectorAll("[data-new], [data-edit], [data-convert]")
+      .forEach(
+        (b) =>
+          (b.disabled =
+            !editionEnabled ||
+            moving ||
+            (b.closest("#detail") &&
+              transformed(
+                selection?.k,
+                (data[selection?.k] || []).find((r) => r.id === selection?.id),
+              ))),
+      );
   }
   function render() {
     document
@@ -580,7 +877,12 @@
       const target = (data[destination.k] || []).find(
         (r) => r.id === destination.id,
       );
-      if (!row || (destination.k !== "unassigned" && !target))
+      if (
+        !row ||
+        transformed(source.k, row) ||
+        (destination.k !== "unassigned" &&
+          (!target || transformed(destination.k, target)))
+      )
         throw Error(
           "L’élément ou sa destination n’existe plus. Actualisez la liste.",
         );
@@ -1020,6 +1322,15 @@
     let html =
       historyToolbar() +
       `<small>${esc(schemas[k].label)}</small><h2 data-slot="Titre">${esc(title(k, r))}</h2><button data-edit="1">Modifier</button>`;
+    if (transformed(k, r)) {
+      html = html.replace('<button data-edit="1">Modifier</button>', "");
+      html +=
+        '<p class="muted">Transformé — conservé pour l’historique.</p>' +
+        conversionTarget(k, r)
+          .map(([kind, row]) => item(kind, row))
+          .join("");
+    } else if (["actions", "tasks"].includes(k))
+      html += `<button type="button" data-convert="${k}" data-convert-id="${r.id}">Faire évoluer en ${k === "actions" ? "tâche" : "chantier"}…</button>`;
     html +=
       '<dl class="meta">' +
       [
@@ -1098,8 +1409,10 @@
           .map(([kind, row]) => branch(tree(kind, row), "right-dependents"))
           .join("");
     if (k !== "actions") {
-      let actions = (data.actions || []).filter((x) =>
-        linkedTo(k, r, "actions", x),
+      let actions = (data.actions || []).filter(
+        (x) =>
+          linkedTo(k, r, "actions", x) &&
+          (["notes", "points"].includes(k) || !transformed("actions", x)),
       );
       let notes = (data.notes || []).filter(
         (x) =>
@@ -1242,6 +1555,10 @@
       );
       return;
     }
+    if (r && transformed(k, r)) {
+      message("Cet élément a été transformé ; modifiez son nouvel élément.");
+      return;
+    }
     if (!editionEnabled || moving) {
       message("Activez le mode Édition pour modifier les données.");
       return;
@@ -1278,7 +1595,10 @@
     $("fields").innerHTML = schemas[k].fields
       .filter(
         (f) =>
-          cfg(k).fields?.[f] && !col(k, f)?.isFormula && !(r && f === "Code"),
+          cfg(k).fields?.[f] &&
+          !col(k, f)?.isFormula &&
+          !(r && f === "Code") &&
+          !["Transforme", "ActionOrigine", "TacheOrigine"].includes(f),
       )
       .map((f) => {
         let v = r ? val(k, r, f) : "";
@@ -1303,7 +1623,11 @@
           target = links[k]?.[f];
         let input;
         if (target) {
-          const rows = data[target] || [];
+          const rows = (data[target] || []).filter(
+            (x) =>
+              !transformed(target, x) ||
+              (r && targets(k, r, f).some((t) => t.id === x.id)),
+          );
           let selected = r ? targets(k, r, f).map((x) => x.id) : [];
           const sourceLinks = values(v)
             .flatMap((x) =>
@@ -1709,7 +2033,7 @@
     if (
       (editing || moving) &&
       e.target.closest(
-        "[data-kind], [data-new], [data-edit], [data-fold], [data-fold-all], [data-move-kind], [data-history]",
+        "[data-kind], [data-new], [data-edit], [data-fold], [data-fold-all], [data-move-kind], [data-convert], [data-history]",
       )
     ) {
       message(
@@ -1755,6 +2079,14 @@
             : folded.delete(b.dataset.fold),
         );
       render();
+      return;
+    }
+    const convert = e.target.closest("[data-convert]");
+    if (convert) {
+      openConversion(
+        convert.dataset.convert,
+        Number(convert.dataset.convertId),
+      );
       return;
     }
     const move = e.target.closest("[data-move-kind]");
@@ -1930,6 +2262,7 @@
             statusCol: c.fields.Statut || "",
             responsibleCol: c.fields.Responsable || "",
             progressCol: c.fields.Avancement || "",
+            archivedCol: c.fields.Transforme || "",
           };
         }
         await grist.setOption("directMapping", old);
