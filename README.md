@@ -73,3 +73,9 @@ Une bordure et un fond discret distinguent les projets (bleu), chantiers (ocre),
 Les boutons **Retour** et **Suivant**, en haut du panneau de détail, parcourent l’historique de navigation du widget. Cliquer sur un élément ouvre son détail en haut du panneau ; revenir restaure la sélection précédente, les positions de défilement des deux volets, les niveaux pliés/dépliés, la vue et ses filtres. Les clics dans la liste et dans le détail, ainsi que les changements d’onglet, alimentent cet historique.
 
 Une nouvelle navigation après un retour remplace la branche « Suivant ». Les commandes restent bloquées tant qu’un formulaire n’a pas été enregistré ou annulé. Cet historique conserve jusqu’à 100 étapes pendant la session, ne modifie aucune donnée Grist et se réinitialise au rechargement du widget. Il ne sert pas à annuler les modifications de données.
+
+## Modifier les rattachements dans le panneau droit
+
+En mode Édition, **Modifier** transforme directement les rattachements affichés en listes de sélection, y compris ceux encore vides. Les actions proposent Projet, Chantier, Tâche et Note / réunion d’origine ; les chantiers proposent leur Projet, les tâches leur Chantier, et les notes leurs associations à un projet, des chantiers et des tâches. Les champs doivent être mappés et non calculés pour être modifiables. Les autres champs facultatifs restent dans « Autres champs ».
+
+Choisir une tâche renseigne immédiatement son chantier et son projet. Changer de chantier ou de projet retire les rattachements inférieurs devenus incompatibles. Les choix ne sont écrits dans Grist qu’avec **Enregistrer** ; **Annuler** conserve les anciens liens. Changer le parent d’une tâche ou d’un chantier actualise également les rattachements redondants des actions dépendantes dans la même sauvegarde. Les notes peuvent sélectionner plusieurs chantiers ou tâches.

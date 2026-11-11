@@ -224,7 +224,7 @@ const fixture = require("../demo.json");
   console.log("PASS autonomous and overdue filters");
   await page.locator("#list [data-kind=actions]").first().click();
   await page.getByRole("button", { name: "Modifier", exact: true }).click();
-  await page.locator("#detail summary").click();
+
   await page.locator("[name=Projet]").selectOption("2");
   await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
   await page.waitForFunction(
@@ -233,9 +233,10 @@ const fixture = require("../demo.json");
       !document.querySelector("#editor").open,
   );
   const last = await page.evaluate(() => window.writes.at(-1));
-  assert.equal(last[3].Projet, undefined);
-  assert.equal(last[3].Chantier, "C001");
-  console.log("PASS precise task derives consistent ancestors");
+  assert.equal(last[3].Projet, "P002");
+  assert.equal(last[3].Chantier, undefined);
+  assert.equal(last[3].Tache, "");
+  console.log("PASS choosing a project detaches incompatible task and stream");
   await page.locator("#list [data-kind=actions]").first().click();
   await page.getByRole("button", { name: "Modifier", exact: true }).click();
   await page.evaluate(() => (window.rejectWrite = true));
@@ -438,6 +439,107 @@ const fixture = require("../demo.json");
     );
   }
 
+  for (const refs of [false, true]) {
+    await page.goto("http://127.0.0.1:8766/?tree=1" + (refs ? "&refs=1" : ""));
+    await page.locator("#list [data-kind=projects]").first().waitFor();
+    await page.locator("#editionButton").click();
+    await page.getByRole("button", { name: "À faire", exact: true }).click();
+    await page.locator('#list [data-kind=actions][data-id="3"]').click();
+    await page.getByRole("button", { name: "Modifier", exact: true }).click();
+    for (const f of ["Projet", "Chantier", "Tache", "NoteOrigine"])
+      assert.equal(
+        await page
+          .locator('#detail [data-slot="' + f + '"] select')
+          .isVisible(),
+        true,
+      );
+    await page.locator("#detail [name=Chantier]").selectOption("2");
+    assert.equal(await page.locator("#detail [name=Projet]").inputValue(), "2");
+    await page
+      .getByRole("button", { name: "Enregistrer", exact: true })
+      .click();
+    await page.waitForFunction(
+      (refs) => window.testDb.data.actions[2].Chantier === (refs ? 2 : "C002"),
+      refs,
+    );
+    await page.getByRole("button", { name: "Modifier", exact: true }).click();
+    await page.locator("#detail [name=Tache]").selectOption("1");
+    assert.equal(
+      await page.locator("#detail [name=Chantier]").inputValue(),
+      "1",
+    );
+    assert.equal(await page.locator("#detail [name=Projet]").inputValue(), "1");
+    await page.locator("#detail [name=NoteOrigine]").selectOption("1");
+    await page
+      .getByRole("button", { name: "Enregistrer", exact: true })
+      .click();
+    await page.waitForFunction(
+      (refs) => window.testDb.data.actions[2].Tache === (refs ? 1 : "T001"),
+      refs,
+    );
+    // All other entity types expose their mapped parent or association controls inline too.
+    await page.getByRole("button", { name: "Projets", exact: true }).click();
+    await page.locator('#list [data-kind=tasks][data-id="1"]').click();
+    await page.getByRole("button", { name: "Modifier", exact: true }).click();
+    assert.equal(
+      await page.locator("#detail [data-slot=Chantier] select").isVisible(),
+      true,
+    );
+    await page.locator("#detail [name=Chantier]").selectOption("2");
+    await page
+      .getByRole("button", { name: "Enregistrer", exact: true })
+      .click();
+    await page.waitForFunction(
+      (refs) => window.testDb.data.actions[2].Chantier === (refs ? 2 : "C002"),
+      refs,
+    );
+    assert.equal(
+      (await page.evaluate(() => window.testDb)).data.actions[2].Projet,
+      refs ? 2 : "P002",
+    );
+    await page.locator('#list [data-kind=streams][data-id="2"]').click();
+    await page.getByRole("button", { name: "Modifier", exact: true }).click();
+    assert.equal(
+      await page.locator("#detail [data-slot=Projet] select").isVisible(),
+      true,
+    );
+    await page.locator("#detail [name=Projet]").selectOption("1");
+    await page
+      .getByRole("button", { name: "Enregistrer", exact: true })
+      .click();
+    await page.waitForFunction(
+      (refs) => window.testDb.data.actions[2].Projet === (refs ? 1 : "P001"),
+      refs,
+    );
+    await page
+      .getByRole("button", { name: "Notes et réunions", exact: true })
+      .click();
+    await page.locator('#list [data-kind=notes][data-id="1"]').click();
+    await page.getByRole("button", { name: "Modifier", exact: true }).click();
+    for (const f of ["Projet", "Chantiers", "Taches"])
+      assert.equal(
+        await page
+          .locator('#detail [data-slot="' + f + '"] select')
+          .isVisible(),
+        true,
+      );
+    await page.locator("#detail [name=Chantiers]").selectOption(["1", "2"]);
+    await page.locator("#detail [name=Taches]").selectOption(["1"]);
+    await page
+      .getByRole("button", { name: "Enregistrer", exact: true })
+      .click();
+    await page.waitForFunction(
+      (refs) =>
+        JSON.stringify(window.testDb.data.notes[0].Chantiers) ===
+        JSON.stringify(refs ? ["L", 1, 2] : "C001, C002"),
+      refs,
+    );
+    console.log(
+      "PASS visible inline links, consistent action parents, task-parent propagation and note multiselect (" +
+        (refs ? "references" : "CSV codes") +
+        ")",
+    );
+  }
   await page.goto("http://127.0.0.1:8766/?layout=1");
   await page.locator("#list [data-kind=projects]").first().click();
   async function checkPaneScroll() {

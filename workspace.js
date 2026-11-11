@@ -919,6 +919,15 @@
     $("detail").scrollLeft = 0;
   }
 
+  function relationLabel(field) {
+    return (
+      {
+        Tache: "Tâche",
+        Taches: "Tâches",
+        NoteOrigine: "Note / réunion d’origine",
+      }[field] || field
+    );
+  }
   function renderDetail() {
     if (editing?.inline) return;
     const k = selection?.k,
@@ -960,8 +969,9 @@
     for (const f of Object.keys(links[k] || {})) {
       const target = links[k][f],
         rs = targets(k, r, f);
-      if (rs.length)
-        html += `<h3>${esc(f)}</h3>` + rs.map((x) => item(target, x)).join("");
+      if (cfg(k).fields?.[f]) {
+        html += `<section class="relation-field"><h3>${esc(relationLabel(f))}</h3><div data-slot="${f}">${rs.length ? rs.map((x) => item(target, x)).join("") : '<span class="muted">Aucun rattachement</span>'}</div></section>`;
+      }
     }
     const progress = val(k, r, "Avancement");
     if (progress !== "" && Number.isFinite(Number(progress))) {
@@ -1191,7 +1201,7 @@
             rows
               .map(
                 (x) =>
-                  `<option value="${x.id}" ${selected.includes(x.id) ? "selected" : ""}>${esc(title(target, x))}</option>`,
+                  `<option value="${x.id}" ${selected.includes(x.id) ? "selected" : ""}>${esc(title(target, x))}${target === "tasks" ? esc(" — " + (targets("tasks", x, "Chantier")[0] ? title("streams", targets("tasks", x, "Chantier")[0]) : "Sans chantier")) : ""}</option>`,
               )
               .join("") +
             "</select>";
@@ -1224,7 +1234,7 @@
           input = `<input name="${f}" type="number" step="any" ${f === "Avancement" ? 'min="0" max="1"' : ""} value="${esc(v)}">`;
         else
           input = `<input name="${f}" ${f === "Titre" ? "required" : ""} value="${esc(v)}">`;
-        return `<label>${esc(f)}${f === "Avancement" ? " (0 à 1 ; 0,5 = 50 %)" : ""}${input}</label>`;
+        return `<label>${esc(target ? relationLabel(f) : f)}${f === "Avancement" ? " (0 à 1 ; 0,5 = 50 %)" : ""}${input}</label>`;
       })
       .join("");
     if (r) {
@@ -1237,14 +1247,19 @@
         .querySelectorAll("[data-edit], [data-new]")
         .forEach((x) => x.remove());
       const extras = document.createElement("details");
-      extras.innerHTML = "<summary>Autres champs et rattachements</summary>";
+      extras.innerHTML = "<summary>Autres champs</summary>";
       for (const label of controls) {
         const control = label.querySelector("[name]");
         const slot =
           control && display.querySelector(`[data-slot="${control.name}"]`);
         if (slot) {
           slot.replaceChildren(control);
-          control.setAttribute("aria-label", control.name);
+          control.setAttribute(
+            "aria-label",
+            links[k]?.[control.name]
+              ? relationLabel(control.name)
+              : control.name,
+          );
         } else extras.append(label);
       }
       $("fields").replaceChildren(display);
@@ -1266,6 +1281,47 @@
     $("editor").append($("editForm"));
     $("editor").close();
     if (inline) renderDetail();
+  }
+  function dependentLinkUpdates(k, record, fields) {
+    const parentField =
+      k === "tasks" ? "Chantier" : k === "streams" ? "Projet" : null;
+    const column = parentField && cfg(k).fields?.[parentField];
+    if (!record || !column || !Object.hasOwn(fields, column)) return [];
+    const changed = { ...record, ...fields },
+      updates = [];
+    for (const action of data.actions || []) {
+      if (!linkedTo(k, record, "actions", action)) continue;
+      const task = targets("actions", action, "Tache")[0];
+      let stream = task
+        ? targets(
+            "tasks",
+            k === "tasks" && task.id === record.id ? changed : task,
+            "Chantier",
+          )[0]
+        : targets("actions", action, "Chantier")[0];
+      if (stream && k === "streams" && stream.id === record.id)
+        stream = changed;
+      const project = stream && targets("streams", stream, "Projet")[0];
+      const delta = {};
+      for (const [field, target, row] of [
+        ["Chantier", "streams", stream],
+        ["Projet", "projects", project],
+      ]) {
+        const colId = cfg("actions").fields?.[field];
+        if (
+          !colId ||
+          col("actions", field)?.isFormula ||
+          (field === "Chantier" && !task)
+        )
+          continue;
+        const value = encodeLink("actions", field, target, row);
+        if (JSON.stringify(action[colId]) !== JSON.stringify(value))
+          delta[colId] = value;
+      }
+      if (Object.keys(delta).length)
+        updates.push(["UpdateRecord", cfg("actions").table, action.id, delta]);
+    }
+    return updates;
   }
   async function save(e) {
     e.preventDefault();
@@ -1349,6 +1405,7 @@
       }
       await grist.docApi.applyUserActions([
         [r ? "UpdateRecord" : "AddRecord", cfg(k).table, r?.id ?? null, fields],
+        ...dependentLinkUpdates(k, r, fields),
       ]);
       busy = false;
       endEdit();
@@ -1567,6 +1624,42 @@
   $("editor").addEventListener("cancel", () => {
     editing = null;
   });
+  $("editForm").onchange = (e) => {
+    if (
+      editing?.k !== "actions" ||
+      !["Projet", "Chantier", "Tache"].includes(e.target.name)
+    )
+      return;
+    const form = $("editForm");
+    const field = (f) => form.elements.namedItem(f);
+    const selected = (f, k) =>
+      (data[k] || []).find((r) => r.id === Number(field(f)?.value));
+    const assign = (f, r) => {
+      if (field(f)) field(f).value = r ? String(r.id) : "";
+    };
+    if (e.target.name === "Tache") {
+      const task = selected("Tache", "tasks");
+      if (task) {
+        const stream = targets("tasks", task, "Chantier")[0];
+        assign("Chantier", stream);
+        assign("Projet", stream && targets("streams", stream, "Projet")[0]);
+      }
+    } else if (e.target.name === "Chantier") {
+      const stream = selected("Chantier", "streams"),
+        task = selected("Tache", "tasks");
+      if (task && !has("tasks", task, "Chantier", stream))
+        assign("Tache", null);
+      if (stream) assign("Projet", targets("streams", stream, "Projet")[0]);
+    } else {
+      const project = selected("Projet", "projects"),
+        stream = selected("Chantier", "streams"),
+        task = selected("Tache", "tasks");
+      if (stream && !has("streams", stream, "Projet", project))
+        assign("Chantier", null);
+      if (task && projectOf("tasks", task)?.id !== project?.id)
+        assign("Tache", null);
+    }
+  };
   $("editForm").onsubmit = save;
   $("mapping").onchange = (e) => {
     const { map: k, field: f } = e.target.dataset;
