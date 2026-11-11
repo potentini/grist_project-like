@@ -829,8 +829,17 @@
     notes: "Note / réunion",
     points: "Point de discussion",
   };
+  function pointMeetingContext(point) {
+    const note = targets("points", point, "NoteOrigine")[0];
+    if (!note) return "Réunion d’origine non renseignée";
+    const raw = dateText(val("notes", note, "Date"));
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(raw)
+      ? raw.split("-").reverse().join("/")
+      : raw || val("notes", note, "DateSource") || "Date non renseignée";
+    return title("notes", note) + " · " + date;
+  }
   function item(k, r, level = 0) {
-    return `<button class="item level${level} ${selection?.k === k && selection.id === r.id ? "selected" : ""}" data-kind="${k}" data-id="${r.id}"><span class="item-kind">${kindLabels[k]}</span><strong>${esc(title(k, r))}</strong>${archived(k, r) ? '<span class="badge">Archivé</span>' : ""}${transformed(k, r) ? '<span class="badge">Transformé</span>' : ""}<small>${esc([val(k, r, "Volet"), val(k, r, "Responsable"), dateText(val(k, r, "Date")) || val(k, r, "Echeance") || dateText(val(k, r, "DateFin"))].filter(Boolean).join(" · "))}</small>${[
+    return `<button class="item level${level} ${selection?.k === k && selection.id === r.id ? "selected" : ""}" data-kind="${k}" data-id="${r.id}"><span class="item-kind">${kindLabels[k]}</span><strong>${esc(title(k, r))}</strong>${k === "points" ? `<small class="point-origin">${esc(pointMeetingContext(r))}</small>` : ""}${archived(k, r) ? '<span class="badge">Archivé</span>' : ""}${transformed(k, r) ? '<span class="badge">Transformé</span>' : ""}<small>${esc([val(k, r, "Volet"), val(k, r, "Responsable"), dateText(val(k, r, "Date")) || val(k, r, "Echeance") || dateText(val(k, r, "DateFin"))].filter(Boolean).join(" · "))}</small>${[
       val(k, r, "Statut") || val(k, r, "Etat"),
       val(k, r, "Vigilance"),
     ]
@@ -1549,6 +1558,8 @@
     let html =
       historyToolbar() +
       `<small>${esc(schemas[k].label)}</small><h2 data-slot="Titre">${esc(title(k, r))}</h2><button data-edit="1">Modifier</button>`;
+    if (k === "points")
+      html += `<p class="point-origin">${esc(pointMeetingContext(r))}</p>`;
     if (inactive(k, r)) {
       html = html.replace('<button data-edit="1">Modifier</button>', "");
       html +=

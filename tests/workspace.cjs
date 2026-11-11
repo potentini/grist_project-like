@@ -726,6 +726,12 @@ const fixture = require("../demo.json");
     await page.locator("#list [data-kind=projects]").first().waitFor();
     await page.locator('#list [data-kind=projects][data-id="2"]').click();
     assert.equal(await page.locator("#detail [data-kind=points]").count(), 1);
+    assert.match(
+      await page
+        .locator("#detail [data-kind=points] .point-origin")
+        .innerText(),
+      /Réunion de coordination · 10\/11\/2026/,
+    );
     await page.locator("#detail [data-kind=points]").click();
     assert.match(
       await page.locator("#detail").innerText(),
@@ -778,6 +784,21 @@ const fixture = require("../demo.json");
       (await page.evaluate(() => window.testDb)).data.actions[0].NoteOrigine,
       refs ? 2 : "N002",
     );
+    assert.match(
+      await page.locator("#detail > .point-origin").innerText(),
+      /Autre réunion · 10\/11\/2026/,
+    );
+    await page.evaluate(() => {
+      window.testDb.data.notes[1].Date = "";
+      window.testDb.data.notes[1].DateSource = "Date à confirmer";
+    });
+    await page.locator("#refresh").click();
+    await page.waitForFunction(() =>
+      document
+        .querySelector("#detail > .point-origin")
+        ?.textContent.includes("Autre réunion · Date à confirmer"),
+    );
+
     console.log(
       "PASS optional discussion points, cross-project visibility, creation and action provenance (" +
         (refs ? "references" : "codes") +

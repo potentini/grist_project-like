@@ -468,3 +468,7 @@ select[multiple] {
 button[data-removal="delete"] {
   color: #a32424;
 }
+.point-origin {
+  color: #43516a;
+  line-height: 1.5;
+}
