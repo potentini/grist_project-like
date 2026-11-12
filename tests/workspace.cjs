@@ -635,6 +635,45 @@ const fixture = require("../demo.json");
     "PASS mapping refresh detects a Boolean column created after widget startup",
   );
   for (const refs of [false, true]) {
+    await page.goto("http://127.0.0.1:8766/?tree=1" + (refs ? "&refs=1" : ""));
+    await page.locator('#list [data-kind=projects][data-id="1"]').waitFor();
+    await page.locator("#editionButton").click();
+    await page.locator('#list [data-kind=projects][data-id="1"]').click();
+    await page.locator("#detail [data-new=actions]").click();
+    const options = async (field) =>
+      page
+        .locator('#editForm [name="' + field + '"] option')
+        .evaluateAll((opts) => opts.map((o) => o.value));
+    assert.deepEqual(await options("Chantier"), ["", "1"]);
+    assert.deepEqual(await options("Tache"), ["", "1"]);
+    await page.locator("#editForm [name=Projet]").selectOption("2");
+    assert.deepEqual(await options("Chantier"), ["", "2"]);
+    assert.deepEqual(await options("Tache"), [""]);
+    await page.locator("#editForm [name=Projet]").selectOption("");
+    assert.deepEqual(await options("Chantier"), ["", "1", "2"]);
+    await page.locator("#editForm [name=Chantier]").selectOption("1");
+    assert.equal(
+      await page.locator("#editForm [name=Projet]").inputValue(),
+      "1",
+    );
+    await page.locator("#editForm [name=Tache]").selectOption("1");
+    await page.locator("#editForm [name=Projet]").selectOption("2");
+    assert.equal(
+      await page.locator("#editForm [name=Chantier]").inputValue(),
+      "",
+    );
+    assert.equal(await page.locator("#editForm [name=Tache]").inputValue(), "");
+    const before = await page.evaluate(() => window.writes.length);
+    await page.getByRole("button", { name: "Annuler", exact: true }).click();
+    assert.equal(await page.evaluate(() => window.writes.length), before);
+    console.log(
+      "PASS cascading creation choices, bottom-up parents, incompatible reset and cancel (" +
+        (refs ? "references" : "codes") +
+        ")",
+    );
+  }
+
+  for (const refs of [false, true]) {
     // Keep both real drag endpoints in view; rich cards now need more height.
     await page.setViewportSize({ width: 1440, height: 1500 });
     await page.goto("http://127.0.0.1:8766/?tree=1" + (refs ? "&refs=1" : ""));
@@ -824,6 +863,20 @@ const fixture = require("../demo.json");
       refs,
     );
     await page.getByRole("button", { name: "Modifier", exact: true }).click();
+    assert.deepEqual(
+      await page
+        .locator("#detail [name=Chantier] option")
+        .evaluateAll((opts) => opts.map((o) => o.value)),
+      ["", "2"],
+    );
+    assert.deepEqual(
+      await page
+        .locator("#detail [name=Tache] option")
+        .evaluateAll((opts) => opts.map((o) => o.value)),
+      [""],
+    );
+    await page.locator("#detail [name=Projet]").selectOption("");
+    await page.locator("#detail [name=Chantier]").selectOption("");
     await page.locator("#detail [name=Tache]").selectOption("1");
     assert.equal(
       await page.locator("#detail [name=Chantier]").inputValue(),
@@ -884,6 +937,7 @@ const fixture = require("../demo.json");
           .isVisible(),
         true,
       );
+    await page.locator("#detail [name=Projet]").selectOption("");
     await page.locator("#detail [name=Chantiers]").selectOption(["1", "2"]);
     await page.locator("#detail [name=Taches]").selectOption(["1"]);
     await page
@@ -947,7 +1001,28 @@ const fixture = require("../demo.json");
     await page
       .locator("[name=Contenu]")
       .fill("Texte du sujet\nDeuxième paragraphe");
+    await page.locator("[name=Projets]").selectOption(["1"]);
+    assert.deepEqual(
+      await page
+        .locator("[name=Chantiers] option")
+        .evaluateAll((opts) => opts.map((o) => o.value)),
+      ["", "1"],
+    );
     await page.locator("[name=Projets]").selectOption(["1", "2"]);
+    assert.deepEqual(
+      await page
+        .locator("[name=Chantiers] option")
+        .evaluateAll((opts) => opts.map((o) => o.value)),
+      ["", "1", "2"],
+    );
+    await page.locator("[name=Chantiers]").selectOption(["1", "2"]);
+    assert.deepEqual(
+      await page
+        .locator("[name=Projets]")
+        .evaluate((el) => [...el.selectedOptions].map((o) => o.value)),
+      ["1", "2"],
+    );
+    await page.locator("[name=Chantiers]").selectOption([]);
     await page
       .getByRole("button", { name: "Enregistrer", exact: true })
       .click();

@@ -2836,9 +2836,132 @@
             ? [...control.selectedOptions].map((o) => o.value)
             : control.value,
       );
+    syncHierarchy("", !r);
     const origin = $("editForm").elements.namedItem("PointOrigine");
     if (k === "actions" && origin?.value)
       origin.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  // Form-only hierarchy: selections remain drafts until Save.
+  function syncHierarchy(changed = "", infer = false) {
+    if (!editing) return;
+    const { k, r } = editing,
+      form = $("editForm");
+    const fields = ["projects", "streams", "tasks"].map((target) =>
+      Object.keys(links[k] || {}).find(
+        (f) =>
+          links[k][f] === target &&
+          [
+            "Projet",
+            "Projets",
+            "Chantier",
+            "Chantiers",
+            "Tache",
+            "Taches",
+          ].includes(f),
+      ),
+    );
+    const control = (f) => f && form.elements.namedItem(f);
+    const selected = (f) => {
+      const el = control(f);
+      return el
+        ? (data[links[k][f]] || []).filter((row) =>
+            [...el.selectedOptions].some((o) => o.value === String(row.id)),
+          )
+        : f && r
+          ? targets(k, r, f)
+          : [];
+    };
+    const assign = (f, rows) => {
+      const el = control(f);
+      if (!el) return;
+      // Restore all options before assigning a newly inferred parent.
+      if (el.dataset.hierarchyOptions)
+        el.innerHTML = el.dataset.hierarchyOptions;
+      const ids = new Set(rows.map((row) => String(row.id)));
+      for (const o of el.options) o.selected = ids.has(o.value);
+      if (!rows.length) el.value = "";
+    };
+    for (const f of fields) {
+      const el = control(f);
+      if (el && !el.dataset.hierarchyOptions)
+        el.dataset.hierarchyOptions = el.innerHTML;
+    }
+    const [pf, sf, tf] = fields;
+    if (infer || changed === sf || changed === tf) {
+      if (tf && (infer || changed === tf) && selected(tf).length) {
+        const parents = selected(tf).flatMap((t) =>
+          targets("tasks", t, "Chantier"),
+        );
+        assign(
+          sf,
+          control(sf)?.multiple
+            ? [...selected(sf), ...parents]
+            : parents.slice(0, 1),
+        );
+      }
+      const parents = [
+        ...selected(sf).flatMap((stream) =>
+          targets("streams", stream, "Projet"),
+        ),
+        ...selected(tf)
+          .map((task) => projectOf("tasks", task))
+          .filter(Boolean),
+      ];
+      const unique = [...new Map(parents.map((row) => [row.id, row])).values()];
+      if (control(pf)?.multiple) {
+        if (unique.length) assign(pf, [...selected(pf), ...unique]);
+      } else if (
+        unique.length === 1 ||
+        (changed === sf && !control(sf)?.multiple && selected(sf).length) ||
+        (changed === tf && !control(tf)?.multiple && selected(tf).length)
+      ) {
+        assign(pf, unique.slice(0, 1));
+      }
+    }
+    const projects = selected(pf),
+      streams = selected(sf);
+    const allowed = (f, row) => {
+      if (f === sf)
+        return (
+          !projects.length ||
+          projects.some((p) => has("streams", row, "Projet", p))
+        );
+      if (f === tf)
+        return (
+          (!selected(sf).length ||
+            selected(sf).some((stream) =>
+              has("tasks", row, "Chantier", stream),
+            )) &&
+          (!projects.length ||
+            projects.some((p) => projectOf("tasks", row)?.id === p.id))
+        );
+      return true;
+    };
+    // A deliberate parent change clears only incompatible descendants.
+    if (
+      (changed === pf && projects.length) ||
+      (changed === sf && streams.length)
+    ) {
+      for (const f of [sf, tf]) {
+        if (f === changed) continue;
+        const rows = selected(f).filter((row) => allowed(f, row));
+        assign(f, rows);
+      }
+    }
+    for (const f of [sf, tf]) {
+      const el = control(f);
+      if (!el) continue;
+      const chosen = new Set([...el.selectedOptions].map((o) => o.value));
+      el.innerHTML = el.dataset.hierarchyOptions;
+      for (const o of [...el.options]) {
+        const row = (data[links[k][f]] || []).find(
+          (x) => String(x.id) === o.value,
+        );
+        if (row && !chosen.has(o.value) && !allowed(f, row)) o.remove();
+        else o.selected = chosen.has(o.value);
+      }
+      if (!el.multiple && !chosen.size) el.value = "";
+    }
   }
   function endEdit() {
     if (busy) return;
@@ -3406,39 +3529,16 @@
     }
 
     if (
-      editing?.k !== "actions" ||
-      !["Projet", "Chantier", "Tache"].includes(e.target.name)
+      [
+        "Projet",
+        "Projets",
+        "Chantier",
+        "Chantiers",
+        "Tache",
+        "Taches",
+      ].includes(e.target.name)
     )
-      return;
-    const form = $("editForm");
-    const field = (f) => form.elements.namedItem(f);
-    const selected = (f, k) =>
-      (data[k] || []).find((r) => r.id === Number(field(f)?.value));
-    const assign = (f, r) => {
-      if (field(f)) field(f).value = r ? String(r.id) : "";
-    };
-    if (e.target.name === "Tache") {
-      const task = selected("Tache", "tasks");
-      if (task) {
-        const stream = targets("tasks", task, "Chantier")[0];
-        assign("Chantier", stream);
-        assign("Projet", stream && targets("streams", stream, "Projet")[0]);
-      }
-    } else if (e.target.name === "Chantier") {
-      const stream = selected("Chantier", "streams"),
-        task = selected("Tache", "tasks");
-      if (task && !has("tasks", task, "Chantier", stream))
-        assign("Tache", null);
-      if (stream) assign("Projet", targets("streams", stream, "Projet")[0]);
-    } else {
-      const project = selected("Projet", "projects"),
-        stream = selected("Chantier", "streams"),
-        task = selected("Tache", "tasks");
-      if (stream && !has("streams", stream, "Projet", project))
-        assign("Chantier", null);
-      if (task && projectOf("tasks", task)?.id !== project?.id)
-        assign("Tache", null);
-    }
+      syncHierarchy(e.target.name);
   };
   $("editForm").onsubmit = save;
   $("mapping").onchange = (e) => {

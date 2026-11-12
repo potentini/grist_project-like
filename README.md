@@ -149,3 +149,9 @@ Dans **Filtres par niveau**, une liste de valeurs disponibles apparaît après s
 Les quatre niveaux Projets, Chantiers, Taches et Actions proposent un champ ResponsableDiPSi, affiché « Responsable DiPSi », en plus de Responsable. Chaque niveau permet d’ajouter des colonnes existantes comme champs supplémentaires dans le mapping. Voir [les consignes](imports/CHAMPS_SUPPLEMENTAIRES.md) pour préparer ces colonnes et les associer. Aucune colonne n’est créée automatiquement.
 
 Dans le panneau droit, **Éléments dépendants**, **Notes et réunions associées** et **Actions associées** disposent d’une flèche de pliage/dépliage. Leur état est propre à l’élément et conservé pendant la navigation et les retours de la session. Le pliage reste possible en lecture seule.
+
+## Rattachements dépendants pendant la saisie
+
+En création comme en modification, le choix d’un projet limite les chantiers et tâches proposés à ce projet ; le choix d’un chantier limite les tâches à ce chantier. Sans parent sélectionné, la liste reste ouverte. Choisir un chantier renseigne son projet, et choisir une tâche renseigne son chantier et son projet, lorsque ces champs sont mappés et modifiables. Changer de parent retire les sélections inférieures incompatibles. Les liens existants restent visibles à l’ouverture, même s’ils sont incohérents, afin de pouvoir les vérifier sans les effacer silencieusement.
+
+Pour les points de discussion, plusieurs projets ou chantiers sélectionnés ouvrent les options de l’ensemble de ces parents. Les parents déduits s’ajoutent aux choix multiples. Une note peut garder plusieurs chantiers de projets différents : son champ Projet unique n’est rempli automatiquement que si les rattachements désignent un seul projet. Pour élargir une liste, effacez le parent ou ajoutez les parents souhaités. Les colonnes calculées restent protégées ; aucun changement n’est écrit avant **Enregistrer**.
