@@ -129,6 +129,8 @@
       ],
     },
   };
+  for (const k of ["projects", "streams", "tasks", "actions"])
+    schemas[k].fields.push("ResponsableDiPSi");
   for (const schema of Object.values(schemas)) schema.fields.push("Archive");
   const aliases = {
     Titre: ["Titre", "Nom", "Name", "Title", "Tache"],
@@ -257,8 +259,10 @@
   );
   function fieldLabel(k, f) {
     return (
+      cfg(k).extraFields?.find((x) => x.id === f)?.label ||
       cfg(k).fieldLabels?.[f] ||
       {
+        ResponsableDiPSi: "Responsable DiPSi",
         DateFin: "Date de fin (date précise)",
         Echeance: "Échéance (texte libre)",
       }[f] ||
@@ -419,17 +423,91 @@
       );
     return true;
   }
-  let advancedRules = [];
+  let advancedRules = [],
+    advancedSelected = [];
+  const quickSelections = {
+    projectFilter: [],
+    ownerFilter: [],
+    statusFilter: [],
+  };
+  function fieldValues(m, value, row) {
+    if (m?.type?.startsWith("RefList:"))
+      return values(value).length
+        ? values(value).map((id) => refText(m, id, null))
+        : [""];
+    if (m?.type === "ChoiceList")
+      return values(value).length ? values(value).map(String) : [""];
+    return [
+      m?.type?.startsWith("Date") ? dateText(value) : refText(m, value, row),
+    ];
+  }
+  function filterValues(k, r, f) {
+    return fieldValues(col(k, f), val(k, r, f), r);
+  }
+  function quickChoice(id) {
+    return quickSelections[id] || [];
+  }
+  function draftAdvancedRule() {
+    return {
+      kind: $("advancedKind").value,
+      column: $("advancedField").value,
+      ...(advancedSelected.length
+        ? { values: [...advancedSelected] }
+        : { value: $("advancedValue").value }),
+    };
+  }
+  function quickUI(id, opts) {
+    const select = $(id);
+    let wrapper = select.parentElement;
+    if (wrapper.tagName === "LABEL") {
+      const div = document.createElement("div");
+      div.className = "quick-filter";
+      wrapper.replaceWith(div);
+      while (wrapper.firstChild) div.append(wrapper.firstChild);
+      wrapper = div;
+    }
+    const caption = wrapper.querySelector("span")?.textContent || id;
+    select.setAttribute("aria-label", caption);
+    let popup = wrapper.querySelector(".quick-multiple");
+    if (!popup) {
+      popup = document.createElement("details");
+      popup.className = "quick-multiple";
+      popup.innerHTML = "<summary>Choix multiples</summary><div></div>";
+      wrapper.append(popup);
+    }
+    popup
+      .querySelector("summary")
+      .setAttribute("aria-label", "Choix multiples : " + caption);
+    popup.querySelector("div").innerHTML =
+      opts
+        .map(
+          ([value, label]) =>
+            `<label><input type="checkbox" data-quick="${id}" value="${esc(value)}" ${quickChoice(id).includes(String(value)) ? "checked" : ""}>${esc(label)}</label>`,
+        )
+        .join("") ||
+      '<span class="muted">Aucune valeur dans le périmètre courant.</span>';
+    popup.ontoggle = () => {
+      if (popup.open)
+        document.querySelectorAll(".quick-multiple").forEach((other) => {
+          if (other !== popup) other.open = false;
+        });
+    };
+    popup.onchange = (e) => {
+      if (!e.target.matches("[data-quick]")) return;
+      quickSelections[id] = [...popup.querySelectorAll("input:checked")].map(
+        (x) => x.value,
+      );
+      filterOptions();
+      render();
+    };
+  }
+
   function advancedMatch(k, r) {
     if (!advancedSets) {
       advancedSets = new Map();
       const rules = [...advancedRules];
-      if ($("advancedValue").value.trim())
-        rules.push({
-          kind: $("advancedKind").value,
-          column: $("advancedField").value,
-          value: $("advancedValue").value,
-        });
+      if ($("advancedValue").value.trim() || advancedSelected.length)
+        rules.push(draftAdvancedRule());
       for (const source of new Set(rules.map((rule) => rule.kind))) {
         const group = rules.filter((rule) => rule.kind === source);
         const allowed = new Set(
@@ -443,7 +521,11 @@
                 const value = c?.type?.startsWith("Date")
                   ? dateText(row[rule.column])
                   : refText(c, row[rule.column], row);
-                return norm(value).includes(norm(rule.value));
+                return rule.values
+                  ? fieldValues(c, row[rule.column], row).some((v) =>
+                      rule.values.includes(v),
+                    )
+                  : norm(value).includes(norm(rule.value));
               }),
             )
             .map((row) => row.id),
@@ -482,14 +564,38 @@
     if (oldField) $("advancedField").value = oldField;
     if (!$("advancedField").value) $("advancedField").selectedIndex = 0;
     const count =
-      advancedRules.length + ($("advancedValue").value.trim() ? 1 : 0);
+      advancedRules.length +
+      ($("advancedValue").value.trim() || advancedSelected.length ? 1 : 0);
+    const column = meta.find(
+      (c) => c.table === cfg(k).table && c.colId === $("advancedField").value,
+    );
+    const choices = [
+      ...new Set(
+        (data[k] || [])
+          .filter((r) => nativeMatch(k, r))
+          .flatMap((r) => fieldValues(column, r[column?.colId], r)),
+      ),
+    ].sort((a, b) => a.localeCompare(b));
+    $("advancedChoices").innerHTML =
+      choices
+        .filter(
+          (v) =>
+            !$("advancedValue").value ||
+            norm(v).includes(norm($("advancedValue").value)) ||
+            advancedSelected.includes(v),
+        )
+        .map(
+          (value) =>
+            `<label><input type="checkbox" data-advanced-choice value="${esc(value)}" ${advancedSelected.includes(value) ? "checked" : ""}>${esc(value || "(Vide)")}</label>`,
+        )
+        .join("") || '<p class="muted">Aucune valeur disponible.</p>';
     $("advancedCount").textContent = count
       ? `(${count} actif${count > 1 ? "s" : ""})`
       : "";
     $("advancedChips").innerHTML = advancedRules
       .map(
         (rule, i) =>
-          `<button type="button" data-remove-filter="${i}">${esc(schemas[rule.kind].label)} · ${esc(meta.find((c) => c.table === cfg(rule.kind).table && c.colId === rule.column)?.label || rule.column)} : ${esc(rule.value)} ×</button>`,
+          `<button type="button" data-remove-filter="${i}">${esc(schemas[rule.kind].label)} · ${esc(meta.find((c) => c.table === cfg(rule.kind).table && c.colId === rule.column)?.label || rule.column)} : ${esc(rule.values ? rule.values.map((v) => v || "(Vide)").join(" ou ") : rule.value)} ×</button>`,
       )
       .join("");
   }
@@ -600,6 +706,12 @@
     return (t?.id || []).map((_, i) =>
       Object.fromEntries(Object.keys(t).map((k) => [k, t[k][i]])),
     );
+  }
+  function fieldsFor(k) {
+    return [
+      ...schemas[k].fields,
+      ...(cfg(k).extraFields || []).map((x) => x.id),
+    ];
   }
   function cfg(k) {
     return mapping[k] || { fields: {} };
@@ -790,6 +902,7 @@
       copied = ["Titre"];
     for (const [from, to] of [
       ["Responsable", "Responsable"],
+      ["ResponsableDiPSi", "ResponsableDiPSi"],
       ["DateDebut", "DateDebut"],
       ["DateFin", "DateFin"],
       ["Echeance", "Echeance"],
@@ -1216,20 +1329,24 @@
       );
   }
   function matches(k, r) {
-    const p = $("projectFilter").value,
-      o = $("ownerFilter").value,
-      s = $("statusFilter").value,
+    const p = quickChoice("projectFilter"),
+      o = quickChoice("ownerFilter"),
+      s = quickChoice("statusFilter"),
       q = norm($("search").value);
     return (
       nativeMatch(k, r) &&
       advancedMatch(k, r) &&
       (!archived(k, r) || $("showArchived").checked) &&
-      (!p ||
+      (!p.length ||
         (k === "points"
-          ? pointProjects(r).some((x) => x.id === Number(p))
-          : projectOf(k, r)?.id === Number(p))) &&
-      (!o || displayValue(k, r, "Responsable") === o) &&
-      (!s || displayValue(k, r, k === "notes" ? "Etat" : "Statut") === s) &&
+          ? pointProjects(r).some((x) => p.includes(String(x.id)))
+          : p.includes(String(projectOf(k, r)?.id)))) &&
+      (!o.length ||
+        filterValues(k, r, "Responsable").some((v) => o.includes(v))) &&
+      (!s.length ||
+        filterValues(k, r, k === "notes" ? "Etat" : "Statut").some((v) =>
+          s.includes(v),
+        )) &&
       (!q ||
         norm(
           Object.keys(cfg(k).fields || {})
@@ -1283,6 +1400,7 @@
     };
     add("Volet", displayValue(k, r, "Volet"));
     add("Responsable", displayValue(k, r, "Responsable"));
+    add("ResponsableDiPSi", displayValue(k, r, "ResponsableDiPSi"));
     add(
       "Date",
       dateValue("Date") || (k === "notes" ? val(k, r, "DateSource") : ""),
@@ -1306,6 +1424,10 @@
     add("Statut", displayValue(k, r, "Statut"));
     add("Etat", displayValue(k, r, "Etat"));
     add("Vigilance", displayValue(k, r, "Vigilance"));
+    if (rich)
+      for (const extra of cfg(k).extraFields || [])
+        if (extra.showInCard !== false)
+          add(extra.id, displayValue(k, r, extra.id));
     const progress = val(k, r, "Avancement");
     if (
       rich &&
@@ -1360,6 +1482,15 @@
       view === "notes" ? "Etat" : "Statut",
     );
     const k = view === "projects" ? "streams" : view;
+    const kinds =
+      view === "notes"
+        ? ["notes", "points", "actions"]
+        : ["projects", "streams", "tasks", "actions"];
+    const scope = kinds.flatMap((kind) =>
+      (data[kind] || [])
+        .filter((row) => nativeMatch(kind, row) && !inactive(kind, row))
+        .map((row) => [kind, row]),
+    );
     for (const [id, opts] of [
       [
         "projectFilter",
@@ -1371,36 +1502,42 @@
         "ownerFilter",
         [
           ...new Set(
-            (data[k] || [])
-              .filter((r) => nativeMatch(k, r))
-              .map((r) => displayValue(k, r, "Responsable"))
+            scope
+              .flatMap(([kind, row]) => filterValues(kind, row, "Responsable"))
               .filter(Boolean),
           ),
         ]
           .sort()
-          .map((x) => [x, x]),
+          .map((v) => [v, v]),
       ],
       [
         "statusFilter",
         [
           ...new Set(
-            (data[k] || [])
-              .filter((r) => nativeMatch(k, r))
-              .map((r) => displayValue(k, r, k === "notes" ? "Etat" : "Statut"))
+            scope
+              .flatMap(([kind, row]) =>
+                filterValues(kind, row, kind === "notes" ? "Etat" : "Statut"),
+              )
               .filter(Boolean),
           ),
         ]
           .sort()
-          .map((x) => [x, x]),
+          .map((v) => [v, v]),
       ],
     ]) {
-      const old = $(id).value;
+      const valid = new Set(opts.map(([v]) => String(v)));
+      quickSelections[id] = quickChoice(id).filter((v) => valid.has(v));
+      const selected = quickChoice(id);
       $(id).innerHTML =
         '<option value="">Tous</option>' +
         opts
           .map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`)
-          .join("");
-      $(id).value = opts.some(([value]) => String(value) === old) ? old : "";
+          .join("") +
+        (selected.length > 1
+          ? `<option value="__multiple__">${selected.length} choix sélectionnés</option>`
+          : "");
+      $(id).value = selected.length > 1 ? "__multiple__" : selected[0] || "";
+      quickUI(id, opts);
     }
   }
   function actionParent(r) {
@@ -1964,6 +2101,13 @@
     "overdue",
   ];
   function captureLocation(source = null) {
+    $("detail")
+      .querySelectorAll("details[data-section-key]")
+      .forEach((d) =>
+        d.open
+          ? folded.delete(d.dataset.sectionKey)
+          : folded.add(d.dataset.sectionKey),
+      );
     let focus = null;
     if (source) {
       const pane = source.closest("#list, #detail");
@@ -1976,6 +2120,8 @@
     return {
       selection: selection ? { ...selection } : null,
       view,
+      quickSelections: structuredClone(quickSelections),
+      advancedSelected: [...advancedSelected],
       advancedRules: structuredClone(advancedRules),
       filters: Object.fromEntries(
         filterIds.map((id) => [
@@ -2015,6 +2161,17 @@
     return '<nav class="detail-navigation" aria-label="Historique du panneau"><button type="button" data-history="back">← Retour</button><button type="button" data-history="forward">Suivant →</button></nav>';
   }
   function restoreLocation(location) {
+    Object.assign(
+      quickSelections,
+      structuredClone(
+        location.quickSelections || {
+          projectFilter: [],
+          ownerFilter: [],
+          statusFilter: [],
+        },
+      ),
+    );
+    advancedSelected = [...(location.advancedSelected || [])];
     advancedRules = structuredClone(location.advancedRules || []);
     selection = location.selection;
     view = location.view;
@@ -2133,6 +2290,22 @@
       }[field] || field
     );
   }
+  function detailSection(k, r, name, label, content) {
+    const key = `section:${k}:${r.id}:${name}`;
+    return `<details class="detail-section" data-section-key="${key}" ${folded.has(key) ? "" : "open"}><summary>${esc(label)}</summary>${content}</details>`;
+  }
+  document.querySelector("main").addEventListener(
+    "toggle",
+    (e) => {
+      const d = e.target;
+      if (d.matches?.("details[data-section-key]") && d.isConnected) {
+        d.open
+          ? folded.delete(d.dataset.sectionKey)
+          : folded.add(d.dataset.sectionKey);
+      }
+    },
+    true,
+  );
   function renderDetail() {
     if (editing?.inline) return;
     const k = selection?.k,
@@ -2166,6 +2339,7 @@
         "Volet",
         "Nature",
         "Responsable",
+        "ResponsableDiPSi",
         "Participants",
         "Date",
         "DateSource",
@@ -2190,6 +2364,9 @@
         html += `<section class="relation-field"><h3>${esc(fieldLabel(k, f))}</h3><div data-slot="${f}">${rs.length ? rs.map((x) => item(target, x)).join("") : '<span class="muted">Aucun rattachement</span>'}</div></section>`;
       }
     }
+    for (const extra of cfg(k).extraFields || [])
+      if (cfg(k).fields?.[extra.id])
+        html += `<section class="extra-field"><h3>${esc(fieldLabel(k, extra.id))}</h3><div data-slot="${extra.id}" class="text">${esc(displayValue(k, r, extra.id)) || '<span class="muted">Non renseigné</span>'}</div></section>`;
     const progress = val(k, r, "Avancement");
     if (progress !== "" && Number.isFinite(Number(progress))) {
       const percent = Math.round(Number(progress) * 100);
@@ -2231,11 +2408,15 @@
       ([kind]) => !["actions", "points"].includes(kind),
     );
     if (deps.length)
-      html +=
-        "<h3>Éléments dépendants</h3>" +
+      html += detailSection(
+        k,
+        r,
+        "dependents",
+        "Éléments dépendants",
         deps
           .map(([kind, row]) => branch(tree(kind, row), "right-dependents"))
-          .join("");
+          .join(""),
+      );
     if (k !== "actions") {
       let actions = (data.actions || []).filter(
         (x) =>
@@ -2245,22 +2426,34 @@
       );
       if (k !== "notes") {
         const meetings = associatedMeetings(k, r, actions);
-        html +=
-          "<h3>Notes et réunions associées</h3>" +
-          (meetings.map(meetingAssociationCard).join("") ||
-            '<p class="muted">Aucune note liée.</p>');
+        html += detailSection(
+          k,
+          r,
+          "meetings",
+          "Notes et réunions associées",
+          meetings.map(meetingAssociationCard).join("") ||
+            '<p class="muted">Aucune note liée.</p>',
+        );
       }
-      html +=
-        "<h3>Actions associées</h3>" +
-        (actions.map((x) => item("actions", x)).join("") ||
-          '<p class="muted">Aucune action liée.</p>');
+      html += detailSection(
+        k,
+        r,
+        "actions",
+        "Actions associées",
+        actions.map((x) => item("actions", x)).join("") ||
+          '<p class="muted">Aucune action liée.</p>',
+      );
     }
     if (k === "actions") {
       const meetings = associatedMeetings(k, r, [r]);
-      html +=
-        "<h3>Notes et réunions associées</h3>" +
-        (meetings.map(meetingAssociationCard).join("") ||
-          '<p class="muted">Aucune note liée.</p>');
+      html += detailSection(
+        k,
+        r,
+        "meetings",
+        "Notes et réunions associées",
+        meetings.map(meetingAssociationCard).join("") ||
+          '<p class="muted">Aucune note liée.</p>',
+      );
     }
     $("detail").innerHTML = html;
     const actionBar =
@@ -2367,7 +2560,19 @@
                   )}</select></label><input class="field-label" data-label-kind="${k}" data-label-field="${f}" value="${esc(c.fieldLabels?.[f] || "")}" placeholder="Libellé affiché : ${esc(fieldLabel(k, f))}" aria-label="Libellé ${k}.${f}">`,
               )
               .join("") +
-            "</fieldset>"
+            `<div class="extra-mapping">${(c.extraFields || [])
+              .map(
+                (extra) =>
+                  `<div class="extra-map-row"><input data-extra-label="${extra.id}" data-extra-kind="${k}" value="${esc(extra.label || "")}" placeholder="Libellé du champ"><select data-map="${k}" data-field="${extra.id}">${options(
+                    meta
+                      .filter((m) => m.table === c.table)
+                      .map((m) => [m.colId, m.label || m.colId]),
+                    c.fields?.[extra.id],
+                  )}</select><button type="button" data-remove-extra="${extra.id}" data-extra-kind="${k}">Retirer</button></div>`,
+              )
+              .join(
+                "",
+              )}<button type="button" data-add-extra="${k}">+ Champ supplémentaire</button></div></fieldset>`
           );
         })
         .join("") +
@@ -2439,7 +2644,7 @@
     $("editError").textContent = "";
     const context =
       selection && (data[selection.k] || []).find((x) => x.id === selection.id);
-    $("fields").innerHTML = schemas[k].fields
+    $("fields").innerHTML = fieldsFor(k)
       .filter(
         (f) =>
           cfg(k).fields?.[f] &&
@@ -2496,22 +2701,27 @@
               )
               .join("") +
             "</select>";
-        } else if (f.startsWith("Date") && f !== "DateSource")
+        } else if (
+          (f.startsWith("Date") && f !== "DateSource") ||
+          type.startsWith("Date")
+        )
           input = `<input type="date" name="${f}" value="${esc(dateText(v))}">`;
         else if (textareas.has(f))
           input = `<textarea name="${f}">${esc(v)}</textarea>`;
-        else if (type === "Choice") {
+        else if (type === "Choice" || type === "ChoiceList") {
           let choices = [];
           try {
             choices = JSON.parse(m.widgetOptions || "{}").choices || [];
           } catch {}
-          if (v && !choices.includes(v)) choices.push(v);
+          const selected = type === "ChoiceList" ? values(v) : [v];
+          for (const value of selected)
+            if (value !== "" && !choices.includes(value)) choices.push(value);
           input =
-            `<select name="${f}"><option value=""></option>` +
+            `<select name="${f}" ${type === "ChoiceList" ? "multiple" : ""}><option value=""></option>` +
             choices
               .map(
                 (x) =>
-                  `<option ${x === v ? "selected" : ""}>${esc(x)}</option>`,
+                  `<option ${selected.includes(x) ? "selected" : ""}>${esc(x)}</option>`,
               )
               .join("") +
             "</select>";
@@ -2528,7 +2738,9 @@
               )
               .join("") +
             "</select>";
-        } else if (
+        } else if (type === "Bool")
+          input = `<input type="checkbox" name="${f}" ${v === true ? "checked" : ""}>`;
+        else if (
           f === "Avancement" ||
           f === "Ordre" ||
           /^(Numeric|Int)$/.test(type)
@@ -2577,6 +2789,14 @@
       $("cancel").textContent = "Annuler";
       $("editor").showModal();
     }
+    for (const control of $("editForm").querySelectorAll("[name]"))
+      control.dataset.initialValue = JSON.stringify(
+        control.type === "checkbox"
+          ? control.checked
+          : control.multiple
+            ? [...control.selectedOptions].map((o) => o.value)
+            : control.value,
+      );
     const origin = $("editForm").elements.namedItem("PointOrigine");
     if (k === "actions" && origin?.value)
       origin.dispatchEvent(new Event("change", { bubbles: true }));
@@ -2587,6 +2807,8 @@
     editing = null;
     $("editor").append($("editForm"));
     $("editor").close();
+    $("fields").replaceChildren();
+    $("editError").textContent = "";
     if (inline) renderDetail();
   }
   function dependentLinkUpdates(k, record, fields) {
@@ -2671,9 +2893,17 @@
     try {
       const { k, r } = editing,
         fields = {};
-      for (const f of schemas[k].fields) {
+      for (const f of fieldsFor(k)) {
         const el = $("editForm").elements.namedItem(f);
         if (!el) continue;
+        const current = JSON.stringify(
+          el.type === "checkbox"
+            ? el.checked
+            : el.multiple
+              ? [...el.selectedOptions].map((o) => o.value)
+              : el.value,
+        );
+        if (r && el.dataset.initialValue === current) continue;
         const m = col(k, f);
         if (m?.isFormula) continue;
         let v = el.value;
@@ -2710,12 +2940,21 @@
                   .filter(Boolean),
               ]
             : Number(v) || 0;
-        else if (f.startsWith("Date") && f !== "DateSource")
+        else if (
+          (f.startsWith("Date") && f !== "DateSource") ||
+          m?.type?.startsWith("Date")
+        )
           v = v
             ? /^Date/.test(m?.type || "")
               ? Date.parse(v + "T00:00:00Z") / 1000
               : v
             : null;
+        else if (m?.type === "Bool") v = el.checked;
+        else if (m?.type === "ChoiceList")
+          v = [
+            "L",
+            ...[...el.selectedOptions].map((o) => o.value).filter(Boolean),
+          ];
         else if (
           f === "Avancement" ||
           f === "Ordre" ||
@@ -2759,7 +2998,7 @@
           ["Chantier", "streams", "Projet"],
         ]) {
           const childEl = $("editForm").elements.namedItem(child);
-          if (childEl?.value) {
+          if (childEl?.value && Number.isFinite(Number(childEl.value))) {
             const row = (data[target] || []).find(
                 (x) => x.id === Number(childEl.value),
               ),
@@ -2894,6 +3133,8 @@
         rememberLocation();
         view = b.dataset.view;
         selection = null;
+        quickSelections.ownerFilter = [];
+        quickSelections.statusFilter = [];
         $("ownerFilter").value = "";
         $("statusFilter").value = "";
         filterOptions();
@@ -2908,21 +3149,35 @@
     "overdue",
     "showArchived",
   ])
-    $(id).onchange = render;
+    $(id).onchange = () => {
+      if (Object.hasOwn(quickSelections, id)) {
+        if ($(id).value !== "__multiple__")
+          quickSelections[id] = $(id).value ? [$(id).value] : [];
+      }
+      filterOptions();
+      render();
+    };
   $("search").oninput = render;
   $("advancedKind").onchange = () => {
+    advancedSelected = [];
     advancedUI(true);
     render();
   };
-  $("advancedField").onchange = render;
+  $("advancedField").onchange = () => {
+    advancedSelected = [];
+    render();
+  };
+  $("advancedChoices").onchange = () => {
+    advancedSelected = [
+      ...$("advancedChoices").querySelectorAll("input:checked"),
+    ].map((x) => x.value);
+    render();
+  };
   $("advancedValue").oninput = render;
   $("advancedAdd").onclick = () => {
-    if (!$("advancedValue").value.trim()) return;
-    advancedRules.push({
-      kind: $("advancedKind").value,
-      column: $("advancedField").value,
-      value: $("advancedValue").value,
-    });
+    if (!$("advancedValue").value.trim() && !advancedSelected.length) return;
+    advancedRules.push(draftAdvancedRule());
+    advancedSelected = [];
     $("advancedValue").value = "";
     render();
   };
@@ -2936,6 +3191,7 @@
   $("advancedClear").onclick = () => {
     $("advancedValue").value = "";
     advancedRules = [];
+    advancedSelected = [];
     render();
   };
   document.querySelector('a[href="timeline.html"]').onclick = (e) => {
@@ -3147,6 +3403,13 @@
   };
   $("editForm").onsubmit = save;
   $("mapping").onchange = (e) => {
+    if (e.target.dataset.extraLabel) {
+      const extra = draft[e.target.dataset.extraKind]?.extraFields?.find(
+        (x) => x.id === e.target.dataset.extraLabel,
+      );
+      if (extra) extra.label = e.target.value.trim();
+      return;
+    }
     if (e.target.dataset.kindLabel) {
       const k = e.target.dataset.kindLabel;
       draft[k] ||= { fields: {} };
@@ -3170,6 +3433,27 @@
     } else draft[k].fields[f] = e.target.value;
   };
   $("mapping").onclick = async (e) => {
+    if (e.target.dataset.addExtra) {
+      const k = e.target.dataset.addExtra;
+      draft[k] ||= { fields: {} };
+      draft[k].extraFields ||= [];
+      let n = 1;
+      while (draft[k].extraFields.some((x) => x.id === "extra_" + n)) n++;
+      draft[k].extraFields.push({
+        id: "extra_" + n,
+        label: "Champ supplémentaire " + n,
+      });
+      mappingUI();
+      return;
+    }
+    if (e.target.dataset.removeExtra) {
+      const k = e.target.dataset.extraKind,
+        id = e.target.dataset.removeExtra;
+      draft[k].extraFields = draft[k].extraFields.filter((x) => x.id !== id);
+      delete draft[k].fields[id];
+      mappingUI();
+      return;
+    }
     if (e.target.id === "detect") {
       draft = detect(draft, true);
       mappingUI();
@@ -3204,6 +3488,19 @@
                   "." +
                   field +
                   " pointe vers une autre table.",
+              );
+          }
+        for (const [kind, c] of Object.entries(draft))
+          for (const extra of c.extraFields || []) {
+            const column = c.fields?.[extra.id];
+            if (
+              column &&
+              Object.entries(c.fields).some(
+                ([f, col]) => f !== extra.id && col === column,
+              )
+            )
+              throw Error(
+                `La colonne ${column} est déjà mappée dans ${schemas[kind].label}. Renommez le champ existant ou choisissez une autre colonne.`,
               );
           }
         await grist.setOption(optionKey, draft);

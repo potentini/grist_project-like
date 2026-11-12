@@ -645,3 +645,87 @@ body[data-current-view="notes"] .item[data-kind="actions"] {
 #detail .tree-row .item {
   padding: 7px 9px;
 }
+.quick-filter {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.quick-multiple {
+  position: relative;
+  font-size: 12px;
+}
+.quick-multiple > summary {
+  cursor: pointer;
+  padding: 7px;
+  border: 1px solid #ccd5e2;
+  border-radius: 6px;
+  background: white;
+}
+.quick-multiple > div {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 8;
+  width: 240px;
+  max-height: 240px;
+  overflow: auto;
+  padding: 8px;
+  background: white;
+  border: 1px solid #ccd5e2;
+  border-radius: 6px;
+  box-shadow: 0 3px 12px #23334a25;
+}
+.quick-multiple label,
+#advancedChoices label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 0;
+}
+.quick-multiple input,
+#advancedChoices input {
+  width: auto;
+}
+#advancedChoices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  max-height: 150px;
+  overflow: auto;
+}
+.detail-section {
+  margin: 18px 0;
+}
+.detail-section > summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 15px;
+  padding: 5px 0;
+}
+.extra-map-row {
+  border-top: 1px solid #e2e8f0;
+  padding: 8px 0;
+  display: grid;
+  gap: 5px;
+}
+.extra-field {
+  margin-top: 12px;
+}
+
+.quick-filter {
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+.quick-filter > select {
+  max-width: 220px;
+}
+.quick-multiple > div {
+  left: auto;
+  right: 0;
+  max-width: calc(100vw - 32px);
+}
+#fields input[type="checkbox"],
+#detail #editForm input[type="checkbox"] {
+  width: auto;
+  justify-self: start;
+}

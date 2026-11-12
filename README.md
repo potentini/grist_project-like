@@ -137,3 +137,15 @@ Le sélecteur de projets se limite désormais aux projets concernés par les fil
 Le widget redemande la vue filtrée native avec `viewApi.fetchSelectedTable` au démarrage, au retour au premier plan, au rétablissement du réseau et avec **Actualiser**. Une erreur temporaire ne supprime plus le dernier périmètre connu : il reste appliqué, y compris lorsqu’il ne contient aucune ligne. Si aucun périmètre n’a encore pu être récupéré, le widget attend la connexion au lieu d’afficher toutes les lignes. Les réponses de synchronisation devenues obsolètes sont ignorées. L’API `onRecords` reste utilisée pour les changements transmis par Grist ; les environnements sans méthode de lecture directe de la vue conservent leur dernier filtre en cas d’erreur.
 
 Les cartes regroupent les informations renseignées sous forme **Champ : valeur ; Champ : valeur**, avec retour à la ligne selon la largeur disponible. Les noms personnalisés restent utilisés. Le titre et le type partagent une ligne dans la liste ; les dates, responsable, statut et avancement sont compacts, avec une petite barre de progression en ligne. Les aperçus et les valeurs longues sont tronqués à 160 caractères pour cet affichage ; le détail et les tables gardent leurs valeurs complètes. Le nom et la date de la réunion d’origine restent affichés sur les points de discussion.
+
+## Sélection multiple et liste des valeurs
+
+Les filtres rapides Projet, Responsable et Statut conservent leur liste simple. **Choix multiples**, à côté, ouvre une liste de cases à cocher. Les choix d’un même filtre sont combinés par **OU** ; les différents filtres par **ET**. Le filtre Responsable propose les personnes présentes aux différents niveaux de la vue, avec les libellés des références. Pour une liste de responsables, choisir une personne suffit à retrouver les lignes où elle figure.
+
+Dans **Filtres par niveau**, une liste de valeurs disponibles apparaît après sélection du champ. Plusieurs valeurs peuvent être cochées puis ajoutées comme un critère. La zone Contient sert à chercher dans les options ; sans case cochée, elle garde son filtrage textuel « contient ». Les champs sans valeur proposent « (Vide) ». Les valeurs sont calculées dans le périmètre natif Grist courant et utilisent les libellés des références, pas les identifiants. Les sélections multiples sont conservées dans l’historique de navigation de la session.
+
+## Responsable DiPSi et champs supplémentaires
+
+Les quatre niveaux Projets, Chantiers, Taches et Actions proposent un champ ResponsableDiPSi, affiché « Responsable DiPSi », en plus de Responsable. Chaque niveau permet d’ajouter des colonnes existantes comme champs supplémentaires dans le mapping. Voir [les consignes](imports/CHAMPS_SUPPLEMENTAIRES.md) pour préparer ces colonnes et les associer. Aucune colonne n’est créée automatiquement.
+
+Dans le panneau droit, **Éléments dépendants**, **Notes et réunions associées** et **Actions associées** disposent d’une flèche de pliage/dépliage. Leur état est propre à l’élément et conservé pendant la navigation et les retours de la session. Le pliage reste possible en lecture seule.

@@ -208,6 +208,63 @@ const fixture = require("../demo.json");
         Echeance: "avant Noël",
         PointEtape: "Suivi <img src=x onerror=alert(1)> de la tâche",
       });
+    if (location.search.includes("choices=1")) {
+      let next = 11000;
+      for (const k of ["projects", "streams", "tasks", "actions"]) {
+        const table = {
+          projects: "Projets",
+          streams: "Chantiers",
+          tasks: "Taches",
+          actions: "Actions",
+        }[k];
+        db.meta.push({
+          id: next++,
+          parentId: db.tables.find((t) => t.tableId === table).id,
+          table,
+          colId: "ResponsableDiPSi",
+          label: "Responsable DiPSi",
+          type: "Ref:Equipe",
+          visibleCol: 9001,
+          isFormula: false,
+        });
+        for (const row of db.data[k])
+          row.ResponsableDiPSi = row.id === 1 ? 2 : 1;
+      }
+      db.meta.find(
+        (c) => c.table === "Taches" && c.colId === "Responsable",
+      ).type = "RefList:Equipe";
+      db.data.tasks[0].Responsable = ["L", 1];
+      db.data.tasks[1].Responsable = ["L", 1, 2];
+      for (const [field, type, options, formula] of [
+        ["Valide", "Bool", "", false],
+        ["Tags", "ChoiceList", JSON.stringify({ choices: ["A", "B"] }), false],
+        ["Score", "Numeric", "", true],
+        ["DateRevue", "Date", "", false],
+      ]) {
+        db.meta.push({
+          id: next++,
+          parentId: 3,
+          table: "Taches",
+          colId: field,
+          label: field,
+          type,
+          widgetOptions: options,
+          isFormula: formula,
+        });
+      }
+      Object.assign(db.data.tasks[0], {
+        Valide: false,
+        Tags: ["L", "A"],
+        Score: 2,
+        DateRevue: null,
+      });
+      Object.assign(db.data.tasks[1], {
+        Valide: true,
+        Tags: ["L", "B"],
+        Score: 4,
+        DateRevue: null,
+      });
+    }
     window.testDb = db;
     if (location.search.includes("refs=1")) {
       const targets = {
@@ -1552,6 +1609,154 @@ const fixture = require("../demo.json");
   assert.equal(await page.evaluate(() => window.writes.length), 0);
   console.log(
     "PASS authoritative filtered view on startup/resume, retained scope through transient failures including zero rows, visibility/focus/online/pageshow refresh and no unfiltered startup",
+  );
+
+  await page.evaluate(() => sessionStorage.removeItem("broaderOptions"));
+  await page.goto("http://127.0.0.1:8766/?broader=1&tree=1&choices=1");
+  await page.locator('#list [data-kind=tasks][data-id="1"]').waitFor();
+  assert.deepEqual(
+    await page
+      .locator("#ownerFilter option")
+      .evaluateAll((opts) => opts.map((o) => o.textContent)),
+    ["Tous", "Alice Référente", "Camille Pilote"],
+  );
+  const menu = (id) =>
+    page
+      .locator("#" + id)
+      .locator("..")
+      .locator(".quick-multiple");
+  await menu("projectFilter").locator("summary").click();
+  await menu("projectFilter").locator('input[value="1"]').check();
+  await menu("projectFilter").locator('input[value="2"]').check();
+  assert.equal(
+    await page.locator("#projectFilter").inputValue(),
+    "__multiple__",
+  );
+  assert.equal(await page.locator("#list [data-kind=projects]").count(), 2);
+  await menu("projectFilter").locator("summary").click();
+  await menu("ownerFilter").locator("summary").click();
+  await menu("ownerFilter").locator('input[value="Alice Référente"]').check();
+  assert.equal(
+    await page.locator('#list [data-kind=tasks][data-id="2"]').isVisible(),
+    true,
+  );
+  await menu("ownerFilter").locator('input[value="Camille Pilote"]').check();
+  await menu("ownerFilter").locator("summary").click();
+  await menu("statusFilter").locator("summary").click();
+  await menu("statusFilter").locator('input[value="En cours"]').check();
+  await menu("statusFilter").locator('input[value="À faire"]').check();
+  await menu("statusFilter").locator("summary").click();
+  await page.locator("#projectFilter").selectOption("");
+  await page.locator("#ownerFilter").selectOption("");
+  await page.locator("#statusFilter").selectOption("");
+  await page.locator("#advancedFilters summary").click();
+  await page.locator("#advancedKind").selectOption("tasks");
+  await page.locator("#advancedField").selectOption("Responsable");
+  assert.equal(await page.locator("#advancedChoices input").count(), 2);
+  await page.locator('#advancedChoices input[value="Alice Référente"]').check();
+  await page.locator('#advancedChoices input[value="Camille Pilote"]').check();
+  assert.equal(await page.locator("#list [data-kind=tasks]").count(), 2);
+  await page.locator("#advancedField").selectOption("ResponsableDiPSi");
+  await page.locator('#advancedChoices input[value="Alice Référente"]').check();
+  assert.equal(
+    await page.locator('#list [data-kind=tasks][data-id="1"]').count(),
+    0,
+  );
+  assert.equal(
+    await page.locator('#list [data-kind=tasks][data-id="2"]').count(),
+    1,
+  );
+  await page.locator("#advancedAdd").click();
+  assert.equal(
+    await page.locator("#advancedChips [data-remove-filter]").count(),
+    1,
+  );
+  await page.locator("#advancedClear").click();
+  await page.locator("#advancedFilters summary").click();
+  await page.locator("#mappingButton").click();
+  assert.equal(
+    await page
+      .locator("[data-map=tasks][data-field=ResponsableDiPSi]")
+      .inputValue(),
+    "ResponsableDiPSi",
+  );
+  for (const [i, column] of [
+    "Priorite",
+    "Valide",
+    "Tags",
+    "Score",
+    "DateRevue",
+  ].entries()) {
+    await page.locator("[data-add-extra=tasks]").click();
+    await page
+      .locator(`[data-map=tasks][data-field=extra_${i + 1}]`)
+      .selectOption(column);
+    await page
+      .locator(`[data-extra-kind=tasks][data-extra-label=extra_${i + 1}]`)
+      .fill(column === "Priorite" ? "Priorité du livrable" : column);
+    await page
+      .locator(`[data-extra-kind=tasks][data-extra-label=extra_${i + 1}]`)
+      .press("Tab");
+  }
+  await page.locator("#applyMapping").click();
+  await page.waitForFunction(
+    () =>
+      window.testOptions.projectWorkspaceMappingV1.tasks.extraFields?.length ===
+      5,
+  );
+  await page.reload();
+  await page.locator('#list [data-kind=tasks][data-id="1"]').click();
+  assert.match(await page.locator("#detail").innerText(), /Responsable DiPSi/);
+  assert.match(await page.locator("#detail").innerText(), /Camille Pilote/);
+  assert.match(
+    await page.locator("#detail").innerText(),
+    /Priorité du livrable/,
+  );
+  await page.locator("#editionButton").click();
+  await page.getByRole("button", { name: "Modifier", exact: true }).click();
+  await page.locator("#detail [name=ResponsableDiPSi]").selectOption("1");
+  await page.locator("#detail [name=extra_1]").fill("Urgent");
+  await page.locator("#detail [name=extra_2]").check();
+  await page.locator("#detail [name=extra_3]").selectOption(["B"]);
+  await page.locator("#detail [name=extra_5]").fill("2026-11-15");
+  assert.equal(await page.locator("#detail [name=extra_4]").count(), 0);
+  await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
+  await page.waitForFunction(() => window.testDb.data.tasks[0].Valide === true);
+  const task = await page.evaluate(() => window.testDb.data.tasks[0]);
+  assert.equal(task.Priorite, "Urgent");
+  assert.equal(task.ResponsableDiPSi, 1);
+  assert.deepEqual(task.Tags, ["L", "B"]);
+  assert.equal(task.DateRevue, Date.parse("2026-11-15T00:00:00Z") / 1000);
+  assert.equal(task.Score, 2);
+  await page.locator('#list [data-kind=projects][data-id="1"]').click();
+  for (const name of ["dependents", "meetings", "actions"]) {
+    const section = page.locator(
+      `#detail details[data-section-key="section:projects:1:${name}"]`,
+    );
+    assert.equal((await section.getAttribute("open")) !== null, true);
+    await section.locator(":scope > summary").click();
+    assert.equal(await section.getAttribute("open"), null);
+  }
+  await page.locator("#refresh").click();
+  await page.waitForFunction(
+    () =>
+      !document.querySelector(
+        'details[data-section-key="section:projects:1:dependents"]',
+      ).open,
+  );
+  await page.locator('#list [data-kind=projects][data-id="2"]').click();
+  await page.locator("[data-history=back]").click();
+  for (const name of ["dependents", "meetings", "actions"])
+    assert.equal(
+      await page
+        .locator(
+          `#detail details[data-section-key="section:projects:1:${name}"]`,
+        )
+        .getAttribute("open"),
+      null,
+    );
+  console.log(
+    "PASS OR multi-choice quick/advanced filters with available values and RefLists, DiPSi ownership, persistent typed extra fields, formula protection and collapsible detail sections with history",
   );
   await page.goto("http://127.0.0.1:8766/?layout=1");
   await page.locator("#list [data-kind=projects]").first().click();
