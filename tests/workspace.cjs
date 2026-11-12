@@ -151,6 +151,55 @@ const fixture = require("../demo.json");
         for (const r of db.data[k] || []) r.Archive = false;
       }
     }
+    if (location.search.includes("broader=1")) {
+      const mId = 9001;
+      db.tables.push({ id: 88, tableId: "Equipe", label: "Equipe" });
+      db.meta.push({
+        id: mId,
+        parentId: 88,
+        table: "Equipe",
+        colId: "Nom",
+        label: "Nom",
+        type: "Text",
+        isFormula: false,
+      });
+      db.people = [
+        { id: 1, Nom: "Alice Référente" },
+        { id: 2, Nom: "Camille Pilote" },
+      ];
+      db.data.tasks.push({
+        ...db.data.tasks[0],
+        id: 2,
+        Code: "T002",
+        Titre: "Livrable secondaire",
+        Chantier: "C002",
+      });
+      for (const k of ["projects", "streams", "tasks", "actions"]) {
+        const table = {
+          projects: "Projets",
+          streams: "Chantiers",
+          tasks: "Taches",
+          actions: "Actions",
+        }[k];
+        const m = db.meta.find(
+          (c) => c.table === table && c.colId === "Responsable",
+        );
+        m.type = "Ref:Equipe";
+        m.visibleCol = mId;
+        for (const r of db.data[k]) r.Responsable = r.id === 2 ? 2 : 1;
+      }
+      db.meta.push({
+        id: 9002,
+        parentId: 3,
+        table: "Taches",
+        colId: "Priorite",
+        label: "Priorité",
+        type: "Text",
+        isFormula: false,
+      });
+      db.data.tasks[0].Priorite = "Haute";
+      db.data.tasks[1].Priorite = "Basse";
+    }
     window.testDb = db;
     if (location.search.includes("refs=1")) {
       const targets = {
@@ -211,7 +260,9 @@ const fixture = require("../demo.json");
         (m) => m.table === "Chantiers" && m.colId === "Avancement",
       ).isFormula = true;
     }
-    window.testOptions = {};
+    window.testOptions = location.search.includes("broader=1")
+      ? JSON.parse(sessionStorage.getItem("broaderOptions") || "{}")
+      : {};
     if (location.pathname.endsWith("timeline.html")) {
       db.data.tasks[0].Transforme = true;
       db.data.tasks.push({
@@ -252,33 +303,48 @@ const fixture = require("../demo.json");
         cb(window.testOptions);
       },
       onRecords(cb) {
+        window.nativeRecordCallback = cb;
         if (location.pathname.endsWith("timeline.html")) cb([]);
+      },
+      selectedTable: {
+        getTableId: async () => {
+          if (!window.nativeTableId)
+            throw Error("No linked view in this fixture");
+          return window.nativeTableId;
+        },
       },
       getOption: async (k) => window.testOptions[k],
       setOption: async (k, v) => {
         window.testOptions[k] = structuredClone(v);
+        if (location.search.includes("broader=1"))
+          sessionStorage.setItem(
+            "broaderOptions",
+            JSON.stringify(window.testOptions),
+          );
         optionsCallback(window.testOptions);
       },
       docApi: {
         fetchTable: async (id) =>
-          id === "Externes"
-            ? encode(db.external || [])
-            : id === "_grist_Tables"
-              ? encode(db.tables)
-              : id === "_grist_Tables_column"
-                ? encode(db.meta)
-                : encode(
-                    db.data[
-                      {
-                        Projets: "projects",
-                        Chantiers: "streams",
-                        Taches: "tasks",
-                        Notes: "notes",
-                        Actions: "actions",
-                        Points: "points",
-                      }[id]
-                    ],
-                  ),
+          id === "Equipe"
+            ? encode(db.people)
+            : id === "Externes"
+              ? encode(db.external || [])
+              : id === "_grist_Tables"
+                ? encode(db.tables)
+                : id === "_grist_Tables_column"
+                  ? encode(db.meta)
+                  : encode(
+                      db.data[
+                        {
+                          Projets: "projects",
+                          Chantiers: "streams",
+                          Taches: "tasks",
+                          Notes: "notes",
+                          Actions: "actions",
+                          Points: "points",
+                        }[id]
+                      ],
+                    ),
         applyUserActions: async (actions) => {
           if (window.rejectWrite) throw Error("Accès refusé");
           window.writes.push(...actions);
@@ -446,6 +512,13 @@ const fixture = require("../demo.json");
     }),
   );
   await page.locator("#mappingButton").click();
+  assert.equal(
+    await page
+      .locator("[data-map=actions][data-field=Transforme]")
+      .inputValue(),
+    "",
+  );
+  await page.locator("#detect").click();
   assert.equal(
     await page
       .locator("[data-map=actions][data-field=Transforme]")
@@ -1095,6 +1168,151 @@ const fixture = require("../demo.json");
         ")",
     );
   }
+
+  await page.goto("http://127.0.0.1:8766/?broader=1&tree=1");
+  await page.locator('#list [data-kind=tasks][data-id="1"]').waitFor();
+  assert.match(
+    await page.locator('#list [data-kind=tasks][data-id="1"]').innerText(),
+    /Alice Référente/,
+  );
+  await page.locator('#list [data-kind=tasks][data-id="1"]').click();
+  assert.match(await page.locator("#detail").innerText(), /Alice Référente/);
+  await page.locator("#editionButton").click();
+  await page.getByRole("button", { name: "Modifier", exact: true }).click();
+  await page.locator("#detail [name=Responsable]").selectOption("2");
+  await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
+  await page.waitForFunction(
+    () => window.testDb.data.tasks[0].Responsable === 2,
+  );
+  assert.match(
+    await page.locator('#list [data-kind=tasks][data-id="1"]').innerText(),
+    /Camille Pilote/,
+  );
+  await page.evaluate(async () => {
+    window.nativeTableId = "Taches";
+    await window.nativeRecordCallback([{ id: 2 }]);
+  });
+  assert.equal(
+    await page.locator('#list [data-kind=tasks][data-id="1"]').count(),
+    0,
+  );
+  assert.equal(
+    await page.locator('#list [data-kind=tasks][data-id="2"]').count(),
+    1,
+  );
+  assert.equal(
+    await page.locator('#list [data-kind=projects][data-id="1"]').count(),
+    0,
+  );
+  await page.evaluate(async () => {
+    await window.nativeRecordCallback([]);
+  });
+  assert.equal(await page.locator("#list [data-kind=tasks]").count(), 0);
+  await page.evaluate(async () => {
+    window.nativeTableId = "Projets";
+    await window.nativeRecordCallback([{ id: 1 }]);
+  });
+  assert.equal(
+    await page.locator('#list [data-kind=projects][data-id="2"]').count(),
+    0,
+  );
+  assert.equal(
+    await page.locator('#list [data-kind=tasks][data-id="1"]').count(),
+    1,
+  );
+  await page.evaluate(async () => {
+    window.nativeTableId = null;
+    await window.nativeRecordCallback([]);
+  });
+  await page.locator("#advancedFilters summary").click();
+  await page.locator("#advancedKind").selectOption("tasks");
+  await page.locator("#advancedField").selectOption("Priorite");
+  await page.locator("#advancedValue").fill("Haute");
+  assert.equal(
+    await page.locator('#list [data-kind=tasks][data-id="1"]').count(),
+    1,
+  );
+  assert.equal(
+    await page.locator('#list [data-kind=tasks][data-id="2"]').count(),
+    0,
+  );
+  await page.locator("#advancedAdd").click();
+  await page.locator("#advancedKind").selectOption("streams");
+  await page.locator("#advancedField").selectOption("Responsable");
+  await page.locator("#advancedValue").fill("Camille");
+  assert.equal(await page.locator("#list [data-kind=tasks]").count(), 0);
+  await page.locator("#advancedValue").fill("Alice");
+  assert.equal(
+    await page.locator('#list [data-kind=tasks][data-id="1"]').count(),
+    1,
+  );
+  assert.equal(
+    await page.locator("#advancedChips [data-remove-filter]").count(),
+    1,
+  );
+  await page.locator("#advancedClear").click();
+  await page.locator("#advancedFilters summary").click();
+  await page.locator("#mappingButton").click();
+  await page.locator("[data-map=tasks][data-field=DateFin]").selectOption("");
+  await page.locator("[data-kind-label=projects]").fill("Sous-projet");
+  await page.locator("[data-kind-label=streams]").fill("Jalons / Livrables");
+  await page
+    .locator("[data-label-kind=tasks][data-label-field=Responsable]")
+    .fill("Pilote du livrable");
+  await page.locator("#applyMapping").click();
+  await page.waitForFunction(
+    () =>
+      window.testOptions.projectWorkspaceMappingV1?.projects?.label ===
+      "Sous-projet",
+  );
+  await page.locator("#mappingButton").click();
+  assert.equal(
+    await page.locator("[data-map=tasks][data-field=DateFin]").inputValue(),
+    "",
+  );
+  await page.locator("#mappingButton").click();
+  await page.reload();
+  await page.locator("#list [data-kind=tasks]").first().waitFor();
+  await page.locator("#mappingButton").click();
+  assert.equal(
+    await page.locator("[data-map=tasks][data-field=DateFin]").inputValue(),
+    "",
+  );
+  assert.equal(
+    await page.locator("[data-kind-label=projects]").inputValue(),
+    "Sous-projet",
+  );
+  await page.locator("#mappingButton").click();
+  await page.locator('#list [data-kind=tasks][data-id="1"]').click();
+  assert.match(await page.locator("#detail").innerText(), /Pilote du livrable/);
+  await page.locator("#editionButton").click();
+  const bar = page.locator("#detail [data-removal=archive]").locator("..");
+  assert.equal(await bar.locator("[data-edit]").count(), 1);
+  assert.equal(await bar.locator("[data-removal=delete]").count(), 1);
+  assert.equal(
+    await page
+      .getByRole("link", { name: "Vue Table/Timeline", exact: true })
+      .count(),
+    1,
+  );
+  await page.locator("#mappingButton").click();
+  await page.locator("[data-map=tasks][data-field=Titre]").selectOption("");
+  await page.locator("#applyMapping").click();
+  await page.waitForFunction(
+    () =>
+      window.testOptions.projectWorkspaceMappingV1.tasks.fields.Titre === "",
+  );
+  await page.reload();
+  await page.locator("#list").waitFor();
+  await page.locator("#mappingButton").click();
+  assert.equal(
+    await page.locator("[data-map=tasks][data-field=Titre]").inputValue(),
+    "",
+  );
+  await page.locator("#mappingButton").click();
+  console.log(
+    "PASS reference labels and editing, native filtered/empty records, arbitrary-field filtering, persistent blank mappings, custom names and shared action toolbar",
+  );
   await page.goto("http://127.0.0.1:8766/?layout=1");
   await page.locator("#list [data-kind=projects]").first().click();
   async function checkPaneScroll() {

@@ -21,7 +21,7 @@
       <button id="editionButton" aria-pressed="false">Édition désactivée</button
       ><button id="mappingButton">Mapping</button
       ><button id="refresh">Actualiser</button
-      ><a href="timeline.html">Timeline</a>
+      ><a href="timeline.html">Vue Table/Timeline</a>
     </header>
     <div id="message" role="status"></div>
     <section
@@ -31,13 +31,13 @@
     ></section>
     <div class="filters">
       <label
-        >Projet
+        ><span id="projectFilterLabel">Projet</span>
         <select id="projectFilter"></select></label
       ><label
-        >Responsable
+        ><span id="ownerFilterLabel">Responsable</span>
         <select id="ownerFilter"></select></label
       ><label
-        >Statut
+        ><span id="statusFilterLabel">Statut</span>
         <select id="statusFilter"></select></label
       ><label class="search"
         >Rechercher
@@ -54,6 +54,21 @@
         archivés</label
       >
     </div>
+    <details id="advancedFilters">
+      <summary>Filtres par niveau <span id="advancedCount"></span></summary>
+      <div class="advanced-controls">
+        <label
+          >Niveau
+          <select id="advancedKind"></select></label
+        ><label
+          >Champ
+          <select id="advancedField"></select></label
+        ><label>Contient <input id="advancedValue" type="search" /></label
+        ><button id="advancedAdd" type="button">Ajouter le filtre</button
+        ><button id="advancedClear" type="button">Tout effacer</button>
+      </div>
+      <div id="advancedChips" class="actions"></div>
+    </details>
     <main>
       <section id="list" tabindex="0" aria-label="Liste des éléments"></section>
       <aside id="detail" tabindex="0" aria-label="Détail"></aside>

@@ -182,6 +182,253 @@
     dragged = null;
   const folded = new Set();
   const knownBranches = new Set();
+  let mappingWasSaved = false,
+    nativeTable = null,
+    nativeIds = null;
+  const refRows = new Map();
+  const referenceIndexes = new Map();
+  let scopeAllowed = new WeakMap(),
+    advancedSets = null;
+  const defaultNames = Object.fromEntries(
+    Object.entries(schemas).map(([k, v]) => [k, v.label]),
+  );
+  function fieldLabel(k, f) {
+    return (
+      cfg(k).fieldLabels?.[f] ||
+      {
+        DateFin: "Date de fin (date précise)",
+        Echeance: "Échéance (texte libre)",
+      }[f] ||
+      (links[k]?.[f] && cfg(links[k][f]).label) ||
+      relationLabel(f)
+    );
+  }
+  function applyLabels() {
+    for (const k of Object.keys(schemas)) {
+      schemas[k].label = cfg(k).label || defaultNames[k];
+      kindLabels[k] = cfg(k).label || defaultKindNames[k];
+    }
+    document.querySelector('button[data-view="projects"]').textContent =
+      cfg("projects").label || "Projets";
+    $("projectFilterLabel").textContent = cfg("projects").label || "Projet";
+  }
+  function tableRows(table) {
+    const k = Object.keys(schemas).find((k) => cfg(k).table === table);
+    return k ? data[k] || [] : refRows.get(table) || [];
+  }
+  function referenceRow(table, id) {
+    const source = tableRows(table),
+      cached = referenceIndexes.get(table);
+    if (!cached || cached.source !== source)
+      referenceIndexes.set(table, {
+        source,
+        byId: new Map(source.map((r) => [r.id, r])),
+      });
+    return referenceIndexes.get(table).byId.get(Number(id));
+  }
+  function refText(m, value, row, depth = 0) {
+    if (!m || !/^Ref(List)?:/.test(m.type || "") || depth > 5)
+      return Array.isArray(value)
+        ? values(value).join(", ")
+        : String(value ?? "");
+    const display = meta.find((c) => c.id === Number(m.displayCol));
+    if (display && row && row[display.colId] != null)
+      return values(row[display.colId]).join(", ");
+    const visible = meta.find((c) => c.id === Number(m.visibleCol)),
+      table = m.type.split(":")[1];
+    return values(value)
+      .filter((id) => Number(id) !== 0)
+      .map((id) => {
+        const r = referenceRow(table, id);
+        if (!r) return "[Référence indisponible]";
+        return visible
+          ? refText(visible, r[visible.colId], r, depth + 1)
+          : String(r.id);
+      })
+      .join(", ");
+  }
+  function displayValue(k, r, f) {
+    return refText(col(k, f), val(k, r, f), r);
+  }
+  async function loadReferences() {
+    let frontier = Object.keys(schemas)
+      .flatMap((k) => Object.keys(cfg(k).fields || {}).map((f) => col(k, f)))
+      .filter((c) => /^Ref(List)?:/.test(c?.type || ""));
+    const doneTables = new Set(),
+      doneColumns = new Set();
+    for (let depth = 0; frontier.length && depth < 5; depth++) {
+      const columns = frontier.filter((c) => !doneColumns.has(c.id));
+      columns.forEach((c) => doneColumns.add(c.id));
+      const needed = [
+        ...new Set(columns.map((c) => c.type.split(":")[1])),
+      ].filter((t) => !doneTables.has(t));
+      await Promise.all(
+        needed.map(async (table) => {
+          doneTables.add(table);
+          if (!Object.values(mapping).some((c) => c.table === table))
+            refRows.set(table, rows(await grist.docApi.fetchTable(table)));
+        }),
+      );
+      frontier = columns
+        .map((c) => meta.find((m) => m.id === Number(c.visibleCol)))
+        .filter((c) => /^Ref(List)?:/.test(c?.type || ""));
+    }
+  }
+  function nativeKind() {
+    return Object.keys(schemas).find((k) => cfg(k).table === nativeTable);
+  }
+  function nativeMatch(k, r) {
+    return scopeMatch(nativeKind(), nativeIds, k, r);
+  }
+  function scopeMatch(source, nativeIds, k, r) {
+    if (!source || !nativeIds) return true;
+    const nativeMatch = (kind, row) => scopeMatch(source, nativeIds, kind, row);
+    if (k === source) return nativeIds.has(r.id);
+    if (k === "notes" && ["projects", "streams", "tasks"].includes(source)) {
+      const direct = (data[source] || [])
+        .filter((x) => nativeIds.has(x.id))
+        .some((x) => linkedTo(source, x, "notes", r));
+      return (
+        direct ||
+        (data.points || []).some(
+          (p) =>
+            has("points", p, "NoteOrigine", r) &&
+            scopeMatch(source, nativeIds, "points", p),
+        )
+      );
+    }
+    let allowed = scopeAllowed.get(nativeIds);
+    if (!allowed) {
+      allowed = (data[source] || []).filter((r) => nativeIds.has(r.id));
+      scopeAllowed.set(nativeIds, allowed);
+    }
+    if (source === "projects")
+      return k === "points"
+        ? pointProjects(r).some((p) => nativeIds.has(p.id))
+        : !!projectOf(k, r) && nativeIds.has(projectOf(k, r).id);
+    if (source === "streams") {
+      if (k === "projects")
+        return allowed.some((s) => has("streams", s, "Projet", r));
+      if (k === "tasks")
+        return targets(k, r, "Chantier").some((s) => nativeIds.has(s.id));
+      if (k === "actions") {
+        const p = actionParent(r);
+        return p?.[0] === "streams"
+          ? nativeIds.has(p[1].id)
+          : p?.[0] === "tasks" && nativeMatch("tasks", p[1]);
+      }
+      return allowed.some((s) => linkedTo("streams", s, k, r));
+    }
+    if (source === "tasks") {
+      if (k === "streams")
+        return allowed.some((t) => has("tasks", t, "Chantier", r));
+      if (k === "projects")
+        return allowed.some((t) => projectOf("tasks", t)?.id === r.id);
+      if (k === "actions")
+        return targets(k, r, "Tache").some((t) => nativeIds.has(t.id));
+      return allowed.some((t) => linkedTo("tasks", t, k, r));
+    }
+    if (source === "notes") {
+      if (k === "points" || k === "actions")
+        return targets(k, r, "NoteOrigine").some((n) => nativeIds.has(n.id));
+      return (
+        allowed.some((n) => linkedTo(k, r, "notes", n)) ||
+        (data.points || []).some(
+          (p) => nativeMatch("points", p) && linkedTo(k, r, "points", p),
+        )
+      );
+    }
+    if (source === "points") {
+      if (k === "notes")
+        return allowed.some((p) => has("points", p, "NoteOrigine", r));
+      if (k === "actions")
+        return targets(k, r, "PointOrigine").some((p) => nativeIds.has(p.id));
+      return allowed.some((p) => linkedTo(k, r, "points", p));
+    }
+    if (source === "actions")
+      return allowed.some((a) =>
+        k === "notes"
+          ? has("actions", a, "NoteOrigine", r)
+          : k === "points"
+            ? has("actions", a, "PointOrigine", r)
+            : linkedTo(k, r, "actions", a),
+      );
+    return true;
+  }
+  let advancedRules = [];
+  function advancedMatch(k, r) {
+    if (!advancedSets) {
+      advancedSets = new Map();
+      const rules = [...advancedRules];
+      if ($("advancedValue").value.trim())
+        rules.push({
+          kind: $("advancedKind").value,
+          column: $("advancedField").value,
+          value: $("advancedValue").value,
+        });
+      for (const source of new Set(rules.map((rule) => rule.kind))) {
+        const group = rules.filter((rule) => rule.kind === source);
+        const allowed = new Set(
+          (data[source] || [])
+            .filter((row) =>
+              group.every((rule) => {
+                const c = meta.find(
+                  (c) =>
+                    c.table === cfg(source).table && c.colId === rule.column,
+                );
+                const value = c?.type?.startsWith("Date")
+                  ? dateText(row[rule.column])
+                  : refText(c, row[rule.column], row);
+                return norm(value).includes(norm(rule.value));
+              }),
+            )
+            .map((row) => row.id),
+        );
+        advancedSets.set(source, allowed);
+      }
+    }
+    return [...advancedSets].every(([source, allowed]) =>
+      scopeMatch(source, allowed, k, r),
+    );
+  }
+  function advancedUI(resetField = false) {
+    const old = $("advancedKind").value;
+    $("advancedKind").innerHTML = Object.keys(schemas)
+      .filter((k) => cfg(k).table)
+      .map((k) => `<option value="${k}">${esc(schemas[k].label)}</option>`)
+      .join("");
+    if (old) $("advancedKind").value = old;
+    if (!$("advancedKind").value) $("advancedKind").selectedIndex = 0;
+    const k = $("advancedKind").value,
+      oldField = resetField ? "" : $("advancedField").value;
+    $("advancedField").innerHTML = meta
+      .filter(
+        (c) =>
+          c.table === cfg(k).table &&
+          c.colId !== "manualSort" &&
+          !c.colId.startsWith("gristHelper_"),
+      )
+      .map((c) => {
+        const f = Object.keys(cfg(k).fields || {}).find(
+          (f) => cfg(k).fields[f] === c.colId,
+        );
+        return `<option value="${esc(c.colId)}">${esc(f ? fieldLabel(k, f) : c.label || c.colId)}</option>`;
+      })
+      .join("");
+    if (oldField) $("advancedField").value = oldField;
+    if (!$("advancedField").value) $("advancedField").selectedIndex = 0;
+    const count =
+      advancedRules.length + ($("advancedValue").value.trim() ? 1 : 0);
+    $("advancedCount").textContent = count
+      ? `(${count} actif${count > 1 ? "s" : ""})`
+      : "";
+    $("advancedChips").innerHTML = advancedRules
+      .map(
+        (rule, i) =>
+          `<button type="button" data-remove-filter="${i}">${esc(schemas[rule.kind].label)} · ${esc(meta.find((c) => c.table === cfg(rule.kind).table && c.colId === rule.column)?.label || rule.column)} : ${esc(rule.value)} ×</button>`,
+      )
+      .join("");
+  }
   const optionKey = "projectWorkspaceMappingV1";
   const demo = new URLSearchParams(location.search).has("demo");
   function message(s, error = false) {
@@ -206,7 +453,11 @@
     return r?.[cfg(k).fields?.[f]] ?? "";
   }
   function title(k, r) {
-    return val(k, r, "Titre") || val(k, r, "Code") || `Ligne ${r.id}`;
+    return (
+      displayValue(k, r, "Titre") ||
+      displayValue(k, r, "Code") ||
+      `Ligne ${r.id}`
+    );
   }
   function values(v) {
     return Array.isArray(v)
@@ -244,6 +495,16 @@
       if (p) projects.push(p);
     }
     return [...new Map(projects.map((p) => [p.id, p])).values()];
+  }
+  function noteProjects(note) {
+    const all = [...targets("notes", note, "Projet")];
+    for (const stream of targets("notes", note, "Chantiers"))
+      all.push(...targets("streams", stream, "Projet"));
+    for (const task of targets("notes", note, "Taches")) {
+      const p = projectOf("tasks", task);
+      if (p) all.push(p);
+    }
+    return [...new Map(all.map((p) => [p.id, p])).values()];
   }
   function projectOf(k, r) {
     if (k === "points") return pointProjects(r)[0];
@@ -800,17 +1061,19 @@
       s = $("statusFilter").value,
       q = norm($("search").value);
     return (
+      nativeMatch(k, r) &&
+      advancedMatch(k, r) &&
       (!archived(k, r) || $("showArchived").checked) &&
       (!p ||
         (k === "points"
           ? pointProjects(r).some((x) => x.id === Number(p))
           : projectOf(k, r)?.id === Number(p))) &&
-      (!o || String(val(k, r, "Responsable")) === o) &&
-      (!s || String(val(k, r, k === "notes" ? "Etat" : "Statut")) === s) &&
+      (!o || displayValue(k, r, "Responsable") === o) &&
+      (!s || displayValue(k, r, k === "notes" ? "Etat" : "Statut") === s) &&
       (!q ||
         norm(
           Object.keys(cfg(k).fields || {})
-            .map((f) => val(k, r, f))
+            .map((f) => displayValue(k, r, f))
             .join(" "),
         ).includes(q)) &&
       (view !== "actions" ||
@@ -829,6 +1092,7 @@
     notes: "Note / réunion",
     points: "Point de discussion",
   };
+  const defaultKindNames = { ...kindLabels };
   function pointMeetingContext(point) {
     const note = targets("points", point, "NoteOrigine")[0];
     if (!note) return "Réunion d’origine non renseignée";
@@ -839,8 +1103,8 @@
     return title("notes", note) + " · " + date;
   }
   function item(k, r, level = 0) {
-    return `<button class="item level${level} ${selection?.k === k && selection.id === r.id ? "selected" : ""}" data-kind="${k}" data-id="${r.id}"><span class="item-kind">${kindLabels[k]}</span><strong>${esc(title(k, r))}</strong>${k === "points" ? `<small class="point-origin">${esc(pointMeetingContext(r))}</small>` : ""}${archived(k, r) ? '<span class="badge">Archivé</span>' : ""}${transformed(k, r) ? '<span class="badge">Transformé</span>' : ""}<small>${esc([val(k, r, "Volet"), val(k, r, "Responsable"), dateText(val(k, r, "Date")) || (k === "notes" ? val(k, r, "DateSource") : "") || val(k, r, "Echeance") || dateText(val(k, r, "DateFin"))].filter(Boolean).join(" · "))}</small>${[
-      val(k, r, "Statut") || val(k, r, "Etat"),
+    return `<button class="item level${level} ${selection?.k === k && selection.id === r.id ? "selected" : ""}" data-kind="${k}" data-id="${r.id}"><span class="item-kind">${kindLabels[k]}</span><strong>${esc(title(k, r))}</strong>${k === "points" ? `<small class="point-origin">${esc(pointMeetingContext(r))}</small>` : ""}${archived(k, r) ? '<span class="badge">Archivé</span>' : ""}${transformed(k, r) ? '<span class="badge">Transformé</span>' : ""}<small>${esc([val(k, r, "Volet"), displayValue(k, r, "Responsable"), dateText(val(k, r, "Date")) || (k === "notes" ? val(k, r, "DateSource") : "") || val(k, r, "Echeance") || dateText(val(k, r, "DateFin"))].filter(Boolean).join(" · "))}</small>${[
+      displayValue(k, r, "Statut") || displayValue(k, r, "Etat"),
       val(k, r, "Vigilance"),
     ]
       .filter(Boolean)
@@ -850,6 +1114,12 @@
       )}${k === "actions" && overdue(r) ? '<span class="badge late">En retard</span>' : ""}</button>`;
   }
   function filterOptions() {
+    const labelKind = view === "projects" ? "streams" : view;
+    $("ownerFilterLabel").textContent = fieldLabel(labelKind, "Responsable");
+    $("statusFilterLabel").textContent = fieldLabel(
+      labelKind,
+      view === "notes" ? "Etat" : "Statut",
+    );
     const k = view === "projects" ? "streams" : view;
     for (const [id, opts] of [
       [
@@ -861,7 +1131,7 @@
         [
           ...new Set(
             (data[k] || [])
-              .map((r) => val(k, r, "Responsable"))
+              .map((r) => displayValue(k, r, "Responsable"))
               .filter(Boolean),
           ),
         ]
@@ -873,7 +1143,7 @@
         [
           ...new Set(
             (data[k] || [])
-              .map((r) => val(k, r, k === "notes" ? "Etat" : "Statut"))
+              .map((r) => displayValue(k, r, k === "notes" ? "Etat" : "Statut"))
               .filter(Boolean),
           ),
         ]
@@ -951,6 +1221,7 @@
     return result;
   }
   function tree(k, r, filtered = false) {
+    if (filtered && !nativeMatch(k, r)) return null;
     const kids = children(k, r)
       .map(([kind, row]) => tree(kind, row, filtered))
       .filter(Boolean);
@@ -961,6 +1232,8 @@
       kids.length ||
       (filtered &&
         editionEnabled &&
+        nativeMatch(k, r) &&
+        advancedMatch(k, r) &&
         !["notes", "points", "actions"].includes(k))
       ? { k, r, kids }
       : null;
@@ -1005,6 +1278,10 @@
       );
   }
   function render() {
+    scopeAllowed = new WeakMap();
+    advancedSets = null;
+    document.body.dataset.currentView = view;
+    advancedUI();
     document
       .querySelectorAll("[data-view]")
       .forEach((b) => b.classList.toggle("active", b.dataset.view === view));
@@ -1038,7 +1315,7 @@
       html += `<section class="unassigned" data-drop-kind="unassigned" data-drop-id="0"><h3>Actions sans rattachement au projet</h3>${standalone || '<p class="muted">Aucune action autonome.</p>'}</section>`;
     }
     $("list").innerHTML =
-      `<div class="actions"><button data-new="${view === "projects" ? "projects" : view}">+ ${view === "projects" ? "Projet" : view === "notes" ? "Note / réunion" : "Action"}</button><button data-fold-all="close">Tout plier</button><button data-fold-all="open">Tout déplier</button></div>` +
+      `<div class="actions"><button data-new="${view === "projects" ? "projects" : view}">+ ${view === "projects" ? cfg("projects").label || "Projet" : view === "notes" ? cfg("notes").label || "Note / réunion" : cfg("actions").label || "Action"}</button><button data-fold-all="close">Tout plier</button><button data-fold-all="open">Tout déplier</button></div>` +
       (html ||
         '<p class="empty">Aucun élément. Vérifiez le mapping ou ajustez les filtres.</p>');
     renderDetail();
@@ -1395,6 +1672,8 @@
   };
 
   function linkedTo(k, r, kind, row) {
+    if (k === "projects" && kind === "notes")
+      return noteProjects(row).some((p) => p.id === r.id);
     if (kind === "points") {
       if (k === "notes") return has("points", row, "NoteOrigine", r);
       if (k === "projects")
@@ -1454,6 +1733,7 @@
     return {
       selection: selection ? { ...selection } : null,
       view,
+      advancedRules: structuredClone(advancedRules),
       filters: Object.fromEntries(
         filterIds.map((id) => [
           id,
@@ -1492,6 +1772,7 @@
     return '<nav class="detail-navigation" aria-label="Historique du panneau"><button type="button" data-history="back">← Retour</button><button type="button" data-history="forward">Suivant →</button></nav>';
   }
   function restoreLocation(location) {
+    advancedRules = structuredClone(location.advancedRules || []);
     selection = location.selection;
     view = location.view;
     folded.clear();
@@ -1499,6 +1780,10 @@
     knownBranches.clear();
     location.known.forEach((key) => knownBranches.add(key));
     filterOptions();
+    if (location.filters.advancedKind) {
+      $("advancedKind").value = location.filters.advancedKind;
+      advancedUI();
+    }
     for (const [id, value] of Object.entries(location.filters)) {
       if ($(id).type === "checkbox") $(id).checked = value;
       else $(id).value = value;
@@ -1651,7 +1936,7 @@
         .filter((f) => val(k, r, f) !== "")
         .map(
           (f) =>
-            `<dt>${esc(f)}</dt><dd data-slot="${f}">${esc(f.startsWith("Date") && f !== "DateSource" ? dateText(val(k, r, f)) : val(k, r, f))}</dd>`,
+            `<dt>${esc(fieldLabel(k, f))}</dt><dd data-slot="${f}">${esc(f.startsWith("Date") && f !== "DateSource" ? dateText(val(k, r, f)) : displayValue(k, r, f))}</dd>`,
         )
         .join("") +
       "</dl>";
@@ -1659,13 +1944,13 @@
       const target = links[k][f],
         rs = targets(k, r, f);
       if (cfg(k).fields?.[f]) {
-        html += `<section class="relation-field"><h3>${esc(relationLabel(f))}</h3><div data-slot="${f}">${rs.length ? rs.map((x) => item(target, x)).join("") : '<span class="muted">Aucun rattachement</span>'}</div></section>`;
+        html += `<section class="relation-field"><h3>${esc(fieldLabel(k, f))}</h3><div data-slot="${f}">${rs.length ? rs.map((x) => item(target, x)).join("") : '<span class="muted">Aucun rattachement</span>'}</div></section>`;
       }
     }
     const progress = val(k, r, "Avancement");
     if (progress !== "" && Number.isFinite(Number(progress))) {
       const percent = Math.round(Number(progress) * 100);
-      html += `<p>Avancement : ${percent} %</p><progress max="100" value="${percent}"></progress>`;
+      html += `<p>${esc(fieldLabel(k, "Avancement"))} : ${percent} %</p><progress max="100" value="${percent}"></progress>`;
     }
     for (const f of [
       "Description",
@@ -1675,9 +1960,9 @@
       "Commentaire",
     ])
       if (val(k, r, f))
-        html += `<h3>${esc(f === "Contenu" ? "Notes et décisions" : f)}</h3><div class="text" data-slot="${f}">${esc(val(k, r, f))}</div>`;
+        html += `<h3>${esc(cfg(k).fieldLabels?.[f] || (f === "Contenu" ? "Notes et décisions" : f))}</h3><div class="text" data-slot="${f}">${esc(displayValue(k, r, f))}</div>`;
     if (["projects", "streams", "tasks"].includes(k))
-      html += `<div class="actions">${k !== "tasks" ? `<button data-new="${k === "projects" ? "streams" : "tasks"}">+ ${k === "projects" ? "Chantier" : "Tâche"}</button>` : ""}<button data-new="notes">+ Note</button><button data-new="actions">+ Action</button></div>`;
+      html += `<div class="actions">${k !== "tasks" ? `<button data-new="${k === "projects" ? "streams" : "tasks"}">+ ${k === "projects" ? cfg("streams").label || "Chantier" : cfg("tasks").label || "Tâche"}</button>` : ""}<button data-new="notes">+ Note</button><button data-new="actions">+ Action</button></div>`;
     if (k === "notes")
       html += cfg("points").table
         ? '<div class="actions"><button data-new="points">+ Point de discussion</button></div>'
@@ -1735,6 +2020,13 @@
           '<p class="muted">Aucune note liée.</p>');
     }
     $("detail").innerHTML = html;
+    const actionBar =
+      $("detail").querySelector("[data-removal]")?.parentElement;
+    if (actionBar)
+      for (const control of [
+        ...$("detail").querySelectorAll("[data-edit],[data-convert]"),
+      ].reverse())
+        actionBar.prepend(control);
     syncEdition();
   }
   async function load() {
@@ -1749,6 +2041,8 @@
       );
       if (token !== request) return;
       data = Object.fromEntries(pairs);
+      await loadReferences();
+      applyLabels();
       filterOptions();
       render();
       message(
@@ -1759,18 +2053,18 @@
                   k !== "points" && (!cfg(k).table || !cfg(k).fields?.Titre),
               ).length
             ? "Mapping incomplet : choisissez les tables et leurs champs."
-            : `Données actualisées — ${Object.values(data).reduce((n, r) => n + r.length, 0)} lignes chargées.`,
+            : `Données actualisées — ${Object.values(data).reduce((n, r) => n + r.length, 0)} lignes chargées.${nativeTable ? (nativeKind() ? " Filtres Grist appliqués depuis « " + nativeTable + " »." : " La table source « " + nativeTable + " » n’est pas mappée : ses filtres ne s’appliquent pas à cette hiérarchie.") : ""}`,
       );
     } catch (e) {
       message("Chargement impossible : " + e.message, true);
     }
   }
-  function detect(d) {
+  function detect(d, force = false) {
     const copy = structuredClone(d);
     for (const [k, s] of Object.entries(schemas)) {
       copy[k] ||= { table: "", fields: {} };
       const c = copy[k];
-      if (!c.table) {
+      if (!c.table && (!Object.hasOwn(d[k] || {}, "table") || force)) {
         const found = tables.filter((t) =>
           s.aliases.some(
             (a) => norm(a) === norm(t.label) || norm(a) === norm(t.tableId),
@@ -1780,7 +2074,7 @@
       }
       c.fields ||= {};
       for (const f of s.fields) {
-        if (c.fields[f]) continue;
+        if (c.fields[f] || (!force && Object.hasOwn(c.fields, f))) continue;
         const names = aliases[f] || [f];
         const columns = meta.filter((x) => x.table === c.table);
         const exact = columns.filter((x) => norm(x.colId) === norm(f));
@@ -1809,12 +2103,12 @@
         )
         .join("");
     $("mapping").innerHTML =
-      '<h2>Tables et champs</h2><p>La détection conserve vos choix. Un champ vide est facultatif, sauf Titre. Mappez les parents pour construire la hiérarchie. Les colonnes de formule sont lisibles et restent protégées en édition.</p><div class="actions"><button id="detect">Détecter les champs manquants</button><button id="applyMapping">Enregistrer le mapping</button></div><div class="grid">' +
+      '<h2>Tables et champs</h2><p>La réouverture conserve tous vos choix, y compris les champs non mappés. La détection est relancée uniquement avec le bouton dédié. Un champ vide est facultatif, sauf Titre. Mappez les parents pour construire la hiérarchie. Les colonnes de formule sont lisibles et restent protégées en édition.</p><p>DateFin est une date précise pour le calendrier et les retards. Echeance est un texte libre (ex. « avant le Codir »). Vous pouvez ne mapper qu’un seul des deux.</p><div class="actions"><button id="detect">Détecter les champs manquants</button><button id="applyMapping">Enregistrer le mapping</button></div><div class="grid">' +
       Object.entries(schemas)
         .map(([k, s]) => {
           const c = draft[k] || { fields: {} };
           return (
-            `<fieldset><legend>${esc(s.label)}</legend><label>Table<select data-map="${k}" data-field="table">${options(
+            `<fieldset><legend>${esc(s.label)}</legend><label>Nom du niveau / type<input data-kind-label="${k}" value="${esc(c.label || "")}" placeholder="${esc(defaultNames[k])}"></label><label>Table<select data-map="${k}" data-field="table">${options(
               tables.map((t) => [t.tableId, t.label || t.tableId]),
               c.table,
             )}</select></label>` +
@@ -1826,7 +2120,7 @@
                       .filter((x) => x.table === c.table)
                       .map((x) => [x.colId, x.label || x.colId]),
                     c.fields?.[f],
-                  )}</select></label>`,
+                  )}</select></label><input class="field-label" data-label-kind="${k}" data-label-field="${f}" value="${esc(c.fieldLabels?.[f] || "")}" placeholder="Libellé affiché : ${esc(fieldLabel(k, f))}" aria-label="Libellé ${k}.${f}">`,
               )
               .join("") +
             "</fieldset>"
@@ -1978,7 +2272,18 @@
               .join("") +
             "</select>";
         } else if (/^Ref/.test(type)) {
-          input = `<input value="Référence : modifier dans la table Grist" disabled>`;
+          const refTable = type.split(":")[1],
+            rows = tableRows(refTable),
+            selected = values(v).map(Number);
+          input =
+            `<select name="${f}" ${type.startsWith("RefList:") ? "multiple" : ""}><option value="">— Aucun —</option>` +
+            rows
+              .map(
+                (row) =>
+                  `<option value="${row.id}" ${selected.includes(row.id) ? "selected" : ""}>${esc(refText(m, row.id, null))}</option>`,
+              )
+              .join("") +
+            "</select>";
         } else if (
           f === "Avancement" ||
           f === "Ordre" ||
@@ -1987,7 +2292,7 @@
           input = `<input name="${f}" type="number" step="any" ${f === "Avancement" ? 'min="0" max="1"' : ""} value="${esc(v)}">`;
         else
           input = `<input name="${f}" ${f === "Titre" ? "required" : ""} value="${esc(v)}">`;
-        return `<label>${esc(target ? relationLabel(f) : f)}${f === "Avancement" ? " (0 à 1 ; 0,5 = 50 %)" : ""}${input}</label>`;
+        return `<label>${esc(fieldLabel(k, f))}${f === "Avancement" ? " (0 à 1 ; 0,5 = 50 %)" : ""}${input}</label>`;
       })
       .join("");
     if (r) {
@@ -2152,7 +2457,16 @@
               : multi.has(f)
                 ? converted.join(", ")
                 : converted[0] || "";
-        } else if (f.startsWith("Date") && f !== "DateSource")
+        } else if (/^Ref(List)?:/.test(m?.type || ""))
+          v = m.type.startsWith("RefList:")
+            ? [
+                "L",
+                ...[...el.selectedOptions]
+                  .map((o) => Number(o.value))
+                  .filter(Boolean),
+              ]
+            : Number(v) || 0;
+        else if (f.startsWith("Date") && f !== "DateSource")
           v = v
             ? /^Date/.test(m?.type || "")
               ? Date.parse(v + "T00:00:00Z") / 1000
@@ -2270,7 +2584,9 @@
       grist.onOptions(async (opts) => {
         const next = opts?.[optionKey];
         if (next && JSON.stringify(next) !== JSON.stringify(mapping)) {
+          mappingWasSaved = true;
           mapping = next;
+          applyLabels();
           draft = structuredClone(mapping);
           if (loaded) {
             mappingUI();
@@ -2279,16 +2595,30 @@
         }
       });
       await refreshMetadata();
-      mapping = detect(mapping);
+      mapping = mappingWasSaved ? mapping : detect(mapping);
       draft = structuredClone(mapping);
       loaded = true;
       mappingUI();
-      grist.onRecords(() => load());
+      grist.onRecords(async (records) => {
+        try {
+          nativeTable = await grist.selectedTable.getTableId();
+          nativeIds = new Set((records || []).map((r) => Number(r.id)));
+          const selected =
+            selection &&
+            (data[selection.k] || []).find((r) => r.id === selection.id);
+          if (selected && !nativeMatch(selection.k, selected)) selection = null;
+        } catch {
+          nativeTable = null;
+          nativeIds = null;
+        }
+        await load();
+      });
       await load();
       if (
         Object.keys(schemas)
           .filter((k) => k !== "points")
-          .some((k) => !cfg(k).table)
+          .some((k) => !cfg(k).table) &&
+        !mappingWasSaved
       )
         $("mapping").hidden = false;
     } catch (e) {
@@ -2324,6 +2654,34 @@
   ])
     $(id).onchange = render;
   $("search").oninput = render;
+  $("advancedKind").onchange = () => {
+    advancedUI(true);
+    render();
+  };
+  $("advancedField").onchange = render;
+  $("advancedValue").oninput = render;
+  $("advancedAdd").onclick = () => {
+    if (!$("advancedValue").value.trim()) return;
+    advancedRules.push({
+      kind: $("advancedKind").value,
+      column: $("advancedField").value,
+      value: $("advancedValue").value,
+    });
+    $("advancedValue").value = "";
+    render();
+  };
+  $("advancedChips").onclick = (e) => {
+    const b = e.target.closest("[data-remove-filter]");
+    if (b) {
+      advancedRules.splice(Number(b.dataset.removeFilter), 1);
+      render();
+    }
+  };
+  $("advancedClear").onclick = () => {
+    $("advancedValue").value = "";
+    advancedRules = [];
+    render();
+  };
   document.querySelector('a[href="timeline.html"]').onclick = (e) => {
     if (demo) {
       e.preventDefault();
@@ -2461,7 +2819,7 @@
     }
     try {
       if (!demo) await refreshMetadata();
-      draft = detect(structuredClone(mapping));
+      draft = structuredClone(mapping);
       mappingUI();
       $("mapping").hidden = false;
     } catch (err) {
@@ -2529,18 +2887,31 @@
   };
   $("editForm").onsubmit = save;
   $("mapping").onchange = (e) => {
+    if (e.target.dataset.kindLabel) {
+      const k = e.target.dataset.kindLabel;
+      draft[k] ||= { fields: {} };
+      draft[k].label = e.target.value.trim();
+      return;
+    }
+    if (e.target.dataset.labelKind) {
+      const k = e.target.dataset.labelKind;
+      draft[k] ||= { fields: {} };
+      draft[k].fieldLabels ||= {};
+      draft[k].fieldLabels[e.target.dataset.labelField] = e.target.value.trim();
+      return;
+    }
     const { map: k, field: f } = e.target.dataset;
     if (!k) return;
     draft[k] ||= { fields: {} };
     if (f === "table") {
-      draft[k] = { table: e.target.value, fields: {} };
-      draft = detect(draft);
+      draft[k] = { ...draft[k], table: e.target.value, fields: {} };
+      draft = { ...draft, [k]: detect({ [k]: draft[k] })[k] };
       mappingUI();
     } else draft[k].fields[f] = e.target.value;
   };
   $("mapping").onclick = async (e) => {
     if (e.target.id === "detect") {
-      draft = detect(draft);
+      draft = detect(draft, true);
       mappingUI();
     }
     if (e.target.id === "applyMapping") {
@@ -2554,9 +2925,6 @@
           .filter(Boolean);
         if (new Set(used).size !== used.length)
           throw Error("Choisissez une table distincte pour chaque objet.");
-        for (const [k, c] of Object.entries(draft))
-          if (c.table && !c.fields.Titre)
-            throw Error("Mappez le titre de " + schemas[k].label);
         for (const [kind, fields] of Object.entries(links))
           for (const [field, target] of Object.entries(fields)) {
             const source = draft[kind];
@@ -2579,7 +2947,9 @@
               );
           }
         await grist.setOption(optionKey, draft);
+        mappingWasSaved = true;
         mapping = structuredClone(draft);
+        applyLabels();
         const old = (await grist.getOption("directMapping")) || { levels: {} };
         for (const [i, k] of ["projects", "streams", "tasks"].entries()) {
           const c = cfg(k);

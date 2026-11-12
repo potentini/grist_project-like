@@ -107,3 +107,19 @@ La suppression ne se fait pas en cascade et est bloquée en présence de référ
 La section **Notes et réunions associées** réunit les liens directs, les réunions d’origine des points concernant l’élément (même sans action), et celles des actions rattachées. Une réunion apparaît une seule fois, avec ses raisons d’association : lien direct, point(s) ou action(s). Les liens hérités de la hiérarchie sont également signalés.
 
 Dans cette section, le dépliage n’affiche que les points et actions expliquant l’association à l’élément courant. Cliquer sur la réunion ouvre son compte rendu complet. Ces associations sont calculées depuis les liens existants, sans nouvelle colonne ni duplication de note. Les réunions archivées restent soumises au filtre d’affichage des archives.
+
+## Filtres natifs, références et configuration des libellés
+
+Les filtres natifs Grist transmis par `onRecords` s’appliquent désormais à la table source rattachée au widget lorsqu’elle correspond à une table mappée. Le widget conserve les ancêtres nécessaires à la lecture de la hiérarchie et limite les descendants liés. Un résultat Grist vide reste vide. Les filtres d’autres vues Grist non rattachées au widget ne sont pas transmis par cette API ; si la table source n’est pas mappée, un message l’indique.
+
+Les champs Référence / Liste de références utilisent la colonne d’affichage configurée dans Grist (`visibleCol`, ou la colonne d’affichage calculée lorsqu’elle est disponible). Cela s’applique aux titres, responsables, métadonnées, sélections et filtres. Les valeurs enregistrées restent des identifiants Grist. Un champ référence sans colonne d’affichage configurée conserve l’affichage par ID choisi dans Grist. Les tables nécessaires à la résolution doivent être accessibles à l’utilisateur.
+
+Le mapping enregistré, même incomplet, est conservé tel quel : rouvrir Mapping ou recharger le widget ne remplit plus les champs laissés vides. **Détecter les champs manquants** est une commande explicite ; elle peut remplir les cases vides, mais conserve les correspondances déjà choisies. Le tout premier démarrage sans configuration propose toujours une détection initiale.
+
+Dans Mapping, **Nom du niveau / type** permet par exemple de nommer Projets « Sous-projet » et Chantiers « Jalons / Livrables ». Chaque champ peut également recevoir un libellé personnalisé. Ces noms sont enregistrés dans les options de cette instance du widget ; les tables et colonnes Grist ne sont pas renommées.
+
+**DateFin** est une date précise, utilisée pour le calendrier et le calcul des retards. **Echeance** est un texte libre pour des indications comme « avant le Codir ». Ce ne sont pas deux dates de fin ; l’un des deux peut rester non mappé. Leurs libellés par défaut précisent désormais cette différence.
+
+Le volet dépliable **Filtres par niveau** permet de choisir un type, n’importe quelle colonne de sa table (même non mappée) et une valeur « contient ». **Ajouter le filtre** permet de cumuler des critères sur plusieurs niveaux ; les critères sur un même niveau doivent être satisfaits par une même ligne. Les filtres utilisent les libellés des références et se combinent aux contrôles rapides ainsi qu’aux filtres natifs Grist. Les pastilles permettent de retirer un critère ; **Tout effacer** retire les filtres avancés. Ils sont conservés dans l’historique de navigation de la session.
+
+Modifier, Faire évoluer, Archiver et Supprimer sont regroupés dans une même barre d’actions (avec retour à la ligne sur les écrans étroits). Le lien de navigation est nommé **Vue Table/Timeline**. Dans Notes et réunions, les trois niveaux Réunion → Point → Action utilisent les accents bleu / ocre / vert bleuté ; À faire reprend les couleurs de la hiérarchie Projets. Les libellés et l’indentation restent disponibles sans dépendre des couleurs.
