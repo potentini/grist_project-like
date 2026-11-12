@@ -2418,7 +2418,12 @@
     for (const f of Object.keys(links[k] || {})) {
       const target = links[k][f],
         rs = targets(k, r, f);
-      if (cfg(k).fields?.[f]) {
+      const emptyOrigin =
+        ["ActionOrigine", "TacheOrigine"].includes(f) &&
+        !values(val(k, r, f)).some(
+          (value) => value !== 0 && String(value ?? "").trim() !== "",
+        );
+      if (cfg(k).fields?.[f] && !emptyOrigin) {
         html += `<section class="relation-field"><h3>${esc(fieldLabel(k, f))}</h3><div data-slot="${f}">${rs.length ? rs.map((x) => item(target, x)).join("") : '<span class="muted">Aucun rattachement</span>'}</div></section>`;
       }
     }
