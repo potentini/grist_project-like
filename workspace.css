@@ -816,3 +816,10 @@ body[data-current-view="notes"] .item[data-kind="actions"] {
   color: #102f52;
   text-decoration: underline;
 }
+
+.editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}

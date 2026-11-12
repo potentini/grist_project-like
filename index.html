@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Projets, notes et actions — Grist</title>
-    <link rel="stylesheet" href="workspace.css?v=20261112-popup-3" />
+    <link rel="stylesheet" href="workspace.css?v=20261112-editor-actions" />
     <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
   </head>
   <body>
@@ -93,11 +93,13 @@
       <form id="editForm">
         <div class="dialoghead">
           <h2 id="editorTitle"></h2>
-          <button type="button" id="cancel">Fermer</button>
+          <div class="editor-actions">
+            <button id="save" type="submit">Enregistrer</button>
+            <button type="button" id="cancel">Annuler</button>
+          </div>
         </div>
         <div id="fields"></div>
         <p id="editError" role="alert"></p>
-        <button id="save" type="submit">Enregistrer</button>
       </form>
     </dialog>
     <dialog id="moveDialog" aria-labelledby="moveTitle">
