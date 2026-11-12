@@ -805,10 +805,14 @@ body[data-current-view="notes"] .item[data-kind="actions"] {
   margin: 0;
   transform: translateY(-50%);
   font-size: 12px;
-  background: #eaf2fb;
-  border-color: #bed1e7;
-  color: #234b75;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  font-weight: 700;
+  color: #173f6b;
 }
 .detail-section > [data-project-timeline]:hover {
-  background: #dce9f7;
+  background: transparent;
+  color: #102f52;
+  text-decoration: underline;
 }

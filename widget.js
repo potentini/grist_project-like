@@ -2548,6 +2548,8 @@
   function updateEditButtons() {
     for (const [button, enabled] of [[toggleDateEditBtn, allowEditing], [tableToggleEditBtn, tableAllowEditing]]) {
       if (!button) continue;
+      if (document.documentElement.dataset.projectPopup === "true") button.disabled = false;
+      button.setAttribute("aria-pressed", String(enabled));
       button.textContent = enabled ? "Édition autorisée" : "Édition bloquée";
       button.classList.toggle("active", enabled);
     }

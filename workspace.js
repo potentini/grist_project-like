@@ -3435,7 +3435,11 @@
         cb([]);
       },
       selectedTable: { getTableId: async () => null },
-      setOption: async () => {},
+      setOption: async (key, value) => {
+        if (key === "uiState")
+          popupEditing =
+            value?.allowEditing === true || value?.tableAllowEditing === true;
+      },
       docApi: {
         fetchTable: async (table) => {
           const kind = kinds.find((k) => cfg(k).table === table);
@@ -3545,7 +3549,8 @@
       popupProjectId = project.id;
       $("timelineTitle").textContent =
         "Timeline — " + title("projects", project);
-      $("timelineFrame").src = "timeline.html?projectPopup=1&v=20261112-popup-2";
+      $("timelineFrame").src =
+        "timeline.html?projectPopup=1&v=20261112-popup-3";
       $("projectTimeline").showModal();
     },
     true,
