@@ -759,3 +759,59 @@ body[data-current-view="notes"] .item[data-kind="actions"] {
   margin-top: 5px;
   font-weight: normal;
 }
+
+#projectTimeline {
+  width: 96vw;
+  max-width: none;
+  height: 92vh;
+  padding: 12px;
+}
+#projectTimeline[open] {
+  display: flex;
+  flex-direction: column;
+}
+#projectTimeline header {
+  flex-shrink: 0;
+  justify-content: space-between;
+}
+#projectTimeline h2 {
+  font-size: 17px;
+  margin: 5px;
+}
+#timelineFrame {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: 0;
+}
+#projectTimeline::backdrop {
+  background: #18253880;
+}
+[data-project-timeline] {
+  margin-left: 12px;
+  font-weight: normal;
+}
+
+.detail-section:has(> [data-project-timeline]) {
+  position: relative;
+}
+.detail-section:has(> [data-project-timeline]) > summary {
+  width: fit-content;
+  max-width: calc(100% - 250px);
+}
+.detail-section > [data-project-timeline] {
+  position: absolute;
+  top: 0;
+  right: 0;
+  margin: 0;
+  font-size: 12px;
+}
+@media (max-width: 800px) {
+  .detail-section > [data-project-timeline] {
+    position: static;
+    margin-bottom: 8px;
+  }
+  .detail-section:has(> [data-project-timeline]) > summary {
+    max-width: 100%;
+  }
+}

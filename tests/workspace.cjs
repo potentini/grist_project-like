@@ -1736,6 +1736,76 @@ const fixture = require("../demo.json");
     "PASS Table/Timeline displays fractional percentages and writes in the configured unit",
   );
 
+  await page.goto("http://127.0.0.1:8766/?tree=1");
+  await page.locator('#list [data-kind=tasks][data-id="1"]').click();
+  await page.locator("[data-project-timeline]").click();
+  const popup = page.frameLocator("#timelineFrame");
+  await popup.locator(".hierarchy-table").waitFor();
+  assert.equal(
+    await popup.getByText("Autre projet", { exact: true }).count(),
+    0,
+  );
+  assert.equal(
+    await popup.getByText("Autre chantier", { exact: true }).count(),
+    0,
+  );
+  assert.equal(
+    (await popup.getByText("Projet exemple", { exact: true }).count()) > 0,
+    true,
+  );
+  if (
+    (await popup.locator("#tableExpandAllBtn").innerText())
+      .toLowerCase()
+      .includes("déplier")
+  )
+    await popup.locator("#tableExpandAllBtn").click();
+  assert.equal(
+    await popup.locator('tr[data-node-id="L3:src:Taches:1"]').count(),
+    1,
+  );
+  assert.ok(
+    (await popup.locator('tr[data-node-id^="L4:src:Actions:"]').count()) > 0,
+  );
+  assert.equal(await popup.locator("#tableToggleEditBtn").isDisabled(), true);
+  assert.equal(
+    await popup
+      .locator('tr[data-node-id="L3:src:Taches:1"] [data-field=name]')
+      .count(),
+    0,
+  );
+  assert.equal(await page.evaluate(() => window.writes.length), 0);
+  const popupTitle = popup.locator(
+    'tr[data-node-id="L3:src:Taches:1"] [data-field=name]',
+  );
+  await page.locator("#timelineClose").click();
+  await page.locator("#editionButton").click();
+  await page.locator("[data-project-timeline]").click();
+  await popup.locator(".hierarchy-table").waitFor();
+  if (
+    (await popup.locator("#tableExpandAllBtn").innerText())
+      .toLowerCase()
+      .includes("déplier")
+  )
+    await popup.locator("#tableExpandAllBtn").click();
+  if (
+    (await popup.locator("#tableToggleEditBtn").innerText()).includes("bloquée")
+  )
+    await popup.locator("#tableToggleEditBtn").click();
+  await popupTitle.fill("Tâche modifiée en popup");
+  await popupTitle.dispatchEvent("change");
+  await page.waitForFunction(
+    () => window.testDb.data.tasks[0].Titre === "Tâche modifiée en popup",
+  );
+  await page.locator("#timelineClose").click();
+  await page.locator("#projectTimeline").waitFor({ state: "hidden" });
+  assert.match(
+    await page.locator("#detail").innerText(),
+    /Tâche modifiée en popup/,
+  );
+  console.log(
+    "PASS project popup from task, full project hierarchy and actions, scoped records, read-mode guard and source updates",
+  );
+
   await page.goto("http://127.0.0.1:8766/?cards=1");
   const card = page.locator('#list [data-kind=tasks][data-id="1"]');
   await card.waitFor();

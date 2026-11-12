@@ -163,3 +163,9 @@ Projets, Chantiers, Tâches et Actions disposent chacun d’un champ **Avancemen
 Si la colonne manque, activez Édition puis utilisez **Créer la colonne Avancement** dans le mapping du niveau concerné. Le widget crée une colonne de données numérique modifiable ; enregistrez ensuite le mapping. Une colonne existante peut être sélectionnée directement, y compris une formule en lecture seule.
 
 La saisie accepte le point et la virgule, de 0 à 1 ou de 0 à 100 selon la base. Les cartes et le détail conservent les pourcentages décimaux. Le choix est transmis à la Vue Table/Timeline ; celle-ci édite les pourcentages affichés et les convertit dans l’unité de la colonne. Une transformation Action → Tâche ou Tâche → Chantier conserve le pourcentage lorsque les bases diffèrent et que le champ est compatible.
+
+## Timeline du projet dans le suivi
+
+Le bouton **Ouvrir la timeline du projet**, près d’**Éléments dépendants**, ouvre une fenêtre avec la table et la timeline du projet complet. Depuis un chantier ou une tâche, le projet parent, ses chantiers, ses tâches et ses actions sont affichés. Une action rattachée directement à un projet ou à un chantier apparaît sous ce parent. Les autres projets sont exclus. Les dates manquantes restent visibles dans la table.
+
+Activez **Édition** dans le suivi avant d’ouvrir la fenêtre pour modifier les titres, dates, statuts, responsables et avancements. Les changements sont enregistrés dans les lignes Grist d’origine et répercutés dans le suivi. Les formules et droits Grist restent protégés. Cette fenêtre ne crée et ne supprime pas d’éléments. La fermeture conserve la sélection et rétablit la position des deux volets ; les réglages de la fenêtre sont séparés de ceux de la timeline principale.

@@ -2348,7 +2348,7 @@
   }
   function detailSection(k, r, name, label, content) {
     const key = `section:${k}:${r.id}:${name}`;
-    return `<details class="detail-section" data-section-key="${key}" ${folded.has(key) ? "" : "open"}><summary>${esc(label)}</summary>${content}</details>`;
+    return `<details class="detail-section" data-section-key="${key}" ${folded.has(key) ? "" : "open"}><summary>${esc(label)}</summary>${name === "dependents" && ["projects", "streams", "tasks"].includes(k) ? ' <button type="button" data-project-timeline>Ouvrir la timeline du projet</button>' : ""}${content}</details>`;
   }
   document.querySelector("main").addEventListener(
     "toggle",
@@ -2461,7 +2461,7 @@
     const deps = children(k, r).filter(
       ([kind]) => !["actions", "points"].includes(kind),
     );
-    if (deps.length)
+    if (deps.length || ["projects", "streams", "tasks"].includes(k))
       html += detailSection(
         k,
         r,
@@ -3380,6 +3380,159 @@
     advancedSelected = [];
     render();
   };
+  let popupProjectId = null,
+    popupScroll = null;
+  window.projectTimelineBridge = () => {
+    const kinds = ["projects", "streams", "tasks", "actions"];
+    const included = (kind, row) => projectOf(kind, row)?.id === popupProjectId;
+    const config = { levels: {} };
+    for (const [index, kind] of kinds.entries()) {
+      const c = cfg(kind);
+      config.levels[index + 1] = {
+        tableId: c.table || "",
+        nameCol: c.fields?.Titre || "",
+        parentCol: "__popupParent",
+        startCol: c.fields?.DateDebut || "",
+        endCol: c.fields?.DateFin || "",
+        statusCol: c.fields?.Statut || "",
+        responsibleCol: c.fields?.Responsable || "",
+        progressCol: c.fields?.Avancement || "",
+        progressBaseOne: progressBaseOne(kind),
+        archivedCol: c.fields?.Transforme || "",
+        manualArchivedCol: c.fields?.Archive || "",
+      };
+    }
+    return {
+      editingAllowed: editionEnabled,
+      ready() {},
+      onOptions(cb) {
+        cb({
+          directMapping: config,
+          uiState: {
+            allowEditing: editionEnabled,
+            tableAllowEditing: editionEnabled,
+          },
+        });
+      },
+      onRecords(cb) {
+        cb([]);
+      },
+      selectedTable: { getTableId: async () => null },
+      setOption: async () => {},
+      docApi: {
+        fetchTable: async (table) => {
+          const kind = kinds.find((k) => cfg(k).table === table);
+          const source = await grist.docApi.fetchTable(table);
+          if (!kind) return source;
+          return rows(source)
+            .filter((row) => included(kind, row))
+            .map((row) => {
+              let parent, level;
+              if (kind === "streams") {
+                parent = targets(kind, row, "Projet")[0];
+                level = 1;
+              }
+              if (kind === "tasks") {
+                parent = targets(kind, row, "Chantier")[0];
+                level = 2;
+              }
+              if (kind === "actions") {
+                const task = targets(kind, row, "Tache")[0],
+                  stream = targets(kind, row, "Chantier")[0];
+                parent = task || stream || projectOf(kind, row);
+                level = task ? 3 : stream ? 2 : 1;
+              }
+              return {
+                ...row,
+                __popupParent: parent?.id || 0,
+                __popupParentLevel: level,
+              };
+            });
+        },
+        applyUserActions: async (actions) => {
+          if (!editionEnabled)
+            throw Error(
+              "Activez le mode Édition dans le widget pour modifier.",
+            );
+          for (const [op, table, id, fields] of actions) {
+            const kind = kinds.find((k) => cfg(k).table === table),
+              row = (data[kind] || []).find((r) => r.id === id);
+            const allowed = [
+              "Titre",
+              "DateDebut",
+              "DateFin",
+              "Statut",
+              "Responsable",
+              "Avancement",
+            ]
+              .map((f) => cfg(kind).fields?.[f])
+              .filter(Boolean);
+            if (
+              op !== "UpdateRecord" ||
+              !row ||
+              !included(kind, row) ||
+              Object.keys(fields).some(
+                (f) =>
+                  !allowed.includes(f) ||
+                  meta.find((m) => m.table === table && m.colId === f)
+                    ?.isFormula,
+              )
+            )
+              throw Error("Modification non autorisée dans cette timeline.");
+          }
+          await grist.docApi.applyUserActions(actions);
+          await load();
+        },
+      },
+    };
+  };
+  $("timelineClose").onclick = () => $("projectTimeline").close();
+  $("projectTimeline").addEventListener("close", () => {
+    $("timelineFrame").src = "about:blank";
+    popupProjectId = null;
+    if (popupScroll)
+      for (const id of ["list", "detail"]) {
+        $(id).scrollTop = popupScroll[id];
+      }
+    popupScroll = null;
+  });
+  document.querySelector("main").addEventListener(
+    "click",
+    async (e) => {
+      if (!e.target.closest("[data-project-timeline]")) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (editing || moving) {
+        message(
+          "Terminez la modification en cours avant d’ouvrir la timeline.",
+        );
+        return;
+      }
+      if (demo) {
+        message(
+          "La timeline est disponible lorsque le widget est connecté à Grist.",
+        );
+        return;
+      }
+      const row = (data[selection?.k] || []).find(
+          (r) => r.id === selection?.id,
+        ),
+        project = row && projectOf(selection.k, row);
+      if (!project) {
+        message("Aucun projet associé à cet élément.", true);
+        return;
+      }
+      popupScroll = Object.fromEntries(
+        ["list", "detail"].map((id) => [id, $(id).scrollTop]),
+      );
+      popupProjectId = project.id;
+      $("timelineTitle").textContent =
+        "Timeline — " + title("projects", project);
+      $("timelineFrame").src = "timeline.html?projectPopup=1";
+      $("projectTimeline").showModal();
+    },
+    true,
+  );
   document.querySelector('a[href="timeline.html"]').onclick = (e) => {
     if (demo) {
       e.preventDefault();

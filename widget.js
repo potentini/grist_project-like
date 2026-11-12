@@ -19,6 +19,7 @@
     { key: "level3", level: 3, label: "Niveau 3", required: false }
   ];
 
+  if (document.documentElement.dataset.projectPopup === "true") LEVELS.push({key:"level4",level:4,label:"Actions",required:false});
   const FIELD_LABELS = {
     level: "Niveau",
     name: "Nom",
@@ -35,10 +36,11 @@
   const DAY_VIEW_CELL_WIDTH = 32;
   const NO_DATE_RANGE_MESSAGE = "Les éléments du niveau 1 sont chargés, mais aucune date n’est mappée ou renseignée. Mappez Date début/Date fin pour afficher les barres de timeline.";
 
-  const STORAGE_KEY = "grist_gantt_dual_state_v1";
+  const POPUP_SUFFIX = document.documentElement.dataset.projectPopup === "true" ? "_project_popup" : "";
+  const STORAGE_KEY = "grist_gantt_dual_state_v1" + POPUP_SUFFIX;
   const WIDGET_STATE_OPTION_KEY = "uiState";
   const DIRECT_MAPPING_OPTION_KEY = "directMapping";
-  const DIRECT_MAPPING_STORAGE_KEY = "grist_gantt_dual_mapping_v1";
+  const DIRECT_MAPPING_STORAGE_KEY = "grist_gantt_dual_mapping_v1" + POPUP_SUFFIX;
   const DIRECT_FIELDS = ["name", "start", "end", "status", "responsible", "progress"];
   const DIRECT_FIELD_AUTOMAP_LABELS = {
     name: ["Titre"],
@@ -1721,7 +1723,8 @@
         const node = current.byRowId.get(rowId);
         if (!node) continue;
         const parentIds = directParentIds(row, current.cfg.parentCol);
-        const parentNode = parentIds.map((id) => parent?.byRowId.get(id)).find(Boolean);
+        const effectiveParent = document.documentElement.dataset.projectPopup === "true" && row.__popupParentLevel ? levelNodes.get(row.__popupParentLevel) : parent;
+        const parentNode = parentIds.map((id) => effectiveParent?.byRowId.get(id)).find(Boolean);
         if (parentNode) {
           node.parentId = parentNode.id;
           parentNode.children.push(node);
