@@ -853,6 +853,32 @@ const fixture = require("../demo.json");
           .isVisible(),
         true,
       );
+    await page.locator("#detail [name=Projet]").selectOption("1");
+    assert.deepEqual(
+      await page
+        .locator("#detail [name=Chantier] option")
+        .evaluateAll((opts) => opts.map((o) => o.value)),
+      ["", "1"],
+    );
+    assert.deepEqual(
+      await page
+        .locator("#detail [name=Tache] option")
+        .evaluateAll((opts) => opts.map((o) => o.value)),
+      ["", "1"],
+    );
+    await page.locator("#detail [name=Projet]").selectOption("2");
+    assert.deepEqual(
+      await page
+        .locator("#detail [name=Chantier] option")
+        .evaluateAll((opts) => opts.map((o) => o.value)),
+      ["", "2"],
+    );
+    assert.deepEqual(
+      await page
+        .locator("#detail [name=Tache] option")
+        .evaluateAll((opts) => opts.map((o) => o.value)),
+      [""],
+    );
     await page.locator("#detail [name=Chantier]").selectOption("2");
     assert.equal(await page.locator("#detail [name=Projet]").inputValue(), "2");
     await page
