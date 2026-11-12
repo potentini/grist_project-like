@@ -429,6 +429,102 @@
       )
       .join("");
   }
+  const layoutKey = "workspacePaneLayoutV1";
+  let preferredSplit = 1.2 / 2.2,
+    splitDrag = null;
+  function paintSplit(fraction = preferredSplit) {
+    const main = document.querySelector("main"),
+      separator = $("paneSeparator");
+    const style = getComputedStyle(main);
+    const available =
+      main.clientWidth -
+      parseFloat(style.paddingLeft) -
+      parseFloat(style.paddingRight) -
+      26;
+    const min = available > 0 ? Math.min(0.45, 260 / available) : 0.3,
+      max = available > 0 ? Math.max(0.55, 1 - 280 / available) : 0.7;
+    const value = Math.max(min, Math.min(max, fraction));
+    main.style.setProperty("--left-fr", value + "fr");
+    main.style.setProperty("--right-fr", 1 - value + "fr");
+    separator.setAttribute("aria-valuemin", String(Math.round(min * 100)));
+    separator.setAttribute("aria-valuemax", String(Math.round(max * 100)));
+    separator.setAttribute("aria-valuenow", String(Math.round(value * 100)));
+    return value;
+  }
+  async function rememberSplit() {
+    if (!demo && window.grist)
+      try {
+        await grist.setOption(layoutKey, { leftFraction: preferredSplit });
+      } catch (err) {
+        message(
+          "La largeur des volets n’a pas pu être mémorisée : " + err.message,
+          true,
+        );
+      }
+  }
+  const separator = $("paneSeparator");
+  separator.onpointerdown = (e) => {
+    if (e.button !== 0 || !matchMedia("(min-width:801px)").matches) return;
+    e.preventDefault();
+    splitDrag = { id: e.pointerId, before: preferredSplit };
+    separator.setPointerCapture(e.pointerId);
+    document.body.classList.add("resizing-panes");
+  };
+  separator.onpointermove = (e) => {
+    if (splitDrag?.id !== e.pointerId) return;
+    const main = document.querySelector("main"),
+      rect = main.getBoundingClientRect(),
+      style = getComputedStyle(main);
+    const available =
+      main.clientWidth -
+      parseFloat(style.paddingLeft) -
+      parseFloat(style.paddingRight) -
+      26;
+    preferredSplit = paintSplit(
+      (e.clientX - rect.left - parseFloat(style.paddingLeft) - 13) / available,
+    );
+  };
+  separator.onpointerup = (e) => {
+    if (splitDrag?.id !== e.pointerId) return;
+    splitDrag = null;
+    separator.releasePointerCapture(e.pointerId);
+    document.body.classList.remove("resizing-panes");
+    rememberSplit();
+  };
+  separator.onpointercancel = () => {
+    if (splitDrag) {
+      preferredSplit = splitDrag.before;
+      splitDrag = null;
+      paintSplit();
+    }
+    document.body.classList.remove("resizing-panes");
+  };
+  separator.onlostpointercapture = () => {
+    splitDrag = null;
+    document.body.classList.remove("resizing-panes");
+  };
+  separator.onkeydown = (e) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
+    e.preventDefault();
+    preferredSplit = paintSplit(
+      e.key === "Home"
+        ? 0
+        : e.key === "End"
+          ? 1
+          : paintSplit() +
+            (e.key === "ArrowRight" ? 1 : -1) * (e.shiftKey ? 0.05 : 0.02),
+    );
+    rememberSplit();
+  };
+  separator.ondblclick = () => {
+    preferredSplit = 1.2 / 2.2;
+    paintSplit();
+    rememberSplit();
+  };
+  window.addEventListener("resize", () => paintSplit());
+  new ResizeObserver(() => paintSplit()).observe(
+    document.querySelector("main"),
+  );
   const optionKey = "projectWorkspaceMappingV1";
   const demo = new URLSearchParams(location.search).has("demo");
   function message(s, error = false) {
@@ -1102,8 +1198,46 @@
       : raw || val("notes", note, "DateSource") || "Date non renseignée";
     return title("notes", note) + " · " + date;
   }
-  function item(k, r, level = 0) {
-    return `<button class="item level${level} ${selection?.k === k && selection.id === r.id ? "selected" : ""}" data-kind="${k}" data-id="${r.id}"><span class="item-kind">${kindLabels[k]}</span><strong>${esc(title(k, r))}</strong>${k === "points" ? `<small class="point-origin">${esc(pointMeetingContext(r))}</small>` : ""}${archived(k, r) ? '<span class="badge">Archivé</span>' : ""}${transformed(k, r) ? '<span class="badge">Transformé</span>' : ""}<small>${esc([val(k, r, "Volet"), displayValue(k, r, "Responsable"), dateText(val(k, r, "Date")) || (k === "notes" ? val(k, r, "DateSource") : "") || val(k, r, "Echeance") || dateText(val(k, r, "DateFin"))].filter(Boolean).join(" · "))}</small>${[
+  function cardFacts(k, r) {
+    const facts = [];
+    for (const f of ["DateDebut", "DateFin"]) {
+      const raw = val(k, r, f);
+      if (raw === "" || raw == null) continue;
+      const iso = dateText(raw),
+        text = /^\d{4}-\d{2}-\d{2}$/.test(iso)
+          ? iso.split("-").reverse().join("/")
+          : iso;
+      facts.push(
+        `<span><span class="card-field-label">${esc(cfg(k).fieldLabels?.[f] || (f === "DateDebut" ? "Début" : "Fin"))}</span> ${esc(text)}</span>`,
+      );
+    }
+    const nature = displayValue(k, r, "Nature");
+    if (nature) facts.push(`<span>${esc(nature)}</span>`);
+    let html = facts.length
+      ? '<span class="card-facts">' + facts.join("") + "</span>"
+      : "";
+    const progress = val(k, r, "Avancement");
+    if (
+      progress !== "" &&
+      progress != null &&
+      Number.isFinite(Number(progress))
+    ) {
+      const percent = Math.round(Number(progress) * 100);
+      html += `<span class="card-progress"><span>${esc(fieldLabel(k, "Avancement"))} : ${percent} %</span><progress max="100" value="${Math.max(0, Math.min(100, percent))}" aria-label="${esc(fieldLabel(k, "Avancement"))} : ${percent} %"></progress></span>`;
+    }
+    const summary =
+      displayValue(k, r, "PointEtape") ||
+      displayValue(k, r, "Decision") ||
+      displayValue(k, r, "Commentaire") ||
+      (["notes", "points"].includes(k) ? displayValue(k, r, "Contenu") : "");
+    if (summary)
+      html += `<small class="card-excerpt">${esc(summary.length > 200 ? summary.slice(0, 197) + "…" : summary)}</small>`;
+    if (k === "notes" && displayValue(k, r, "Participants"))
+      html += `<small class="card-excerpt">${esc(fieldLabel(k, "Participants"))} : ${esc(displayValue(k, r, "Participants"))}</small>`;
+    return html;
+  }
+  function item(k, r, level = 0, rich = false) {
+    return `<button class="item level${level} ${selection?.k === k && selection.id === r.id ? "selected" : ""}" data-kind="${k}" data-id="${r.id}"><span class="item-kind">${kindLabels[k]}</span><strong>${esc(title(k, r))}</strong>${k === "points" ? `<small class="point-origin">${esc(pointMeetingContext(r))}</small>` : ""}${archived(k, r) ? '<span class="badge">Archivé</span>' : ""}${transformed(k, r) ? '<span class="badge">Transformé</span>' : ""}<small>${esc([displayValue(k, r, "Volet"), displayValue(k, r, "Responsable"), dateText(val(k, r, "Date")) || (k === "notes" ? val(k, r, "DateSource") : "") || displayValue(k, r, "Echeance") || (!rich ? dateText(val(k, r, "DateFin")) : "")].filter(Boolean).join(" · "))}</small>${rich ? cardFacts(k, r) : ""}${[
       displayValue(k, r, "Statut") || displayValue(k, r, "Etat"),
       val(k, r, "Vigilance"),
     ]
@@ -1114,6 +1248,7 @@
       )}${k === "actions" && overdue(r) ? '<span class="badge late">En retard</span>' : ""}</button>`;
   }
   function filterOptions() {
+    scopeAllowed = new WeakMap();
     const labelKind = view === "projects" ? "streams" : view;
     $("ownerFilterLabel").textContent = fieldLabel(labelKind, "Responsable");
     $("statusFilterLabel").textContent = fieldLabel(
@@ -1124,13 +1259,16 @@
     for (const [id, opts] of [
       [
         "projectFilter",
-        (data.projects || []).map((r) => [r.id, title("projects", r)]),
+        outlineRows("projects")
+          .filter((r) => nativeMatch("projects", r))
+          .map((r) => [r.id, title("projects", r)]),
       ],
       [
         "ownerFilter",
         [
           ...new Set(
             (data[k] || [])
+              .filter((r) => nativeMatch(k, r))
               .map((r) => displayValue(k, r, "Responsable"))
               .filter(Boolean),
           ),
@@ -1143,6 +1281,7 @@
         [
           ...new Set(
             (data[k] || [])
+              .filter((r) => nativeMatch(k, r))
               .map((r) => displayValue(k, r, k === "notes" ? "Etat" : "Statut"))
               .filter(Boolean),
           ),
@@ -1157,7 +1296,7 @@
         opts
           .map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`)
           .join("");
-      $(id).value = old;
+      $(id).value = opts.some(([value]) => String(value) === old) ? old : "";
     }
   }
   function actionParent(r) {
@@ -1249,7 +1388,7 @@
     const open = !folded.has(key);
     const movable =
       ["streams", "tasks", "actions"].includes(k) && !inactive(k, r);
-    return `<div class="tree-node" data-tree-kind="${k}" data-tree-id="${r.id}"><div class="tree-row" data-drop-kind="${k}" data-drop-id="${r.id}" ${movable ? `draggable="${editionEnabled && !editing && !moving && !demo}" data-drag-kind="${k}" data-drag-id="${r.id}"` : ""}>${kids.length ? `<button class="fold" type="button" data-fold="${key}" aria-expanded="${open}" aria-label="${open ? "Plier" : "Déplier"} ${esc(title(k, r))}">${open ? "▾" : "▸"}</button>` : '<span class="fold-spacer"></span>'}${item(k, r)}${editionEnabled && movable ? `<button class="move-button" type="button" data-move-kind="${k}" data-move-id="${r.id}" aria-label="Déplacer ${esc(title(k, r))}" title="Déplacer"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20 20 4M7 4h13v13"/></svg></button>` : ""}</div>${kids.length ? `<div class="tree-children" ${open ? "" : "hidden"}>${kids.map((n) => branch(n, context)).join("")}</div>` : ""}</div>`;
+    return `<div class="tree-node" data-tree-kind="${k}" data-tree-id="${r.id}"><div class="tree-row" data-drop-kind="${k}" data-drop-id="${r.id}" ${movable ? `draggable="${editionEnabled && !editing && !moving && !demo}" data-drag-kind="${k}" data-drag-id="${r.id}"` : ""}>${kids.length ? `<button class="fold" type="button" data-fold="${key}" aria-expanded="${open}" aria-label="${open ? "Plier" : "Déplier"} ${esc(title(k, r))}">${open ? "▾" : "▸"}</button>` : '<span class="fold-spacer"></span>'}${item(k, r, 0, context.startsWith("left-"))}${editionEnabled && movable ? `<button class="move-button" type="button" data-move-kind="${k}" data-move-id="${r.id}" aria-label="Déplacer ${esc(title(k, r))}" title="Déplacer"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20 20 4M7 4h13v13"/></svg></button>` : ""}</div>${kids.length ? `<div class="tree-children" ${open ? "" : "hidden"}>${kids.map((n) => branch(n, context)).join("")}</div>` : ""}</div>`;
   }
   function syncEdition() {
     updateHistoryControls();
@@ -2582,6 +2721,11 @@
         );
       grist.ready({ requiredAccess: "full" });
       grist.onOptions(async (opts) => {
+        const width = opts?.[layoutKey]?.leftFraction;
+        if (typeof width === "number" && Number.isFinite(width)) {
+          preferredSplit = Math.max(0.05, Math.min(0.95, width));
+          paintSplit();
+        }
         const next = opts?.[optionKey];
         if (next && JSON.stringify(next) !== JSON.stringify(mapping)) {
           mappingWasSaved = true;

@@ -200,6 +200,14 @@ const fixture = require("../demo.json");
       db.data.tasks[0].Priorite = "Haute";
       db.data.tasks[1].Priorite = "Basse";
     }
+    if (location.search.includes("cards=1"))
+      Object.assign(db.data.tasks[0], {
+        DateDebut: "2026-11-01",
+        DateFin: "2026-12-20",
+        Avancement: 0,
+        Echeance: "avant Noël",
+        PointEtape: "Suivi <img src=x onerror=alert(1)> de la tâche",
+      });
     window.testDb = db;
     if (location.search.includes("refs=1")) {
       const targets = {
@@ -285,6 +293,10 @@ const fixture = require("../demo.json");
         },
       };
     }
+    if (location.search.includes("cards=1"))
+      window.testOptions = JSON.parse(
+        sessionStorage.getItem("cardsOptions") || "{}",
+      );
     window.writes = [];
     window.batches = [];
     const table = (k) => db.tables.find((t) => t.tableId === k);
@@ -319,6 +331,11 @@ const fixture = require("../demo.json");
         if (location.search.includes("broader=1"))
           sessionStorage.setItem(
             "broaderOptions",
+            JSON.stringify(window.testOptions),
+          );
+        if (location.search.includes("cards=1"))
+          sessionStorage.setItem(
+            "cardsOptions",
             JSON.stringify(window.testOptions),
           );
         optionsCallback(window.testOptions);
@@ -530,6 +547,8 @@ const fixture = require("../demo.json");
     "PASS mapping refresh detects a Boolean column created after widget startup",
   );
   for (const refs of [false, true]) {
+    // Keep both real drag endpoints in view; rich cards now need more height.
+    await page.setViewportSize({ width: 1440, height: 1500 });
     await page.goto("http://127.0.0.1:8766/?tree=1" + (refs ? "&refs=1" : ""));
     await page.locator("#list [data-kind=tasks]").waitFor();
     const project = page.locator(
@@ -688,9 +707,12 @@ const fixture = require("../demo.json");
         (refs ? "references" : "CSV codes") +
         ")",
     );
+    await page.setViewportSize({ width: 1440, height: 1000 });
   }
 
   for (const refs of [false, true]) {
+    // Keep both real drag endpoints in view; rich cards now need more height.
+    await page.setViewportSize({ width: 1440, height: 1500 });
     await page.goto("http://127.0.0.1:8766/?tree=1" + (refs ? "&refs=1" : ""));
     await page.locator("#list [data-kind=projects]").first().waitFor();
     await page.locator("#editionButton").click();
@@ -1204,10 +1226,25 @@ const fixture = require("../demo.json");
     await page.locator('#list [data-kind=projects][data-id="1"]').count(),
     0,
   );
+  assert.deepEqual(
+    await page
+      .locator("#projectFilter option")
+      .evaluateAll((opts) => opts.map((o) => o.value)),
+    ["", "2"],
+  );
+  await page.locator("#projectFilter").selectOption("2");
+
   await page.evaluate(async () => {
     await window.nativeRecordCallback([]);
   });
   assert.equal(await page.locator("#list [data-kind=tasks]").count(), 0);
+  assert.deepEqual(
+    await page
+      .locator("#projectFilter option")
+      .evaluateAll((opts) => opts.map((o) => o.value)),
+    [""],
+  );
+  assert.equal(await page.locator("#projectFilter").inputValue(), "");
   await page.evaluate(async () => {
     window.nativeTableId = "Projets";
     await window.nativeRecordCallback([{ id: 1 }]);
@@ -1312,6 +1349,67 @@ const fixture = require("../demo.json");
   await page.locator("#mappingButton").click();
   console.log(
     "PASS reference labels and editing, native filtered/empty records, arbitrary-field filtering, persistent blank mappings, custom names and shared action toolbar",
+  );
+
+  await page.goto("http://127.0.0.1:8766/?cards=1");
+  const card = page.locator('#list [data-kind=tasks][data-id="1"]');
+  await card.waitFor();
+  assert.match(await card.innerText(), /Début 01\/11\/2026/);
+  assert.match(await card.innerText(), /Fin 20\/12\/2026/);
+  assert.match(await card.innerText(), /Avancement : 0 %/);
+  assert.match(await card.innerText(), /avant Noël/);
+  assert.equal(await card.locator("img").count(), 0);
+  assert.match(await card.locator(".card-excerpt").innerText(), /<img/);
+  await page.evaluate(() => (window.testDb.data.tasks[0].Avancement = 0.65));
+  await page.locator("#refresh").click();
+  await page.waitForFunction(
+    () =>
+      document.querySelector("#list [data-kind=tasks] progress")?.value === 65,
+  );
+  const leftBefore = (await page.locator("#list").boundingBox()).width;
+  const separator = page.locator("#paneSeparator"),
+    box = await separator.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 100, box.y + box.height / 2, {
+    steps: 8,
+  });
+  await page.mouse.up();
+  await page.waitForFunction(() => !!window.testOptions.workspacePaneLayoutV1);
+  const leftAfter = (await page.locator("#list").boundingBox()).width;
+  assert.ok(leftAfter > leftBefore + 50);
+  await separator.focus();
+  await page.keyboard.press("ArrowLeft");
+  assert.ok((await page.locator("#list").boundingBox()).width < leftAfter);
+  await separator.focus();
+  await page.keyboard.press("Home");
+  assert.ok((await page.locator("#list").boundingBox()).width >= 259);
+  await separator.focus();
+  await page.keyboard.press("End");
+  assert.ok((await page.locator("#detail").boundingBox()).width >= 279);
+  await separator.dblclick();
+  const resetWidth = (await page.locator("#list").boundingBox()).width;
+  await separator.focus();
+  await page.keyboard.press("ArrowRight");
+  const savedWidth = (await page.locator("#list").boundingBox()).width;
+  assert.ok(savedWidth > resetWidth);
+  await page.reload();
+  await card.waitFor();
+  assert.ok(
+    Math.abs((await page.locator("#list").boundingBox()).width - savedWidth) <
+      2,
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.equal(await separator.isVisible(), false);
+  assert.equal(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+    true,
+  );
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  console.log(
+    "PASS populated/zero-progress cards, escaped previews, pointer and keyboard resizing, bounds, saved ratio and mobile stacking",
   );
   await page.goto("http://127.0.0.1:8766/?layout=1");
   await page.locator("#list [data-kind=projects]").first().click();
