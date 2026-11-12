@@ -795,7 +795,7 @@ body[data-current-view="notes"] .item[data-kind="actions"] {
 .detail-section:has(> [data-project-timeline]) {
   position: relative;
 }
-.detail-section:has(> [data-project-timeline]) > summary {
+.detail-section[open]:has(> [data-project-timeline]) > summary {
   width: fit-content;
   max-width: calc(100% - 250px);
 }
@@ -822,4 +822,8 @@ body[data-current-view="notes"] .item[data-kind="actions"] {
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+}
+
+.detail-section:not([open]) > [data-project-timeline] {
+  display: none;
 }
