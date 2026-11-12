@@ -185,6 +185,69 @@
   let mappingWasSaved = false,
     nativeTable = null,
     nativeIds = null;
+  let nativeRevision = 0,
+    nativePending = false,
+    nativeWarning = "",
+    resumeTimer = null;
+  function selectedViewFetcher() {
+    return grist.viewApi?.fetchSelectedTable
+      ? (opts) => grist.viewApi.fetchSelectedTable(opts)
+      : typeof grist.fetchSelectedTable === "function"
+        ? (opts) => grist.fetchSelectedTable(opts)
+        : null;
+  }
+  function acceptNativeScope(table, records) {
+    nativeTable = table;
+    nativeIds = new Set(rows(records).map((r) => Number(r.id)));
+    nativePending = false;
+    nativeWarning = "";
+    scopeAllowed = new WeakMap();
+    const selected =
+      selection && (data[selection.k] || []).find((r) => r.id === selection.id);
+    if (selected && !editing && !nativeMatch(selection.k, selected))
+      selection = null;
+  }
+  async function refreshNativeScope() {
+    if (demo || !window.grist) return;
+    const fetcher = selectedViewFetcher();
+    if (!fetcher) return;
+    const stamp = ++nativeRevision;
+    if (nativeIds === null) {
+      nativePending = true;
+      nativeWarning = "Chargement des filtres Grist…";
+    }
+    try {
+      const [table, records] = await Promise.all([
+        grist.selectedTable.getTableId(),
+        fetcher({ format: "columns", keepEncoded: true, expandRefs: false }),
+      ]);
+      if (stamp === nativeRevision) acceptNativeScope(table, records);
+    } catch (err) {
+      if (stamp === nativeRevision) {
+        nativePending = nativeIds === null;
+        nativeWarning = nativePending
+          ? "Filtres Grist en attente de connexion."
+          : "Connexion Grist interrompue : dernier filtre conservé.";
+      }
+    }
+  }
+  function scheduleNativeResume() {
+    if (demo || document.visibilityState === "hidden") return;
+    clearTimeout(resumeTimer);
+    resumeTimer = setTimeout(async () => {
+      if (!loaded) return;
+      if (moving) {
+        scheduleNativeResume();
+        return;
+      }
+      await refreshNativeScope();
+      await load();
+    }, 100);
+  }
+  document.addEventListener("visibilitychange", scheduleNativeResume);
+  window.addEventListener("focus", scheduleNativeResume);
+  window.addEventListener("online", scheduleNativeResume);
+  window.addEventListener("pageshow", scheduleNativeResume);
   const refRows = new Map();
   const referenceIndexes = new Map();
   let scopeAllowed = new WeakMap(),
@@ -278,6 +341,7 @@
     return Object.keys(schemas).find((k) => cfg(k).table === nativeTable);
   }
   function nativeMatch(k, r) {
+    if (nativePending && nativeIds === null) return false;
     return scopeMatch(nativeKind(), nativeIds, k, r);
   }
   function scopeMatch(source, nativeIds, k, r) {
@@ -1198,54 +1262,94 @@
       : raw || val("notes", note, "DateSource") || "Date non renseignée";
     return title("notes", note) + " · " + date;
   }
-  function cardFacts(k, r) {
+  function cardFacts(k, r, rich = true) {
     const facts = [];
-    for (const f of ["DateDebut", "DateFin"]) {
+    const add = (f, value, label) => {
+      if (value !== "" && value != null) {
+        const text = String(value).replace(/\s+/g, " ");
+        value = text.length > 160 ? text.slice(0, 157) + "…" : text;
+        facts.push(
+          `<span><span class="card-field-label">${esc(label || fieldLabel(k, f))} :</span> ${esc(value)}</span>`,
+        );
+      }
+    };
+    const dateValue = (f) => {
       const raw = val(k, r, f);
-      if (raw === "" || raw == null) continue;
-      const iso = dateText(raw),
-        text = /^\d{4}-\d{2}-\d{2}$/.test(iso)
-          ? iso.split("-").reverse().join("/")
-          : iso;
-      facts.push(
-        `<span><span class="card-field-label">${esc(cfg(k).fieldLabels?.[f] || (f === "DateDebut" ? "Début" : "Fin"))}</span> ${esc(text)}</span>`,
-      );
-    }
-    const nature = displayValue(k, r, "Nature");
-    if (nature) facts.push(`<span>${esc(nature)}</span>`);
-    let html = facts.length
-      ? '<span class="card-facts">' + facts.join("") + "</span>"
-      : "";
+      if (raw === "" || raw == null) return "";
+      const iso = dateText(raw);
+      return /^\d{4}-\d{2}-\d{2}$/.test(iso)
+        ? iso.split("-").reverse().join("/")
+        : iso;
+    };
+    add("Volet", displayValue(k, r, "Volet"));
+    add("Responsable", displayValue(k, r, "Responsable"));
+    add(
+      "Date",
+      dateValue("Date") || (k === "notes" ? val(k, r, "DateSource") : ""),
+    );
+    add(
+      "DateDebut",
+      rich ? dateValue("DateDebut") : "",
+      cfg(k).fieldLabels?.DateDebut || "Date de début",
+    );
+    add(
+      "DateFin",
+      dateValue("DateFin"),
+      cfg(k).fieldLabels?.DateFin || "Date de fin",
+    );
+    add(
+      "Echeance",
+      displayValue(k, r, "Echeance"),
+      cfg(k).fieldLabels?.Echeance || "Échéance",
+    );
+    if (rich) add("Nature", displayValue(k, r, "Nature"));
+    add("Statut", displayValue(k, r, "Statut"));
+    add("Etat", displayValue(k, r, "Etat"));
+    add("Vigilance", displayValue(k, r, "Vigilance"));
     const progress = val(k, r, "Avancement");
     if (
+      rich &&
       progress !== "" &&
       progress != null &&
       Number.isFinite(Number(progress))
     ) {
       const percent = Math.round(Number(progress) * 100);
-      html += `<span class="card-progress"><span>${esc(fieldLabel(k, "Avancement"))} : ${percent} %</span><progress max="100" value="${Math.max(0, Math.min(100, percent))}" aria-label="${esc(fieldLabel(k, "Avancement"))} : ${percent} %"></progress></span>`;
+      facts.push(
+        `<span class="card-progress"><span><span class="card-field-label">${esc(fieldLabel(k, "Avancement"))} :</span> ${percent} %</span><progress max="100" value="${Math.max(0, Math.min(100, percent))}" aria-label="${esc(fieldLabel(k, "Avancement"))} : ${percent} %"></progress></span>`,
+      );
     }
-    const summary =
-      displayValue(k, r, "PointEtape") ||
-      displayValue(k, r, "Decision") ||
-      displayValue(k, r, "Commentaire") ||
-      (["notes", "points"].includes(k) ? displayValue(k, r, "Contenu") : "");
-    if (summary)
-      html += `<small class="card-excerpt">${esc(summary.length > 200 ? summary.slice(0, 197) + "…" : summary)}</small>`;
-    if (k === "notes" && displayValue(k, r, "Participants"))
-      html += `<small class="card-excerpt">${esc(fieldLabel(k, "Participants"))} : ${esc(displayValue(k, r, "Participants"))}</small>`;
+    if (rich && k === "notes")
+      add("Participants", displayValue(k, r, "Participants"));
+    if (k === "actions" && overdue(r))
+      facts.push('<span class="badge late">Échéance : en retard</span>');
+    let html = facts.length
+      ? '<span class="card-facts">' +
+        facts.join(
+          '<span class="fact-separator" aria-hidden="true">; </span>',
+        ) +
+        "</span>"
+      : "";
+    if (rich) {
+      const f = [
+        "PointEtape",
+        "Decision",
+        "Commentaire",
+        ...(["notes", "points"].includes(k) ? ["Contenu"] : []),
+      ].find((f) => displayValue(k, r, f));
+      if (f) {
+        const text = displayValue(k, r, f).replace(/\s+/g, " ");
+        html += `<small class="card-excerpt"><span class="card-field-label">${esc(cfg(k).fieldLabels?.[f] || { PointEtape: "Point d’étape", Decision: "Décision", Contenu: "Notes" }[f] || fieldLabel(k, f))} :</span> ${esc(text.length > 160 ? text.slice(0, 157) + "…" : text)}</small>`;
+      }
+    }
     return html;
   }
   function item(k, r, level = 0, rich = false) {
-    return `<button class="item level${level} ${selection?.k === k && selection.id === r.id ? "selected" : ""}" data-kind="${k}" data-id="${r.id}"><span class="item-kind">${kindLabels[k]}</span><strong>${esc(title(k, r))}</strong>${k === "points" ? `<small class="point-origin">${esc(pointMeetingContext(r))}</small>` : ""}${archived(k, r) ? '<span class="badge">Archivé</span>' : ""}${transformed(k, r) ? '<span class="badge">Transformé</span>' : ""}<small>${esc([displayValue(k, r, "Volet"), displayValue(k, r, "Responsable"), dateText(val(k, r, "Date")) || (k === "notes" ? val(k, r, "DateSource") : "") || displayValue(k, r, "Echeance") || (!rich ? dateText(val(k, r, "DateFin")) : "")].filter(Boolean).join(" · "))}</small>${rich ? cardFacts(k, r) : ""}${[
-      displayValue(k, r, "Statut") || displayValue(k, r, "Etat"),
-      val(k, r, "Vigilance"),
-    ]
-      .filter(Boolean)
-      .map((x) => `<span class="badge">${esc(x)}</span>`)
-      .join(
-        "",
-      )}${k === "actions" && overdue(r) ? '<span class="badge late">En retard</span>' : ""}</button>`;
+    const note = k === "points" ? targets("points", r, "NoteOrigine")[0] : null;
+    const context = note ? pointMeetingContext(r) : "";
+    const labelledContext = note
+      ? "Réunion : " + context.replace(" · ", " ; Date : ")
+      : "Réunion : non renseignée";
+    return `<button class="item ${rich ? "compact-card" : ""} level${level} ${selection?.k === k && selection.id === r.id ? "selected" : ""}" data-kind="${k}" data-id="${r.id}"><span class="item-kind">${kindLabels[k]}</span><strong>${esc(title(k, r))}</strong>${k === "points" ? `<small class="point-origin">${esc(labelledContext)}</small>` : ""}${archived(k, r) ? '<span class="badge">État : Archivé</span>' : ""}${transformed(k, r) ? '<span class="badge">État : Transformé</span>' : ""}${cardFacts(k, r, rich)}</button>`;
   }
   function filterOptions() {
     scopeAllowed = new WeakMap();
@@ -2185,14 +2289,15 @@
       filterOptions();
       render();
       message(
-        demo
-          ? "Démonstration : données fictives, édition désactivée."
-          : Object.keys(schemas).filter(
-                (k) =>
-                  k !== "points" && (!cfg(k).table || !cfg(k).fields?.Titre),
-              ).length
-            ? "Mapping incomplet : choisissez les tables et leurs champs."
-            : `Données actualisées — ${Object.values(data).reduce((n, r) => n + r.length, 0)} lignes chargées.${nativeTable ? (nativeKind() ? " Filtres Grist appliqués depuis « " + nativeTable + " »." : " La table source « " + nativeTable + " » n’est pas mappée : ses filtres ne s’appliquent pas à cette hiérarchie.") : ""}`,
+        nativeWarning ||
+          (demo
+            ? "Démonstration : données fictives, édition désactivée."
+            : Object.keys(schemas).filter(
+                  (k) =>
+                    k !== "points" && (!cfg(k).table || !cfg(k).fields?.Titre),
+                ).length
+              ? "Mapping incomplet : choisissez les tables et leurs champs."
+              : `Données actualisées — ${Object.values(data).reduce((n, r) => n + r.length, 0)} lignes chargées.${nativeTable ? (nativeKind() ? " Filtres Grist appliqués depuis « " + nativeTable + " »." : " La table source « " + nativeTable + " » n’est pas mappée : ses filtres ne s’appliquent pas à cette hiérarchie.") : ""}`),
       );
     } catch (e) {
       message("Chargement impossible : " + e.message, true);
@@ -2744,19 +2849,26 @@
       loaded = true;
       mappingUI();
       grist.onRecords(async (records) => {
-        try {
-          nativeTable = await grist.selectedTable.getTableId();
-          nativeIds = new Set((records || []).map((r) => Number(r.id)));
-          const selected =
-            selection &&
-            (data[selection.k] || []).find((r) => r.id === selection.id);
-          if (selected && !nativeMatch(selection.k, selected)) selection = null;
-        } catch {
-          nativeTable = null;
-          nativeIds = null;
+        if (selectedViewFetcher()) await refreshNativeScope();
+        else {
+          const stamp = ++nativeRevision;
+          try {
+            const table = await grist.selectedTable.getTableId();
+            if (stamp === nativeRevision)
+              acceptNativeScope(table, records || []);
+          } catch {
+            if (stamp === nativeRevision) {
+              nativePending = nativeIds === null;
+              nativeWarning = nativePending
+                ? "Filtres Grist en attente de connexion."
+                : "Connexion Grist interrompue : dernier filtre conservé.";
+            }
+          }
         }
         await load();
       });
+      await refreshNativeScope();
+
       await load();
       if (
         Object.keys(schemas)
@@ -2970,7 +3082,11 @@
       message("Impossible d’actualiser les colonnes : " + err.message, true);
     }
   };
-  $("refresh").onclick = () => (demo ? init() : load());
+  $("refresh").onclick = async () => {
+    if (demo) return init();
+    await refreshNativeScope();
+    await load();
+  };
   $("cancel").onclick = endEdit;
   $("editor").addEventListener("cancel", () => {
     editing = null;

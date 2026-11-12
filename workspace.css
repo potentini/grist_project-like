@@ -591,3 +591,57 @@ body[data-current-view="notes"] .item[data-kind="actions"] {
     display: none;
   }
 }
+
+.item {
+  padding: 8px 10px;
+  margin: 3px 0;
+}
+.compact-card > .item-kind {
+  display: inline;
+  margin: 0 7px 0 0;
+}
+.compact-card > strong {
+  display: inline;
+  line-height: 1.35;
+}
+.card-facts {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.card-facts > span {
+  display: inline;
+}
+.fact-separator {
+  color: #617187;
+}
+.card-progress {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  font-size: 12px;
+}
+.card-progress progress {
+  width: 58px;
+  height: 4px;
+  margin: 0;
+}
+.card-excerpt {
+  margin-top: 3px;
+  -webkit-line-clamp: 1;
+  line-height: 1.4;
+}
+.item .badge {
+  margin-top: 3px;
+  padding: 2px 5px;
+}
+.compact-card .point-origin {
+  margin-top: 3px;
+  font-size: 12px;
+}
+#detail .tree-row .item {
+  padding: 7px 9px;
+}

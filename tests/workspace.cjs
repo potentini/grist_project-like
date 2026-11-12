@@ -320,6 +320,7 @@ const fixture = require("../demo.json");
       },
       selectedTable: {
         getTableId: async () => {
+          if (window.nativeUnavailable) throw Error("RPC indisponible");
           if (!window.nativeTableId)
             throw Error("No linked view in this fixture");
           return window.nativeTableId;
@@ -394,6 +395,23 @@ const fixture = require("../demo.json");
         },
       },
     };
+    if (location.search.includes("resume=1")) {
+      window.nativeTableId = "Projets";
+      window.nativeFilterIds = [1];
+      window.nativeUnavailable = location.search.includes("offline=1");
+      window.viewFetchCalls = 0;
+      window.grist.viewApi = {
+        fetchSelectedTable: async () => {
+          window.viewFetchCalls++;
+          if (window.nativeUnavailable) throw Error("RPC indisponible");
+          return encode(
+            db.data.projects.filter((r) =>
+              window.nativeFilterIds.includes(r.id),
+            ),
+          );
+        },
+      };
+    }
   }, fixture);
   await page.goto("http://127.0.0.1:8766");
   await page
@@ -828,7 +846,7 @@ const fixture = require("../demo.json");
       await page
         .locator("#detail [data-kind=points]:visible .point-origin")
         .innerText(),
-      /Réunion de coordination · 10\/11\/2026/,
+      /Réunion : Réunion de coordination ; Date : 10\/11\/2026/,
     );
     await page.locator("#detail [data-kind=points]:visible").click();
     assert.match(
@@ -1233,6 +1251,15 @@ const fixture = require("../demo.json");
     ["", "2"],
   );
   await page.locator("#projectFilter").selectOption("2");
+  await page.evaluate(async () => {
+    window.nativeUnavailable = true;
+    await window.nativeRecordCallback(window.testDb.data.tasks);
+  });
+  assert.equal(
+    await page.locator('#list [data-kind=tasks][data-id="1"]').count(),
+    0,
+  );
+  await page.evaluate(() => (window.nativeUnavailable = false));
 
   await page.evaluate(async () => {
     await window.nativeRecordCallback([]);
@@ -1258,7 +1285,7 @@ const fixture = require("../demo.json");
     1,
   );
   await page.evaluate(async () => {
-    window.nativeTableId = null;
+    window.nativeTableId = "NonMappedTable";
     await window.nativeRecordCallback([]);
   });
   await page.locator("#advancedFilters summary").click();
@@ -1354,9 +1381,17 @@ const fixture = require("../demo.json");
   await page.goto("http://127.0.0.1:8766/?cards=1");
   const card = page.locator('#list [data-kind=tasks][data-id="1"]');
   await card.waitFor();
-  assert.match(await card.innerText(), /Début 01\/11\/2026/);
-  assert.match(await card.innerText(), /Fin 20\/12\/2026/);
+  assert.match(await card.innerText(), /Date de début : 01\/11\/2026/);
+  assert.match(await card.innerText(), /Date de fin : 20\/12\/2026/);
   assert.match(await card.innerText(), /Avancement : 0 %/);
+  assert.ok((await card.boundingBox()).height < 130);
+  assert.equal(await card.locator(".card-facts > .card-progress").count(), 1);
+  assert.ok(
+    (await card.locator(".card-field-label").allTextContents()).every((text) =>
+      text.trim().endsWith(":"),
+    ),
+  );
+
   assert.match(await card.innerText(), /avant Noël/);
   assert.equal(await card.locator("img").count(), 0);
   assert.match(await card.locator(".card-excerpt").innerText(), /<img/);
@@ -1410,6 +1445,113 @@ const fixture = require("../demo.json");
   await page.setViewportSize({ width: 1440, height: 1000 });
   console.log(
     "PASS populated/zero-progress cards, escaped previews, pointer and keyboard resizing, bounds, saved ratio and mobile stacking",
+  );
+
+  await page.goto("http://127.0.0.1:8766/?resume=1");
+  await page.locator('#list [data-kind=projects][data-id="1"]').waitFor();
+  assert.equal(
+    await page.locator('#list [data-kind=projects][data-id="2"]').count(),
+    0,
+  );
+  await page.evaluate(async () => {
+    window.scopeLeak = false;
+    new MutationObserver(() => {
+      if (document.querySelector('#list [data-kind=projects][data-id="2"]'))
+        window.scopeLeak = true;
+    }).observe(document.querySelector("#list"), {
+      childList: true,
+      subtree: true,
+    });
+    window.nativeUnavailable = true;
+    await window.nativeRecordCallback(window.testDb.data.projects);
+  });
+  assert.equal(
+    await page.locator('#list [data-kind=projects][data-id="2"]').count(),
+    0,
+  );
+  assert.match(
+    await page.locator("#message").innerText(),
+    /dernier filtre conservé/,
+  );
+  const fetchCount = await page.evaluate(() => window.viewFetchCalls);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await page.waitForFunction((n) => window.viewFetchCalls > n, fetchCount);
+  assert.equal(await page.evaluate(() => window.scopeLeak), false);
+  await page.evaluate(() => {
+    window.nativeUnavailable = false;
+    window.nativeFilterIds = [2];
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await page.locator('#list [data-kind=projects][data-id="2"]').waitFor();
+  assert.equal(
+    await page.locator('#list [data-kind=projects][data-id="1"]').count(),
+    0,
+  );
+  assert.deepEqual(
+    await page
+      .locator("#projectFilter option")
+      .evaluateAll((opts) => opts.map((o) => o.value)),
+    ["", "2"],
+  );
+  await page.evaluate(() => {
+    window.originalViewFetcher = window.grist.viewApi.fetchSelectedTable;
+    window.pendingNativeRequests = [];
+    window.grist.viewApi.fetchSelectedTable = () =>
+      new Promise((resolve) => window.pendingNativeRequests.push(resolve));
+    window.nativeCallbacks = [
+      window.nativeRecordCallback([]),
+      window.nativeRecordCallback([]),
+    ];
+  });
+  await page.waitForFunction(() => window.pendingNativeRequests.length === 2);
+  await page.evaluate(() => window.pendingNativeRequests[1]({ id: [2] }));
+  await page.locator('#list [data-kind=projects][data-id="2"]').waitFor();
+  await page.evaluate(async () => {
+    window.pendingNativeRequests[0]({ id: [1] });
+    await Promise.all(window.nativeCallbacks);
+    window.grist.viewApi.fetchSelectedTable = window.originalViewFetcher;
+  });
+  assert.equal(
+    await page.locator('#list [data-kind=projects][data-id="1"]').count(),
+    0,
+  );
+  await page.evaluate(() => {
+    window.nativeFilterIds = [];
+    window.dispatchEvent(new Event("online"));
+  });
+  await page.waitForFunction(
+    () => document.querySelectorAll("#list [data-kind=projects]").length === 0,
+  );
+  await page.evaluate(async () => {
+    window.nativeUnavailable = true;
+    await window.nativeRecordCallback(window.testDb.data.projects);
+  });
+  assert.equal(await page.locator("#list [data-kind=projects]").count(), 0);
+  await page.evaluate(() => {
+    window.nativeUnavailable = false;
+    window.nativeFilterIds = [1, 2];
+    window.dispatchEvent(new Event("pageshow"));
+  });
+  await page.waitForFunction(
+    () => document.querySelectorAll("#list [data-kind=projects]").length === 2,
+  );
+  await page.goto("http://127.0.0.1:8766/?resume=1&offline=1");
+  await page
+    .getByText("Filtres Grist en attente de connexion.", { exact: true })
+    .waitFor();
+  assert.equal(await page.locator("#list [data-kind=projects]").count(), 0);
+  await page.evaluate(() => {
+    window.nativeUnavailable = false;
+    window.dispatchEvent(new Event("online"));
+  });
+  await page.locator('#list [data-kind=projects][data-id="1"]').waitFor();
+  assert.equal(
+    await page.locator('#list [data-kind=projects][data-id="2"]').count(),
+    0,
+  );
+  assert.equal(await page.evaluate(() => window.writes.length), 0);
+  console.log(
+    "PASS authoritative filtered view on startup/resume, retained scope through transient failures including zero rows, visibility/focus/online/pageshow refresh and no unfiltered startup",
   );
   await page.goto("http://127.0.0.1:8766/?layout=1");
   await page.locator("#list [data-kind=projects]").first().click();
