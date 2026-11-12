@@ -720,12 +720,29 @@ body[data-current-view="notes"] .item[data-kind="actions"] {
   max-width: 220px;
 }
 .quick-multiple > div {
-  left: auto;
-  right: 0;
+  left: 0;
+  right: auto;
   max-width: calc(100vw - 32px);
 }
 #fields input[type="checkbox"],
 #detail #editForm input[type="checkbox"] {
   width: auto;
   justify-self: start;
+}
+.quick-multiple {
+  font-size: 14px;
+  max-width: 240px;
+}
+.quick-multiple > summary {
+  min-width: 100px;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 8px 10px;
+}
+.quick-multiple > div label:first-child {
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 7px;
+  margin-bottom: 3px;
 }

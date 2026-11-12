@@ -467,7 +467,9 @@
       wrapper = div;
     }
     const caption = wrapper.querySelector("span")?.textContent || id;
-    select.setAttribute("aria-label", caption);
+    select.hidden = true;
+    select.setAttribute("aria-hidden", "true");
+    select.tabIndex = -1;
     let popup = wrapper.querySelector(".quick-multiple");
     if (!popup) {
       popup = document.createElement("details");
@@ -475,17 +477,29 @@
       popup.innerHTML = "<summary>Choix multiples</summary><div></div>";
       wrapper.append(popup);
     }
+    const selected = quickChoice(id),
+      text =
+        selected.length > 1
+          ? `${selected.length} choix`
+          : selected.length
+            ? opts.find(([v]) => String(v) === selected[0])?.[1] || selected[0]
+            : "Tous";
+    popup.querySelector("summary").textContent = text;
     popup
       .querySelector("summary")
-      .setAttribute("aria-label", "Choix multiples : " + caption);
+      .setAttribute("aria-label", caption + " : " + text);
+    popup.querySelector("summary").title = caption + " : " + text;
     popup.querySelector("div").innerHTML =
+      `<label><input type="checkbox" data-quick-all="${id}" ${!selected.length ? "checked" : ""}>Tous</label>` +
       opts
         .map(
           ([value, label]) =>
-            `<label><input type="checkbox" data-quick="${id}" value="${esc(value)}" ${quickChoice(id).includes(String(value)) ? "checked" : ""}>${esc(label)}</label>`,
+            `<label><input type="checkbox" data-quick="${id}" value="${esc(value)}" ${selected.includes(String(value)) ? "checked" : ""}>${esc(label)}</label>`,
         )
-        .join("") ||
-      '<span class="muted">Aucune valeur dans le périmètre courant.</span>';
+        .join("") +
+      (!opts.length
+        ? '<span class="muted">Aucune valeur dans le périmètre courant.</span>'
+        : "");
     popup.ontoggle = () => {
       if (popup.open)
         document.querySelectorAll(".quick-multiple").forEach((other) => {
@@ -493,14 +507,39 @@
         });
     };
     popup.onchange = (e) => {
-      if (!e.target.matches("[data-quick]")) return;
-      quickSelections[id] = [...popup.querySelectorAll("input:checked")].map(
-        (x) => x.value,
-      );
+      if (!e.target.matches("[data-quick],[data-quick-all]")) return;
+      const all = e.target.hasAttribute("data-quick-all"),
+        value = e.target.value;
+      quickSelections[id] = all
+        ? []
+        : [...popup.querySelectorAll("input[data-quick]:checked")].map(
+            (x) => x.value,
+          );
       filterOptions();
       render();
+      [...popup.querySelectorAll("input")]
+        .find((x) =>
+          all
+            ? x.hasAttribute("data-quick-all")
+            : x.hasAttribute("data-quick") && x.value === value,
+        )
+        ?.focus({ preventScroll: true });
+    };
+    popup.onkeydown = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        popup.open = false;
+        popup.querySelector("summary").focus({ preventScroll: true });
+      }
     };
   }
+
+  document.addEventListener("pointerdown", (e) => {
+    if (!e.target.closest(".quick-multiple"))
+      document
+        .querySelectorAll(".quick-multiple[open]")
+        .forEach((d) => (d.open = false));
+  });
 
   function advancedMatch(k, r) {
     if (!advancedSets) {

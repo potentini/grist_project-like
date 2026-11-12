@@ -12,6 +12,19 @@ const fixture = require("../demo.json");
     viewport: { width: 1440, height: 1000 },
   });
   page.on("pageerror", (e) => errors.push(e.message));
+  async function setQuick(id, values) {
+    const menu = page
+      .locator("#" + id)
+      .locator("..")
+      .locator(".quick-multiple");
+    if (!(await menu.evaluate((el) => el.open)))
+      await menu.locator("summary").click();
+    await menu.locator("[data-quick-all]").check();
+    for (const value of values)
+      await menu.locator(`input[data-quick][value="${value}"]`).check();
+    await menu.locator("summary").click();
+  }
+
   await page.route("https://docs.getgrist.com/**", (r) =>
     r.fulfill({ body: "" }),
   );
@@ -1307,7 +1320,7 @@ const fixture = require("../demo.json");
       .evaluateAll((opts) => opts.map((o) => o.value)),
     ["", "2"],
   );
-  await page.locator("#projectFilter").selectOption("2");
+  await setQuick("projectFilter", ["2"]);
   await page.evaluate(async () => {
     window.nativeUnavailable = true;
     await window.nativeRecordCallback(window.testDb.data.tasks);
@@ -1625,14 +1638,38 @@ const fixture = require("../demo.json");
       .locator("#" + id)
       .locator("..")
       .locator(".quick-multiple");
+  for (const id of ["projectFilter", "ownerFilter", "statusFilter"]) {
+    assert.equal(await page.locator("#" + id).isVisible(), false);
+    assert.equal(await menu(id).count(), 1);
+    assert.equal(await menu(id).locator("summary").textContent(), "Tous");
+  }
   await menu("projectFilter").locator("summary").click();
   await menu("projectFilter").locator('input[value="1"]').check();
+  assert.notEqual(
+    await menu("projectFilter").locator("summary").textContent(),
+    "Tous",
+  );
   await menu("projectFilter").locator('input[value="2"]').check();
   assert.equal(
     await page.locator("#projectFilter").inputValue(),
     "__multiple__",
   );
   assert.equal(await page.locator("#list [data-kind=projects]").count(), 2);
+  assert.equal(
+    await menu("projectFilter").locator("summary").textContent(),
+    "2 choix",
+  );
+  await page.keyboard.press("Escape");
+  assert.equal(await menu("projectFilter").evaluate((el) => el.open), false);
+  assert.equal(
+    await menu("projectFilter")
+      .locator("summary")
+      .evaluate((el) => el === document.activeElement),
+    true,
+  );
+  await menu("projectFilter").locator("summary").click();
+  await page.locator("#search").click();
+  assert.equal(await menu("projectFilter").evaluate((el) => el.open), false);
   await menu("projectFilter").locator("summary").click();
   await menu("ownerFilter").locator("summary").click();
   await menu("ownerFilter").locator('input[value="Alice Référente"]').check();
@@ -1646,9 +1683,9 @@ const fixture = require("../demo.json");
   await menu("statusFilter").locator('input[value="En cours"]').check();
   await menu("statusFilter").locator('input[value="À faire"]').check();
   await menu("statusFilter").locator("summary").click();
-  await page.locator("#projectFilter").selectOption("");
-  await page.locator("#ownerFilter").selectOption("");
-  await page.locator("#statusFilter").selectOption("");
+  await setQuick("projectFilter", []);
+  await setQuick("ownerFilter", []);
+  await setQuick("statusFilter", []);
   await page.locator("#advancedFilters summary").click();
   await page.locator("#advancedKind").selectOption("tasks");
   await page.locator("#advancedField").selectOption("Responsable");
@@ -1878,7 +1915,7 @@ const fixture = require("../demo.json");
   await dependency.locator('[data-kind=streams][data-id="1"]').first().click();
   assert.equal(await page.locator("[data-history=forward]").isDisabled(), true);
   // Returning across tabs restores the old view's filters as well as its location.
-  await page.locator("#projectFilter").selectOption("1");
+  await setQuick("projectFilter", ["1"]);
   await page.locator("#search").fill("Préparer");
   await page.locator("#list").evaluate((el) => (el.scrollTop = 0));
   const beforeTab = await snapshot();
