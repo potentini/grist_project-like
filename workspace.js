@@ -2362,7 +2362,9 @@
     },
     true,
   );
+  let timelineHeadingObserver;
   function renderDetail() {
+    timelineHeadingObserver?.disconnect();
     if (editing?.inline) return;
     const k = selection?.k,
       r = (data[k] || []).find((r) => r.id === selection.id);
@@ -2517,6 +2519,17 @@
         ...$("detail").querySelectorAll("[data-edit],[data-convert]"),
       ].reverse())
         actionBar.prepend(control);
+    const timelineButton = $("detail").querySelector("[data-project-timeline]");
+    if (timelineButton) {
+      const summary = timelineButton.previousElementSibling;
+      const align = () => {
+        timelineButton.style.top =
+          summary.offsetTop + summary.offsetHeight / 2 + "px";
+      };
+      timelineHeadingObserver = new ResizeObserver(align);
+      timelineHeadingObserver.observe(summary);
+      align();
+    }
     syncEdition();
   }
   async function load() {
@@ -3402,15 +3415,19 @@
         manualArchivedCol: c.fields?.Archive || "",
       };
     }
+    let popupEditing = false;
     return {
-      editingAllowed: editionEnabled,
+      setPopupEditing(enabled) {
+        popupEditing = enabled === true;
+      },
       ready() {},
       onOptions(cb) {
         cb({
           directMapping: config,
           uiState: {
-            allowEditing: editionEnabled,
-            tableAllowEditing: editionEnabled,
+            allowEditing: false,
+            tableAllowEditing: false,
+            viewMode: "timeline",
           },
         });
       },
@@ -3450,9 +3467,9 @@
             });
         },
         applyUserActions: async (actions) => {
-          if (!editionEnabled)
+          if (!popupEditing)
             throw Error(
-              "Activez le mode Édition dans le widget pour modifier.",
+              "Activez l’édition dans la fenêtre timeline pour modifier.",
             );
           for (const [op, table, id, fields] of actions) {
             const kind = kinds.find((k) => cfg(k).table === table),
@@ -3528,7 +3545,7 @@
       popupProjectId = project.id;
       $("timelineTitle").textContent =
         "Timeline — " + title("projects", project);
-      $("timelineFrame").src = "timeline.html?projectPopup=1";
+      $("timelineFrame").src = "timeline.html?projectPopup=1&v=20261112-popup-2";
       $("projectTimeline").showModal();
     },
     true,

@@ -1740,7 +1740,12 @@ const fixture = require("../demo.json");
   await page.locator('#list [data-kind=tasks][data-id="1"]').click();
   await page.locator("[data-project-timeline]").click();
   const popup = page.frameLocator("#timelineFrame");
-  await popup.locator(".hierarchy-table").waitFor();
+  await popup.locator(".hierarchy-table").waitFor({ state: "attached" });
+  assert.equal(await popup.locator("#tableView").isVisible(), false);
+  assert.equal(await popup.locator("#tableToolbarActions").isVisible(), false);
+  assert.equal(await popup.locator("#ganttContainer").isVisible(), true);
+  await popup.locator("#popupTableToggle").click();
+  assert.equal(await popup.locator("#tableView").isVisible(), true);
   assert.equal(
     await popup.getByText("Autre projet", { exact: true }).count(),
     0,
@@ -1749,61 +1754,70 @@ const fixture = require("../demo.json");
     await popup.getByText("Autre chantier", { exact: true }).count(),
     0,
   );
-  assert.equal(
-    (await popup.getByText("Projet exemple", { exact: true }).count()) > 0,
-    true,
-  );
   if (
     (await popup.locator("#tableExpandAllBtn").innerText())
       .toLowerCase()
       .includes("déplier")
   )
     await popup.locator("#tableExpandAllBtn").click();
-  assert.equal(
-    await popup.locator('tr[data-node-id="L3:src:Taches:1"]').count(),
-    1,
-  );
   assert.ok(
     (await popup.locator('tr[data-node-id^="L4:src:Actions:"]').count()) > 0,
   );
-  assert.equal(await popup.locator("#tableToggleEditBtn").isDisabled(), true);
-  assert.equal(
-    await popup
-      .locator('tr[data-node-id="L3:src:Taches:1"] [data-field=name]')
-      .count(),
-    0,
-  );
-  assert.equal(await page.evaluate(() => window.writes.length), 0);
   const popupTitle = popup.locator(
     'tr[data-node-id="L3:src:Taches:1"] [data-field=name]',
   );
+  assert.equal(await popupTitle.count(), 0);
+  await popup.locator("#toggleDateEditBtn").click();
+  await popupTitle.fill("Modification indépendante");
+  await popupTitle.dispatchEvent("change");
+  await page.waitForFunction(
+    () => window.testDb.data.tasks[0].Titre === "Modification indépendante",
+  );
+  assert.equal(
+    await page.locator("#editionButton").getAttribute("aria-pressed"),
+    "false",
+  );
+  await popup.locator("#tableToggleEditBtn").click();
+  assert.equal(await popupTitle.count(), 0);
+  await popup.locator("#popupTableToggle").click();
+  assert.equal(await popup.locator("#tableView").isVisible(), false);
   await page.locator("#timelineClose").click();
+  const titleBox = await page.locator("[data-project-timeline]").boundingBox();
+  const headingBox = await page
+    .locator("[data-project-timeline]")
+    .locator("..")
+    .locator(":scope > summary")
+    .boundingBox();
+  assert.ok(
+    Math.abs(
+      titleBox.y + titleBox.height / 2 - headingBox.y - headingBox.height / 2,
+    ) < 2,
+  );
   await page.locator("#editionButton").click();
   await page.locator("[data-project-timeline]").click();
-  await popup.locator(".hierarchy-table").waitFor();
+  await popup.locator(".hierarchy-table").waitFor({ state: "attached" });
+  assert.equal(await popup.locator("#tableView").isVisible(), false);
+  await popup.locator("#popupTableToggle").click();
+  assert.equal(await popupTitle.count(), 0);
+  await popup.locator("#tableToggleEditBtn").click();
   if (
     (await popup.locator("#tableExpandAllBtn").innerText())
       .toLowerCase()
       .includes("déplier")
   )
     await popup.locator("#tableExpandAllBtn").click();
-  if (
-    (await popup.locator("#tableToggleEditBtn").innerText()).includes("bloquée")
-  )
-    await popup.locator("#tableToggleEditBtn").click();
   await popupTitle.fill("Tâche modifiée en popup");
   await popupTitle.dispatchEvent("change");
   await page.waitForFunction(
     () => window.testDb.data.tasks[0].Titre === "Tâche modifiée en popup",
   );
   await page.locator("#timelineClose").click();
-  await page.locator("#projectTimeline").waitFor({ state: "hidden" });
   assert.match(
     await page.locator("#detail").innerText(),
     /Tâche modifiée en popup/,
   );
   console.log(
-    "PASS project popup from task, full project hierarchy and actions, scoped records, read-mode guard and source updates",
+    "PASS aligned popup heading, collapsed table and controls, independent edition from either control, project scope and source updates",
   );
 
   await page.goto("http://127.0.0.1:8766/?cards=1");

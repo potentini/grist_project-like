@@ -801,17 +801,14 @@ body[data-current-view="notes"] .item[data-kind="actions"] {
 }
 .detail-section > [data-project-timeline] {
   position: absolute;
-  top: 0;
   right: 0;
   margin: 0;
+  transform: translateY(-50%);
   font-size: 12px;
+  background: #eaf2fb;
+  border-color: #bed1e7;
+  color: #234b75;
 }
-@media (max-width: 800px) {
-  .detail-section > [data-project-timeline] {
-    position: static;
-    margin-bottom: 8px;
-  }
-  .detail-section:has(> [data-project-timeline]) > summary {
-    max-width: 100%;
-  }
+.detail-section > [data-project-timeline]:hover {
+  background: #dce9f7;
 }

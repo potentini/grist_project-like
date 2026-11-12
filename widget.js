@@ -3039,6 +3039,11 @@
 
   function toggleEditing() {
     allowEditing = !allowEditing;
+    if (document.documentElement.dataset.projectPopup === "true") {
+      tableAllowEditing = allowEditing;
+      grist.setPopupEditing(allowEditing);
+      renderTableView();
+    }
     updateEditButtons();
     if (!allowEditing && tooltipState.editingField) {
       tooltipState.editingField = null;
@@ -3376,6 +3381,10 @@
   toggleDateEditBtn.addEventListener("click", toggleEditing);
   tableToggleEditBtn?.addEventListener("click", () => {
     tableAllowEditing = !tableAllowEditing;
+    if (document.documentElement.dataset.projectPopup === "true") {
+      allowEditing = tableAllowEditing;
+      grist.setPopupEditing(allowEditing);
+    }
     saveState();
     updateEditButtons();
     if (tableAddLevel1Btn) tableAddLevel1Btn.disabled = !canAddLevel(1);
