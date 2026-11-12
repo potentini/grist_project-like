@@ -792,14 +792,14 @@ body[data-current-view="notes"] .item[data-kind="actions"] {
   font-weight: normal;
 }
 
-.detail-section:has(> [data-project-timeline]) {
+.timeline-section {
   position: relative;
 }
-.detail-section[open]:has(> [data-project-timeline]) > summary {
+.timeline-section > .detail-section > summary {
   width: fit-content;
   max-width: calc(100% - 250px);
 }
-.detail-section > [data-project-timeline] {
+.timeline-section > [data-project-timeline] {
   position: absolute;
   right: 0;
   margin: 0;
@@ -811,7 +811,7 @@ body[data-current-view="notes"] .item[data-kind="actions"] {
   font-weight: 700;
   color: #173f6b;
 }
-.detail-section > [data-project-timeline]:hover {
+.timeline-section > [data-project-timeline]:hover {
   background: transparent;
   color: #102f52;
   text-decoration: underline;
@@ -822,8 +822,4 @@ body[data-current-view="notes"] .item[data-kind="actions"] {
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
-}
-
-.detail-section:not([open]) > [data-project-timeline] {
-  display: none;
 }

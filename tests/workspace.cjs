@@ -1786,7 +1786,7 @@ const fixture = require("../demo.json");
   const headingBox = await page
     .locator("[data-project-timeline]")
     .locator("..")
-    .locator(":scope > summary")
+    .locator(":scope > details > summary")
     .boundingBox();
   assert.ok(
     Math.abs(

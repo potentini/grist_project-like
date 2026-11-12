@@ -2348,7 +2348,12 @@
   }
   function detailSection(k, r, name, label, content) {
     const key = `section:${k}:${r.id}:${name}`;
-    return `<details class="detail-section" data-section-key="${key}" ${folded.has(key) ? "" : "open"}><summary>${esc(label)}</summary>${name === "dependents" && ["projects", "streams", "tasks"].includes(k) ? ' <button type="button" data-project-timeline>Ouvrir la timeline du projet</button>' : ""}${content}</details>`;
+    const timeline =
+      name === "dependents" && ["projects", "streams", "tasks"].includes(k);
+    const section = `<details class="detail-section" data-section-key="${key}" ${folded.has(key) ? "" : "open"}><summary>${esc(label)}</summary>${content}</details>`;
+    return timeline
+      ? `<div class="timeline-section">${section}<button type="button" data-project-timeline>Ouvrir la timeline du projet</button></div>`
+      : section;
   }
   document.querySelector("main").addEventListener(
     "toggle",
@@ -2526,7 +2531,8 @@
         actionBar.prepend(control);
     const timelineButton = $("detail").querySelector("[data-project-timeline]");
     if (timelineButton) {
-      const summary = timelineButton.previousElementSibling;
+      const summary =
+        timelineButton.previousElementSibling.querySelector("summary");
       const align = () => {
         timelineButton.style.top =
           summary.offsetTop + summary.offsetHeight / 2 + "px";
