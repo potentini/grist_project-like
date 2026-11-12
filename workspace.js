@@ -129,8 +129,11 @@
       ],
     },
   };
-  for (const k of ["projects", "streams", "tasks", "actions"])
+  for (const k of ["projects", "streams", "tasks", "actions"]) {
     schemas[k].fields.push("ResponsableDiPSi");
+    if (!schemas[k].fields.includes("Avancement"))
+      schemas[k].fields.push("Avancement");
+  }
   for (const schema of Object.values(schemas)) schema.fields.push("Archive");
   const aliases = {
     Titre: ["Titre", "Nom", "Name", "Title", "Tache"],
@@ -763,6 +766,21 @@
   function val(k, r, f) {
     return r?.[cfg(k).fields?.[f]] ?? "";
   }
+  function progressBaseOne(k) {
+    return cfg(k).progressBaseOne !== false;
+  }
+  function progressNumber(value) {
+    if (value == null || String(value).trim() === "") return null;
+    const number = Number(String(value).trim().replace(",", "."));
+    return Number.isFinite(number) ? number : null;
+  }
+  function progressPercent(k, r) {
+    const number = progressNumber(val(k, r, "Avancement"));
+    return number === null ? null : number * (progressBaseOne(k) ? 100 : 1);
+  }
+  function progressText(percent) {
+    return percent.toLocaleString("fr-FR", { maximumFractionDigits: 10 });
+  }
   function title(k, r) {
     return (
       displayValue(k, r, "Titre") ||
@@ -963,7 +981,12 @@
         supported = choices.includes(value);
       }
       if (supported) {
-        fields[cfg(destKind).fields[to]] = value;
+        fields[cfg(destKind).fields[to]] =
+          from === "Avancement" && progressNumber(value) !== null
+            ? (progressNumber(value) *
+                (progressBaseOne(sourceKind) ? 100 : 1)) /
+              (progressBaseOne(destKind) ? 100 : 1)
+            : value;
         copied.push(to);
       } else skipped.push(from);
     }
@@ -1467,16 +1490,10 @@
       for (const extra of cfg(k).extraFields || [])
         if (extra.showInCard !== false)
           add(extra.id, displayValue(k, r, extra.id));
-    const progress = val(k, r, "Avancement");
-    if (
-      rich &&
-      progress !== "" &&
-      progress != null &&
-      Number.isFinite(Number(progress))
-    ) {
-      const percent = Math.round(Number(progress) * 100);
+    const percent = progressPercent(k, r);
+    if (rich && percent !== null) {
       facts.push(
-        `<span class="card-progress"><span><span class="card-field-label">${esc(fieldLabel(k, "Avancement"))} :</span> ${percent} %</span><progress max="100" value="${Math.max(0, Math.min(100, percent))}" aria-label="${esc(fieldLabel(k, "Avancement"))} : ${percent} %"></progress></span>`,
+        `<span class="card-progress"><span><span class="card-field-label">${esc(fieldLabel(k, "Avancement"))} :</span> ${progressText(percent)} %</span><progress max="100" value="${Math.max(0, Math.min(100, percent))}" aria-label="${esc(fieldLabel(k, "Avancement"))} : ${progressText(percent)} %"></progress></span>`,
       );
     }
     if (rich && k === "notes")
@@ -2406,11 +2423,9 @@
     for (const extra of cfg(k).extraFields || [])
       if (cfg(k).fields?.[extra.id])
         html += `<section class="extra-field"><h3>${esc(fieldLabel(k, extra.id))}</h3><div data-slot="${extra.id}" class="text">${esc(displayValue(k, r, extra.id)) || '<span class="muted">Non renseigné</span>'}</div></section>`;
-    const progress = val(k, r, "Avancement");
-    if (progress !== "" && Number.isFinite(Number(progress))) {
-      const percent = Math.round(Number(progress) * 100);
-      html += `<p>${esc(fieldLabel(k, "Avancement"))} : ${percent} %</p><progress max="100" value="${percent}"></progress>`;
-    }
+    const percent = progressPercent(k, r);
+    if (cfg(k).fields?.Avancement)
+      html += `<section><label>${esc(fieldLabel(k, "Avancement"))} : <span data-slot="Avancement">${percent === null ? "Non renseigné" : progressText(percent) + " %"}</span></label>${percent === null ? "" : `<progress max="100" value="${Math.max(0, Math.min(100, percent))}"></progress>`}</section>`;
     for (const f of [
       "Description",
       "Contenu",
@@ -2596,7 +2611,7 @@
                       .filter((x) => x.table === c.table)
                       .map((x) => [x.colId, x.label || x.colId]),
                     c.fields?.[f],
-                  )}</select></label><input class="field-label" data-label-kind="${k}" data-label-field="${f}" value="${esc(c.fieldLabels?.[f] || "")}" placeholder="Libellé affiché : ${esc(fieldLabel(k, f))}" aria-label="Libellé ${k}.${f}">`,
+                  )}</select></label>${f === "Avancement" ? `<label><input type="checkbox" data-progress-base="${k}" ${c.progressBaseOne !== false ? "checked" : ""}> Sur base 1 (0,1 = 10 % ; sinon 0,1 = 0,1 %)</label>${c.table && !c.fields?.Avancement && !meta.some((m) => m.table === c.table && m.colId === "Avancement") ? `<button type="button" data-create-progress="${k}">Créer la colonne Avancement</button>` : ""}` : ""}<input class="field-label" data-label-kind="${k}" data-label-field="${f}" value="${esc(c.fieldLabels?.[f] || "")}" placeholder="Libellé affiché : ${esc(fieldLabel(k, f))}" aria-label="Libellé ${k}.${f}">`,
               )
               .join("") +
             `<div class="extra-mapping">${(c.extraFields || [])
@@ -2779,15 +2794,13 @@
             "</select>";
         } else if (type === "Bool")
           input = `<input type="checkbox" name="${f}" ${v === true ? "checked" : ""}>`;
-        else if (
-          f === "Avancement" ||
-          f === "Ordre" ||
-          /^(Numeric|Int)$/.test(type)
-        )
-          input = `<input name="${f}" type="number" step="any" ${f === "Avancement" ? 'min="0" max="1"' : ""} value="${esc(v)}">`;
+        else if (f === "Avancement")
+          input = `<input name="Avancement" type="text" inputmode="decimal" value="${esc(v)}" aria-describedby="progressHelp">`;
+        else if (f === "Ordre" || /^(Numeric|Int)$/.test(type))
+          input = `<input name="${f}" type="number" step="any"  value="${esc(v)}">`;
         else
           input = `<input name="${f}" ${f === "Titre" ? "required" : ""} value="${esc(v)}">`;
-        return `<label>${esc(fieldLabel(k, f))}${f === "Avancement" ? " (0 à 1 ; 0,5 = 50 %)" : ""}${input}</label>`;
+        return `<label>${esc(fieldLabel(k, f))}${f === "Avancement" ? `<small id="progressHelp">${progressBaseOne(k) ? "Sur base 1 : 0 à 1 ; 0,1 = 10 %" : "Sur base 100 : 0 à 100 ; 0,1 = 0,1 %"}. Virgule ou point acceptés.</small>` : ""}${input}</label>`;
       })
       .join("");
     if (r) {
@@ -2809,6 +2822,10 @@
           control && display.querySelector(`[data-slot="${control.name}"]`);
         if (slot) {
           slot.replaceChildren(control);
+          if (control.name === "Avancement") {
+            const help = label.querySelector("small");
+            if (help) slot.append(help);
+          }
           control.setAttribute(
             "aria-label",
             links[k]?.[control.name]
@@ -3117,11 +3134,18 @@
             "L",
             ...[...el.selectedOptions].map((o) => o.value).filter(Boolean),
           ];
-        else if (
-          f === "Avancement" ||
-          f === "Ordre" ||
-          /^(Numeric|Int)$/.test(m?.type || "")
-        )
+        else if (f === "Avancement") {
+          const number = progressNumber(v),
+            maximum = progressBaseOne(k) ? 1 : 100;
+          if (
+            String(v).trim() &&
+            (number === null || number < 0 || number > maximum)
+          )
+            throw Error(
+              `L’avancement doit être un nombre entre 0 et ${maximum} (virgule ou point acceptés).`,
+            );
+          v = number;
+        } else if (f === "Ordre" || /^(Numeric|Int)$/.test(m?.type || ""))
           v = v === "" ? null : Number(v);
         fields[cfg(k).fields[f]] = v;
       }
@@ -3542,6 +3566,12 @@
   };
   $("editForm").onsubmit = save;
   $("mapping").onchange = (e) => {
+    if (e.target.dataset.progressBase) {
+      const k = e.target.dataset.progressBase;
+      draft[k] ||= { fields: {} };
+      draft[k].progressBaseOne = e.target.checked;
+      return;
+    }
     if (e.target.dataset.extraLabel) {
       const extra = draft[e.target.dataset.extraKind]?.extraFields?.find(
         (x) => x.id === e.target.dataset.extraLabel,
@@ -3572,6 +3602,41 @@
     } else draft[k].fields[f] = e.target.value;
   };
   $("mapping").onclick = async (e) => {
+    if (e.target.dataset.createProgress) {
+      if (demo || !editionEnabled) {
+        message(
+          "Activez le mode Édition pour créer une colonne dans Grist.",
+          true,
+        );
+        return;
+      }
+      const k = e.target.dataset.createProgress,
+        table = draft[k]?.table;
+      if (!table) return;
+      e.target.disabled = true;
+      try {
+        await refreshMetadata();
+        if (!meta.some((m) => m.table === table && m.colId === "Avancement"))
+          await grist.docApi.applyUserActions([
+            [
+              "AddColumn",
+              table,
+              "Avancement",
+              { type: "Numeric", isFormula: false, formula: "" },
+            ],
+          ]);
+        await refreshMetadata();
+        draft[k].fields.Avancement = "Avancement";
+        mappingUI();
+        message(
+          "Colonne Avancement disponible. Enregistrez le mapping pour l’utiliser.",
+        );
+      } catch (err) {
+        message("Création de la colonne impossible : " + err.message, true);
+        e.target.disabled = false;
+      }
+      return;
+    }
     if (e.target.dataset.addExtra) {
       const k = e.target.dataset.addExtra;
       draft[k] ||= { fields: {} };
@@ -3659,6 +3724,7 @@
             statusCol: c.fields.Statut || "",
             responsibleCol: c.fields.Responsable || "",
             progressCol: c.fields.Avancement || "",
+            progressBaseOne: progressBaseOne(k),
             archivedCol: c.fields.Transforme || "",
             manualArchivedCol: c.fields.Archive || "",
           };

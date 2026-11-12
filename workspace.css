@@ -746,3 +746,16 @@ body[data-current-view="notes"] .item[data-kind="actions"] {
   padding-bottom: 7px;
   margin-bottom: 3px;
 }
+
+#mapping label:has([data-progress-base]) {
+  display: flex;
+  gap: 7px;
+}
+#mapping [data-progress-base] {
+  width: auto;
+}
+[data-slot="Avancement"] small {
+  display: block;
+  margin-top: 5px;
+  font-weight: normal;
+}

@@ -338,6 +338,33 @@ const fixture = require("../demo.json");
         (m) => m.table === "Chantiers" && m.colId === "Avancement",
       ).isFormula = true;
     }
+    if (location.search.includes("progress=1")) {
+      for (const [kind, tableId] of [
+        ["projects", "Projets"],
+        ["streams", "Chantiers"],
+        ["tasks", "Taches"],
+        ["actions", "Actions"],
+      ]) {
+        if (kind === "projects" && location.search.includes("create=1"))
+          continue;
+        if (
+          !db.meta.some((m) => m.table === tableId && m.colId === "Avancement")
+        )
+          db.meta.push({
+            id: db.meta.length + 1000,
+            parentId: db.tables.find((t) => t.tableId === tableId).id,
+            table: tableId,
+            colId: "Avancement",
+            label: "Avancement",
+            type: "Numeric",
+            isFormula: false,
+          });
+        db.meta.find(
+          (m) => m.table === tableId && m.colId === "Avancement",
+        ).isFormula = false;
+        for (const row of db.data[kind]) row.Avancement = 0.1;
+      }
+    }
     window.testOptions = location.search.includes("broader=1")
       ? JSON.parse(sessionStorage.getItem("broaderOptions") || "{}")
       : {};
@@ -366,6 +393,10 @@ const fixture = require("../demo.json");
     if (location.search.includes("cards=1"))
       window.testOptions = JSON.parse(
         sessionStorage.getItem("cardsOptions") || "{}",
+      );
+    if (location.search.includes("progress=1"))
+      window.testOptions = JSON.parse(
+        sessionStorage.getItem("progressOptions") || "{}",
       );
     window.writes = [];
     window.batches = [];
@@ -409,6 +440,11 @@ const fixture = require("../demo.json");
             "cardsOptions",
             JSON.stringify(window.testOptions),
           );
+        if (location.search.includes("progress=1"))
+          sessionStorage.setItem(
+            "progressOptions",
+            JSON.stringify(window.testOptions),
+          );
         optionsCallback(window.testOptions);
       },
       docApi: {
@@ -446,7 +482,17 @@ const fixture = require("../demo.json");
               Actions: "actions",
               Points: "points",
             }[t];
-            if (op === "UpdateRecord")
+            if (op === "AddColumn") {
+              db.meta.push({
+                id: db.meta.length + 1000,
+                parentId: table(t).id,
+                table: t,
+                colId: id,
+                label: id,
+                ...fields,
+              });
+              for (const row of db.data[k]) row[id] = null;
+            } else if (op === "UpdateRecord")
               Object.assign(
                 db.data[k].find((r) => r.id === id),
                 fields,
@@ -1547,6 +1593,147 @@ const fixture = require("../demo.json");
   await page.locator("#mappingButton").click();
   console.log(
     "PASS reference labels and editing, native filtered/empty records, arbitrary-field filtering, persistent blank mappings, custom names and shared action toolbar",
+  );
+
+  await page.goto("http://127.0.0.1:8766/?progress=1&create=1");
+  await page.locator("#list [data-kind=projects]").first().waitFor();
+  await page.locator("#editionButton").click();
+  await page.locator("#mappingButton").click();
+  await page.locator("[data-create-progress=projects]").click();
+  await page.waitForFunction(
+    () =>
+      document.querySelector("[data-map=projects][data-field=Avancement]")
+        ?.value === "Avancement",
+  );
+  const createdProgress = await page.evaluate(() =>
+    window.testDb.meta.find(
+      (m) => m.table === "Projets" && m.colId === "Avancement",
+    ),
+  );
+  assert.equal(createdProgress.type, "Numeric");
+  assert.equal(createdProgress.isFormula, false);
+  assert.equal(
+    await page.locator("[data-create-progress=projects]").count(),
+    0,
+  );
+  await page.locator("#mappingButton").click();
+  await page.evaluate(() => sessionStorage.removeItem("progressOptions"));
+  await page.goto("http://127.0.0.1:8766/?progress=1");
+  await page.locator("#list [data-kind=projects]").first().waitFor();
+  await page.locator("#mappingButton").click();
+  for (const kind of ["projects", "streams", "tasks", "actions"]) {
+    assert.equal(
+      await page
+        .locator(`[data-map=${kind}][data-field=Avancement]`)
+        .inputValue(),
+      "Avancement",
+    );
+    assert.equal(
+      await page.locator(`[data-progress-base=${kind}]`).isChecked(),
+      true,
+    );
+  }
+  await page.locator("[data-progress-base=projects]").uncheck();
+  await page.locator("[data-progress-base=tasks]").uncheck();
+  await page.locator("#applyMapping").click();
+  await page.waitForFunction(
+    () =>
+      window.testOptions.projectWorkspaceMappingV1?.tasks.progressBaseOne ===
+      false,
+  );
+  assert.equal(
+    await page.evaluate(
+      () => window.testOptions.directMapping.levels[3].progressBaseOne,
+    ),
+    false,
+  );
+  await page.reload();
+  await page.locator("#list [data-kind=projects]").first().waitFor();
+  await page.locator("#editionButton").click();
+  for (const [kind, view, expected] of [
+    ["projects", "projects", "0,1"],
+    ["streams", "projects", "10"],
+    ["tasks", "projects", "0,1"],
+    ["actions", "actions", "10"],
+  ]) {
+    await page.locator(`nav [data-view=${view}]`).click();
+    await page.locator(`#list [data-kind=${kind}][data-id="1"]`).click();
+    assert.match(
+      await page.locator("#detail").innerText(),
+      new RegExp("Avancement : " + expected + " %"),
+    );
+    for (const input of ["0,1", "0.1"]) {
+      await page.getByRole("button", { name: "Modifier", exact: true }).click();
+      assert.equal(
+        await page.locator("#detail [data-slot=Avancement] input").count(),
+        1,
+      );
+      await page.locator("#editForm [name=Avancement]").fill(input);
+      await page
+        .getByRole("button", { name: "Enregistrer", exact: true })
+        .click();
+      await page.waitForFunction(
+        () => document.querySelector("#editForm").parentElement.id === "editor",
+      );
+      assert.equal(
+        await page.evaluate((k) => window.testDb.data[k][0].Avancement, kind),
+        0.1,
+      );
+      assert.match(
+        await page.locator("#detail").innerText(),
+        new RegExp("Avancement : " + expected + " %"),
+      );
+    }
+  }
+  await page.getByRole("button", { name: "Modifier", exact: true }).click();
+  const writesBeforeInvalidProgress = await page.evaluate(
+    () => window.writes.length,
+  );
+  await page.locator("#editForm [name=Avancement]").fill("1,1");
+  await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
+  assert.match(await page.locator("#editError").innerText(), /entre 0 et 1/);
+  assert.equal(
+    await page.evaluate(() => window.writes.length),
+    writesBeforeInvalidProgress,
+  );
+  await page.getByRole("button", { name: "Annuler", exact: true }).click();
+  console.log(
+    "PASS progress on all four levels, real data column creation, independent persisted scales, comma/dot edits, fractional percentages and range validation",
+  );
+
+  await page.goto("http://127.0.0.1:8766/timeline.html?progress=1&refs=1");
+  const timelineProject = page.locator(
+    '#hierarchyTableWrap tr[data-node-id="L1:src:Projets:1"]',
+  );
+  await timelineProject.waitFor();
+  assert.match(await timelineProject.innerText(), /0\.1%/);
+  await page.locator("#tableToggleEditBtn").click();
+  const timelineProjectProgress = timelineProject.locator(
+    "[data-field=progress]",
+  );
+  assert.equal(await timelineProjectProgress.inputValue(), "0.1");
+  await timelineProjectProgress.fill("0.2");
+  await timelineProjectProgress.dispatchEvent("change");
+  await page.waitForFunction(
+    () => window.testDb.data.projects[0].Avancement === 0.2,
+  );
+  if (
+    (await page.locator("#tableExpandAllBtn").innerText())
+      .toLowerCase()
+      .includes("déplier")
+  )
+    await page.locator("#tableExpandAllBtn").click();
+  const timelineStreamProgress = page.locator(
+    '#hierarchyTableWrap tr[data-node-id="L2:src:Chantiers:1"] [data-field=progress]',
+  );
+  assert.equal(await timelineStreamProgress.inputValue(), "10");
+  await timelineStreamProgress.fill("25");
+  await timelineStreamProgress.dispatchEvent("change");
+  await page.waitForFunction(
+    () => window.testDb.data.streams[0].Avancement === 0.25,
+  );
+  console.log(
+    "PASS Table/Timeline displays fractional percentages and writes in the configured unit",
   );
 
   await page.goto("http://127.0.0.1:8766/?cards=1");
