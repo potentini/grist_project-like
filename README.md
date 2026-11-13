@@ -189,3 +189,5 @@ La liste occupe seule l’écran. Ouvrir un élément affiche uniquement le dét
 L’API publique du widget ne fournit pas l’identité de l’utilisateur connecté. L’affectation peut être confiée à une formule d’initialisation Grist sur la colonne de données Responsable : `user.Name` pour une colonne Texte, ou `Collaborateurs.lookupOne(Email=user.Email)` pour une référence (en adaptant les noms réels de table et de colonne). La formule doit s’appliquer aux nouvelles lignes, pas aux modifications ultérieures.
 
 Le widget laisse Grist calculer cette valeur lorsqu’un nouvel élément est enregistré sans responsable choisi. Un responsable explicitement sélectionné reste prioritaire ; la modification d’un élément existant ne réaffecte pas son responsable. Ce mécanisme attribue la valeur à l’enregistrement : il ne permet pas d’afficher l’identité dans le formulaire avant sa création.
+
+Dans **Filtres par niveau**, seuls les champs mappés pour le niveau sélectionné sont proposés, y compris les champs supplémentaires et les colonnes calculées mappées. Les libellés personnalisés sont repris. Retirer un champ du mapping retire également les filtres actifs qui utilisaient ce champ.

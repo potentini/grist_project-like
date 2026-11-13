@@ -1508,6 +1508,25 @@ const fixture = require("../demo.json");
   });
   await page.locator("#advancedFilters summary").click();
   await page.locator("#advancedKind").selectOption("tasks");
+  assert.equal(
+    await page.locator('#advancedField option[value="Priorite"]').count(),
+    0,
+  );
+  await page.locator("#mappingButton").click();
+  await page.locator("[data-add-extra=tasks]").click();
+  await page
+    .locator("[data-map=tasks][data-field=extra_1]")
+    .selectOption("Priorite");
+  await page
+    .locator("[data-extra-kind=tasks][data-extra-label=extra_1]")
+    .fill("Priorité du suivi");
+  await page.locator("#applyMapping").click();
+  await page.waitForFunction(() => document.querySelector("#mapping").hidden);
+  await page.locator("#advancedKind").selectOption("tasks");
+  assert.equal(
+    await page.locator('#advancedField option[value="Priorite"]').textContent(),
+    "Priorité du suivi",
+  );
   await page.locator("#advancedField").selectOption("Priorite");
   await page.locator("#advancedValue").fill("Haute");
   assert.equal(

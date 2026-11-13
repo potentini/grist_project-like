@@ -604,7 +604,18 @@
       scopeMatch(source, allowed, k, r),
     );
   }
+  function mappedFilterColumns(kind) {
+    if (!schemas[kind] || !cfg(kind).table) return new Set();
+    return new Set(
+      fieldsFor(kind)
+        .map((field) => cfg(kind).fields?.[field])
+        .filter(Boolean),
+    );
+  }
   function advancedUI(resetField = false) {
+    advancedRules = advancedRules.filter((rule) =>
+      mappedFilterColumns(rule.kind).has(rule.column),
+    );
     const old = $("advancedKind").value;
     $("advancedKind").innerHTML = Object.keys(schemas)
       .filter((k) => cfg(k).table)
@@ -618,6 +629,7 @@
       .filter(
         (c) =>
           c.table === cfg(k).table &&
+          mappedFilterColumns(k).has(c.colId) &&
           c.colId !== "manualSort" &&
           !c.colId.startsWith("gristHelper_"),
       )
@@ -628,21 +640,34 @@
         return `<option value="${esc(c.colId)}">${esc(f ? fieldLabel(k, f) : c.label || c.colId)}</option>`;
       })
       .join("");
+    if (oldField && !mappedFilterColumns(k).has(oldField)) {
+      advancedSelected = [];
+      $("advancedValue").value = "";
+    }
     if (oldField) $("advancedField").value = oldField;
     if (!$("advancedField").value) $("advancedField").selectedIndex = 0;
+    const hasField = !!$("advancedField").value;
+    for (const id of ["advancedField", "advancedValue", "advancedAdd"])
+      $(id).disabled = !hasField;
+    if (!hasField) {
+      advancedSelected = [];
+      $("advancedValue").value = "";
+    }
     const count =
       advancedRules.length +
       ($("advancedValue").value.trim() || advancedSelected.length ? 1 : 0);
     const column = meta.find(
       (c) => c.table === cfg(k).table && c.colId === $("advancedField").value,
     );
-    const choices = [
-      ...new Set(
-        (data[k] || [])
-          .filter((r) => nativeMatch(k, r))
-          .flatMap((r) => fieldValues(column, r[column?.colId], r)),
-      ),
-    ].sort((a, b) => a.localeCompare(b));
+    const choices = column
+      ? [
+          ...new Set(
+            (data[k] || [])
+              .filter((r) => nativeMatch(k, r))
+              .flatMap((r) => fieldValues(column, r[column?.colId], r)),
+          ),
+        ].sort((a, b) => a.localeCompare(b))
+      : [];
     $("advancedChoices").innerHTML =
       choices
         .filter(
