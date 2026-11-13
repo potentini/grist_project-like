@@ -2878,9 +2878,76 @@
             : control.value,
       );
     syncHierarchy("", !r);
+    searchableEditorFields(k);
     const origin = $("editForm").elements.namedItem("PointOrigine");
     if (k === "actions" && origin?.value)
       origin.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  const editorSearchObservers = [];
+  function searchableEditorFields(kind) {
+    editorSearchObservers
+      .splice(0)
+      .forEach((observer) => observer.disconnect());
+    for (const select of $("editForm").querySelectorAll("select[name]")) {
+      const wrapper = document.createElement("div");
+      wrapper.className = "reference-picker";
+      const search = document.createElement("input");
+      search.type = "search";
+      search.autocomplete = "off";
+      search.placeholder = "Rechercher dans les options…";
+      search.setAttribute(
+        "aria-label",
+        "Rechercher dans " + fieldLabel(kind, select.name),
+      );
+      search.dataset.searchFor = select.name;
+      const status = document.createElement("small");
+      status.className = "muted";
+      status.setAttribute("role", "status");
+      select.before(wrapper);
+      wrapper.append(search, select, status);
+      if (!select.hasAttribute("aria-label"))
+        select.setAttribute("aria-label", fieldLabel(kind, select.name));
+      const originalSize = select.size;
+      const filter = () => {
+        const query = norm(search.value);
+        let matches = 0,
+          visible = 0;
+        for (const option of select.options) {
+          const match = !query || norm(option.textContent).includes(query);
+          if (option.value && match) matches++;
+          // A search never clears an existing link, including multiple selections.
+          option.hidden = !!query && !match && !option.selected;
+          if (!option.hidden) visible++;
+        }
+        select.size = query ? Math.max(2, Math.min(6, visible)) : originalSize;
+        status.textContent = query
+          ? matches
+            ? `${matches} résultat${matches > 1 ? "s" : ""}.`
+            : "Aucun résultat. Les sélections existantes sont conservées."
+          : "";
+        status.hidden = !query;
+      };
+      search.addEventListener("input", filter);
+      search.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === "ArrowDown") {
+          event.preventDefault();
+          select.focus();
+        } else if (event.key === "Escape" && search.value) {
+          event.preventDefault();
+          event.stopPropagation();
+          search.value = "";
+          filter();
+        }
+      });
+      select.addEventListener("change", () => {
+        if (!select.multiple) search.value = "";
+        filter();
+      });
+      const observer = new MutationObserver(filter);
+      observer.observe(select, { childList: true });
+      editorSearchObservers.push(observer);
+      filter();
+    }
   }
   // Form-only hierarchy: selections remain drafts until Save.
   function syncHierarchy(changed = "", infer = false) {
@@ -3006,6 +3073,9 @@
   }
   function endEdit() {
     if (busy) return;
+    editorSearchObservers
+      .splice(0)
+      .forEach((observer) => observer.disconnect());
     const inline = editing?.inline;
     editing = null;
     $("editor").append($("editForm"));

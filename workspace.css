@@ -823,3 +823,21 @@ body[data-current-view="notes"] .item[data-kind="actions"] {
   gap: 8px;
   flex-shrink: 0;
 }
+
+.reference-picker {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.reference-picker > input[type="search"],
+.reference-picker > select {
+  width: 100%;
+  min-width: 0;
+}
+.reference-picker > small {
+  font-size: 12px;
+  font-weight: normal;
+}
+.reference-picker option[hidden] {
+  display: none;
+}
