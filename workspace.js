@@ -208,6 +208,7 @@
     dragged = null;
   const folded = new Set();
   const knownBranches = new Set();
+  let mappingSaving = false;
   let mappingWasSaved = false,
     nativeTable = null,
     nativeIds = null;
@@ -2633,7 +2634,9 @@
       for (const f of s.fields) {
         if (c.fields[f] || (!force && Object.hasOwn(c.fields, f))) continue;
         const names = aliases[f] || [f];
-        const columns = meta.filter((x) => x.table === c.table);
+        const columns = meta.filter(
+          (x) => x.table === c.table && !x.colId.startsWith("gristHelper_"),
+        );
         const exact = columns.filter((x) => norm(x.colId) === norm(f));
         const labels = columns.filter((x) => norm(x.label) === norm(f));
         const found = exact.length
@@ -2645,7 +2648,11 @@
                   (a) => norm(a) === norm(x.colId) || norm(a) === norm(x.label),
                 ),
               );
-        if (found.length === 1) c.fields[f] = found[0].colId;
+        if (
+          found.length === 1 &&
+          !(f === "ResponsableDiPSi" && found[0].colId === c.fields.Responsable)
+        )
+          c.fields[f] = found[0].colId;
       }
     }
     return copy;
@@ -2674,8 +2681,19 @@
                 (f) =>
                   `<label>${esc(f === "ResponsableDiPSi" ? "Responsable externe" : f)}${f === "Titre" ? " *" : ""}<select data-map="${k}" data-field="${f}">${options(
                     meta
-                      .filter((x) => x.table === c.table)
-                      .map((x) => [x.colId, x.label || x.colId]),
+                      .filter(
+                        (x) =>
+                          x.table === c.table &&
+                          (!x.colId.startsWith("gristHelper_") ||
+                            x.colId === c.fields?.[f]),
+                      )
+                      .map((x) => [
+                        x.colId,
+                        (x.label || x.colId) +
+                          (x.label && x.label !== x.colId
+                            ? ` [${x.colId}]`
+                            : ""),
+                      ]),
                     c.fields?.[f],
                   )}</select></label>${f === "Avancement" ? `<label><input type="checkbox" data-progress-base="${k}" ${c.progressBaseOne !== false ? "checked" : ""}> Sur base 1 (0,1 = 10 % ; sinon 0,1 = 0,1 %)</label>${c.table && !c.fields?.Avancement && !meta.some((m) => m.table === c.table && m.colId === "Avancement") ? `<button type="button" data-create-progress="${k}">Créer la colonne Avancement</button>` : ""}` : ""}<input class="field-label" data-label-kind="${k}" data-label-field="${f}" value="${esc(c.fieldLabels?.[f] || "")}" placeholder="Libellé affiché : ${esc(fieldLabel(k, f))}" aria-label="Libellé ${k}.${f}">`,
               )
@@ -2685,8 +2703,19 @@
                 (extra) =>
                   `<div class="extra-map-row"><input data-extra-label="${extra.id}" data-extra-kind="${k}" value="${esc(extra.label || "")}" placeholder="Libellé du champ"><select data-map="${k}" data-field="${extra.id}">${options(
                     meta
-                      .filter((m) => m.table === c.table)
-                      .map((m) => [m.colId, m.label || m.colId]),
+                      .filter(
+                        (m) =>
+                          m.table === c.table &&
+                          (!m.colId.startsWith("gristHelper_") ||
+                            m.colId === c.fields?.[extra.id]),
+                      )
+                      .map((m) => [
+                        m.colId,
+                        (m.label || m.colId) +
+                          (m.label && m.label !== m.colId
+                            ? ` [${m.colId}]`
+                            : ""),
+                      ]),
                     c.fields?.[extra.id],
                   )}</select><button type="button" data-remove-extra="${extra.id}" data-extra-kind="${k}">Retirer</button></div>`,
               )
@@ -3565,7 +3594,11 @@
           paintSplit();
         }
         const next = opts?.[optionKey];
-        if (next && JSON.stringify(next) !== JSON.stringify(mapping)) {
+        if (
+          !mappingSaving &&
+          next &&
+          JSON.stringify(next) !== JSON.stringify(mapping)
+        ) {
           mappingWasSaved = true;
           mapping = next;
           applyLabels();
@@ -4169,15 +4202,36 @@
         message("Mapping de démonstration : aucune configuration enregistrée.");
         return;
       }
+      if (mappingSaving) return;
+      // Read the visible controls as one snapshot, including selections whose change event is pending.
+      const saved = structuredClone(draft);
+      for (const select of $("mapping").querySelectorAll(
+        "select[data-map][data-field]",
+      )) {
+        const { map: kind, field } = select.dataset;
+        saved[kind] ||= { fields: {} };
+        if (field === "table") saved[kind].table = select.value;
+        else saved[kind].fields[field] = select.value;
+      }
+      mappingSaving = true;
       try {
-        const used = Object.values(draft)
+        for (const [kind, c] of Object.entries(saved)) {
+          if (
+            c.fields?.Responsable &&
+            c.fields.Responsable === c.fields.ResponsableDiPSi
+          )
+            throw Error(
+              `${schemas[kind].label} : Responsable et Responsable externe doivent utiliser deux colonnes différentes. Laissez Responsable externe non mappé si nécessaire.`,
+            );
+        }
+        const used = Object.values(saved)
           .map((c) => c.table)
           .filter(Boolean);
         if (new Set(used).size !== used.length)
           throw Error("Choisissez une table distincte pour chaque objet.");
         for (const [kind, fields] of Object.entries(links))
           for (const [field, target] of Object.entries(fields)) {
-            const source = draft[kind];
+            const source = saved[kind];
             const m = meta.find(
               (x) =>
                 x.table === source?.table &&
@@ -4185,8 +4239,8 @@
             );
             if (
               /^Ref(List)?:/.test(m?.type || "") &&
-              draft[target]?.table &&
-              m.type.split(":")[1] !== draft[target].table
+              saved[target]?.table &&
+              m.type.split(":")[1] !== saved[target].table
             )
               throw Error(
                 "La référence " +
@@ -4196,7 +4250,7 @@
                   " pointe vers une autre table.",
               );
           }
-        for (const [kind, c] of Object.entries(draft))
+        for (const [kind, c] of Object.entries(saved))
           for (const extra of c.extraFields || []) {
             const column = c.fields?.[extra.id];
             if (
@@ -4209,9 +4263,10 @@
                 `La colonne ${column} est déjà mappée dans ${schemas[kind].label}. Renommez le champ existant ou choisissez une autre colonne.`,
               );
           }
-        await grist.setOption(optionKey, draft);
+        await grist.setOption(optionKey, saved);
         mappingWasSaved = true;
-        mapping = structuredClone(draft);
+        mapping = structuredClone(saved);
+        draft = structuredClone(saved);
         applyLabels();
         const old = (await grist.getOption("directMapping")) || { levels: {} };
         for (const [i, k] of ["projects", "streams", "tasks"].entries()) {
@@ -4236,6 +4291,8 @@
         await load();
       } catch (err) {
         message("Mapping : " + err.message, true);
+      } finally {
+        mappingSaving = false;
       }
     }
   };

@@ -1924,6 +1924,49 @@ const fixture = require("../demo.json");
     "PASS new-row owner leaves native initial formula intact and preserves explicit owner",
   );
 
+  await page.evaluate(() => sessionStorage.removeItem("broaderOptions"));
+  await page.goto("http://127.0.0.1:8766/?broader=1&choices=1&tree=1");
+  await page.locator("#list [data-kind=projects]").first().waitFor();
+  await page.locator("#mappingButton").click();
+  const primaryOwner = page.locator("[data-map=tasks][data-field=Responsable]");
+  const externalOwner = page.locator(
+    "[data-map=tasks][data-field=ResponsableDiPSi]",
+  );
+  await externalOwner.selectOption("Responsable");
+  await page.locator("#applyMapping").click();
+  assert.match(
+    await page.locator("#message").innerText(),
+    /deux colonnes différentes/,
+  );
+  await externalOwner.selectOption("");
+  await primaryOwner.selectOption("");
+  await primaryOwner.evaluate((el) => {
+    el.value = "Responsable";
+  });
+  await page.locator("#applyMapping").click();
+  await page.waitForFunction(
+    () =>
+      window.testOptions.projectWorkspaceMappingV1?.tasks.fields.Responsable ===
+      "Responsable",
+  );
+  assert.equal(
+    await page.evaluate(
+      () =>
+        window.testOptions.projectWorkspaceMappingV1.tasks.fields
+          .ResponsableDiPSi,
+    ),
+    "",
+  );
+  await page.reload();
+  await page.locator("#list [data-kind=projects]").first().waitFor();
+  await page.locator("#mappingButton").click();
+  assert.equal(await primaryOwner.inputValue(), "Responsable");
+  assert.equal(await externalOwner.inputValue(), "");
+  await page.locator("#mappingButton").click();
+  console.log(
+    "PASS owner column conflict rejected and visible primary/blank external mappings persist after reload even without change event",
+  );
+
   await page.goto("http://127.0.0.1:8766/?cards=1");
   const card = page.locator('#list [data-kind=tasks][data-id="1"]');
   await card.waitFor();
