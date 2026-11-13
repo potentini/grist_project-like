@@ -2500,8 +2500,34 @@ const fixture = require("../demo.json");
   ])
     assert.equal(await phone.locator(selector).isVisible(), false);
   assert.equal(await phone.locator("#phoneNav").isVisible(), true);
+  assert.equal(await phone.locator("#message").isVisible(), false);
+  assert.equal(await phone.locator("#phoneSearch #search").isVisible(), true);
+  await phone.locator("#search").fill("inexistant");
+  assert.equal(await phone.locator("#list [data-kind=actions]").count(), 0);
+  await phone.locator("#search").fill("");
   await phone.locator("#phoneFilters").click();
   assert.equal(await phone.locator("#filterPanel").isVisible(), true);
+  assert.equal(await phone.locator("#showArchived").isVisible(), false);
+  const filterRows = await phone
+    .locator(".quick-filter")
+    .evaluateAll((items) =>
+      items.map((item) => item.getBoundingClientRect().y),
+    );
+  assert.ok(Math.max(...filterRows) - Math.min(...filterRows) < 2);
+  await phone.locator(".quick-multiple summary").first().tap();
+  const projectChoices = phone
+    .locator(".quick-multiple")
+    .first()
+    .locator("div");
+  assert.equal(await projectChoices.isVisible(), true);
+  const choiceBounds = await projectChoices.boundingBox();
+  assert.ok(choiceBounds.x >= 0 && choiceBounds.x + choiceBounds.width <= 390);
+  await phone.locator(".quick-multiple summary").first().tap();
+  await phone.screenshot({
+    path: "/workspace/exports/widget-phone-filters.png",
+    fullPage: true,
+  });
+
   await phone.locator("#phoneFilters").click();
   assert.equal(await phone.locator("#filterPanel").isVisible(), false);
   await phone.locator("#editionButton").click();
@@ -2626,6 +2652,9 @@ const fixture = require("../demo.json");
     assert.equal(await check.locator("#refresh").isVisible(), true);
     assert.equal(await check.locator("#phoneNav").isVisible(), false);
     assert.equal(await check.locator("#detail").isVisible(), true);
+    assert.equal(await check.locator(".filters #search").isVisible(), true);
+    assert.equal(await check.locator("#showArchived").isVisible(), true);
+    assert.equal(await check.locator("#message").isVisible(), true);
     await context.close();
   }
   console.log(

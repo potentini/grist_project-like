@@ -1079,3 +1079,104 @@ body.phone-mode #fields .grid {
   color: #748094;
   opacity: 1;
 }
+
+/* Compact filters and persistent search, restricted to phones. */
+body.phone-mode #message:not(.error) {
+  display: none;
+}
+body.phone-mode #phoneSearch {
+  flex: 0 0 auto;
+  padding: 0 9px 6px;
+}
+body.phone-mode #phoneSearch > .search {
+  display: block;
+  font-size: 0;
+}
+body.phone-mode #phoneSearch input {
+  width: 100%;
+  min-width: 0;
+  font-size: 16px;
+  padding: 6px 8px;
+}
+body.phone-mode .filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px 6px;
+  padding: 5px 9px;
+  align-items: start;
+}
+body.phone-mode .filters > label {
+  grid-column: 1 / -1;
+  gap: 5px;
+  font-size: 12px;
+}
+body.phone-mode .filters > label:has(#showArchived) {
+  display: none;
+}
+body.phone-mode .quick-filter {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  flex-wrap: nowrap;
+  min-width: 0;
+  gap: 2px;
+  font-size: 11px;
+}
+body.phone-mode .quick-filter > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body.phone-mode .quick-multiple {
+  width: 100%;
+  max-width: 100%;
+  font-size: 12px;
+}
+body.phone-mode .quick-multiple > summary {
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+  padding: 5px 6px;
+}
+body.phone-mode .quick-multiple > div {
+  position: static;
+  width: 100%;
+  max-width: 100%;
+  max-height: 170px;
+  padding: 5px;
+  font-size: 12px;
+  box-shadow: none;
+}
+body.phone-mode .quick-multiple > div label {
+  gap: 4px;
+  padding: 3px 0;
+  overflow-wrap: anywhere;
+}
+body.phone-mode #advancedFilters {
+  margin: 0 9px 5px;
+  padding: 5px 7px;
+}
+body.phone-mode #advancedFilters summary {
+  font-size: 12px;
+}
+body.phone-mode .advanced-controls {
+  gap: 5px;
+  margin-top: 5px;
+}
+body.phone-mode .advanced-controls label {
+  gap: 3px;
+  font-size: 11px;
+}
+body.phone-mode .advanced-controls input,
+body.phone-mode .advanced-controls select,
+body.phone-mode .advanced-controls button {
+  padding: 5px;
+}
+body.phone-mode #advancedChoices {
+  gap: 2px 10px;
+  max-height: 110px;
+}
+body.phone-mode #advancedChoices label {
+  font-size: 12px;
+  padding: 2px 0;
+}

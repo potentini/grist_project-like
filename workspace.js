@@ -22,6 +22,14 @@
   let phoneMode = isPhone(),
     phoneListScroll = 0;
   document.body.classList.toggle("phone-mode", phoneMode);
+  const searchLabel = $("search").closest("label"),
+    searchHome = document.createComment("search position");
+  searchLabel.before(searchHome);
+  function placePhoneSearch() {
+    if (phoneMode) $("phoneSearch").append(searchLabel);
+    else searchHome.after(searchLabel);
+  }
+  placePhoneSearch();
   function phoneDetail(show) {
     if (!phoneMode) return;
     if (show && !document.body.classList.contains("phone-detail"))
@@ -3690,6 +3698,7 @@
     if (next === phoneMode) return;
     phoneMode = next;
     document.body.classList.toggle("phone-mode", phoneMode);
+    placePhoneSearch();
     document.body.classList.remove("phone-detail", "phone-filters-open");
     $("phoneFilters").setAttribute("aria-expanded", "false");
     if (!editing) {
