@@ -2412,6 +2412,54 @@ const fixture = require("../demo.json");
   await phone
     .locator("#editForm [name=Titre]")
     .fill("Action depuis le téléphone");
+  const phoneSearch = (field) =>
+    phone.locator(`#editForm [data-search-for="${field}"]`);
+  const phoneOption = (field) =>
+    phoneSearch(field).locator("..").locator("[role=option]");
+  await phoneSearch("Projet").fill("autre");
+  await phoneOption("Projet").first().tap();
+  assert.equal(
+    await phone.locator("#editForm select[name=Projet]").inputValue(),
+    "2",
+  );
+  assert.equal(
+    await phoneSearch("Projet").getAttribute("aria-expanded"),
+    "false",
+  );
+  await phoneSearch("Projet").fill("exemple");
+  // A touch browser may deliver pointerup without a compatibility click.
+  await phoneOption("Projet")
+    .first()
+    .dispatchEvent("pointerdown", {
+      pointerType: "touch",
+      pointerId: 42,
+      clientX: 10,
+      clientY: 10,
+    });
+  await phoneOption("Projet")
+    .first()
+    .dispatchEvent("pointerup", {
+      pointerType: "touch",
+      pointerId: 42,
+      clientX: 10,
+      clientY: 10,
+    });
+  assert.equal(
+    await phone.locator("#editForm select[name=Projet]").inputValue(),
+    "1",
+  );
+  await phoneSearch("Chantier").fill("lancement");
+  await phoneOption("Chantier").first().tap();
+  assert.equal(
+    await phone.locator("#editForm select[name=Chantier]").inputValue(),
+    "1",
+  );
+  await phoneSearch("Tache").fill("confirmer");
+  await phoneOption("Tache").first().tap();
+  assert.equal(
+    await phone.locator("#editForm select[name=Tache]").inputValue(),
+    "1",
+  );
   await phone.locator("#save").click();
   await phone.waitForFunction(() =>
     window.testDb.data.actions.some(

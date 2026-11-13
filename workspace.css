@@ -1070,3 +1070,7 @@ body.phone-mode .reference-options {
 body.phone-mode #fields .grid {
   grid-template-columns: minmax(0, 1fr);
 }
+
+.reference-options {
+  touch-action: pan-y;
+}

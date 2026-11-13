@@ -2954,7 +2954,24 @@
       select.setAttribute("aria-hidden", "true");
       let open = false,
         query = "",
-        active = -1;
+        active = -1,
+        touchStart = null,
+        touchChosenAt = 0;
+      list.addEventListener(
+        "click",
+        (event) => {
+          if (
+            (event.detail !== 0 ||
+              event.pointerType === "touch" ||
+              event.pointerType === "pen") &&
+            Date.now() - touchChosenAt < 700
+          ) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        },
+        true,
+      );
       const label = () =>
         [...select.selectedOptions]
           .filter((o) => o.value)
@@ -2988,9 +3005,7 @@
             item.classList.add("active");
             input.setAttribute("aria-activedescendant", item.id);
           }
-          item.onpointerdown = (e) => e.preventDefault();
-          item.onclick = (event) => {
-            event.preventDefault();
+          const choose = () => {
             if (select.multiple) {
               if (!option.value) {
                 for (const o of select.options) o.selected = false;
@@ -3006,6 +3021,48 @@
               input.value = "";
               draw();
             } else close();
+          };
+          item.onpointerdown = (event) => {
+            event.preventDefault();
+            if (event.pointerType === "touch" || event.pointerType === "pen")
+              touchStart = {
+                id: event.pointerId,
+                x: event.clientX,
+                y: event.clientY,
+                moved: false,
+              };
+          };
+          item.onpointermove = (event) => {
+            if (
+              touchStart &&
+              Math.hypot(
+                event.clientX - touchStart.x,
+                event.clientY - touchStart.y,
+              ) > 10
+            )
+              touchStart.moved = true;
+          };
+          item.onpointercancel = () => {
+            touchStart = null;
+          };
+          item.onpointerup = (event) => {
+            if (!touchStart || touchStart.id !== event.pointerId) return;
+            const tap =
+              !touchStart.moved &&
+              Math.hypot(
+                event.clientX - touchStart.x,
+                event.clientY - touchStart.y,
+              ) <= 10;
+            touchStart = null;
+            if (tap) {
+              event.preventDefault();
+              touchChosenAt = Date.now();
+              choose();
+            }
+          };
+          item.onclick = (event) => {
+            event.preventDefault();
+            choose();
           };
           list.append(item);
         }
@@ -3069,7 +3126,7 @@
         }
       };
       wrapper.addEventListener("focusout", (e) => {
-        if (!wrapper.contains(e.relatedTarget)) close();
+        if (!touchStart && !wrapper.contains(e.relatedTarget)) close();
       });
       select.addEventListener("change", () => {
         input.value = label();
