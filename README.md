@@ -191,3 +191,5 @@ L’API publique du widget ne fournit pas l’identité de l’utilisateur conne
 Le widget laisse Grist calculer cette valeur lorsqu’un nouvel élément est enregistré sans responsable choisi. Un responsable explicitement sélectionné reste prioritaire ; la modification d’un élément existant ne réaffecte pas son responsable. Ce mécanisme attribue la valeur à l’enregistrement : il ne permet pas d’afficher l’identité dans le formulaire avant sa création.
 
 Dans **Filtres par niveau**, seuls les champs mappés pour le niveau sélectionné sont proposés, y compris les champs supplémentaires et les colonnes calculées mappées. Les libellés personnalisés sont repris. Retirer un champ du mapping retire également les filtres actifs qui utilisaient ce champ.
+
+À l’ouverture, les branches du panneau gauche démarrent repliées dans chaque vue, sur téléphone, tablette et PC. Le pliage/dépliage manuel et les boutons Tout plier/Tout déplier restent disponibles. Les choix sont conservés pendant la session et l’historique de navigation ; un rechargement démarre de nouveau replié. Vérification dédiée : `node tests/initial-fold.cjs` (serveur local sur le port 8766).

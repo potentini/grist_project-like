@@ -1738,7 +1738,8 @@
       key = `${context}:${k}:${r.id}`;
     if (!knownBranches.has(key)) {
       knownBranches.add(key);
-      if (context.startsWith("right-")) folded.add(key);
+      if (context.startsWith("right-") || context.startsWith("left-"))
+        folded.add(key);
     }
     const open = !folded.has(key);
     const movable =

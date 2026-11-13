@@ -12,6 +12,39 @@ const fixture = require("../demo.json");
     viewport: { width: 1440, height: 1000 },
   });
   page.on("pageerror", (e) => errors.push(e.message));
+  // Legacy workflow scenarios start expanded; initial folding has a separate browser test.
+  const originalGoto = page.goto.bind(page),
+    originalReload = page.reload.bind(page);
+  async function expandScenarioList() {
+    if (new URL(page.url()).pathname.endsWith("timeline.html")) return;
+    await page.locator("#list > *").first().waitFor();
+    await page.locator("#list [data-fold-all=open]").click();
+    await page.evaluate(() => {
+      const initialized = new Set([document.body.dataset.currentView]);
+      document.querySelectorAll("[data-view]").forEach((button) =>
+        button.addEventListener("click", () =>
+          queueMicrotask(() => {
+            const view = document.body.dataset.currentView;
+            if (!initialized.has(view)) {
+              initialized.add(view);
+              document.querySelector("#list [data-fold-all=open]")?.click();
+            }
+          }),
+        ),
+      );
+    });
+  }
+  page.goto = async (...args) => {
+    const result = await originalGoto(...args);
+    await expandScenarioList();
+    return result;
+  };
+  page.reload = async (...args) => {
+    const result = await originalReload(...args);
+    await expandScenarioList();
+    return result;
+  };
+
   async function setQuick(id, values) {
     const menu = page
       .locator("#" + id)
