@@ -879,3 +879,194 @@ body[data-current-view="notes"] .item[data-kind="actions"] {
   color: #173f6b;
   font-weight: 600;
 }
+
+/* Phone layout is enabled only on small physical touch screens, not narrow desktop panes. */
+.phone-only {
+  display: none;
+}
+#filterPanel {
+  display: contents;
+}
+body.phone-mode {
+  font-size: 13px;
+}
+body.phone-mode > header {
+  gap: 7px;
+  padding: 7px 9px;
+  flex-wrap: wrap;
+}
+body.phone-mode > header > div:first-child,
+body.phone-mode > header > nav,
+body.phone-mode #mappingButton,
+body.phone-mode #refresh,
+body.phone-mode > header > a[href="timeline.html"],
+body.phone-mode [data-project-timeline],
+body.phone-mode #mapping {
+  display: none !important;
+}
+body.phone-mode .phone-only {
+  display: block;
+}
+body.phone-mode #phoneNav {
+  position: relative;
+  flex: 1;
+  min-width: 120px;
+}
+body.phone-mode #phoneNav > summary {
+  cursor: pointer;
+  border: 1px solid #ccd5e2;
+  border-radius: 6px;
+  padding: 7px 9px;
+  background: white;
+  font-weight: 600;
+}
+body.phone-mode #phoneNav > div {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 40;
+  background: white;
+  padding: 5px;
+  border: 1px solid #ccd5e2;
+  border-radius: 6px;
+  box-shadow: 0 3px 12px #23334a25;
+  min-width: 160px;
+}
+body.phone-mode #phoneNav button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin: 2px 0;
+}
+body.phone-mode #editionButton,
+body.phone-mode #phoneFilters {
+  font-size: 12px;
+  padding: 7px;
+  white-space: nowrap;
+}
+body.phone-mode #message {
+  font-size: 11px;
+  padding: 3px 9px;
+  max-height: 34px;
+  overflow: auto;
+}
+body.phone-mode #filterPanel {
+  display: none;
+}
+body.phone-mode.phone-filters-open #filterPanel {
+  display: block;
+  flex: 0 1 auto;
+  max-height: 45dvh;
+  overflow: auto;
+}
+body.phone-mode .filters {
+  padding: 7px 9px;
+  gap: 8px;
+}
+body.phone-mode #advancedFilters {
+  margin: 0 9px 8px;
+}
+body.phone-mode main {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  padding: 0 5px 5px;
+  gap: 4px;
+}
+body.phone-mode #list,
+body.phone-mode #detail {
+  padding: 9px;
+  border-radius: 6px;
+  scrollbar-gutter: auto;
+}
+body.phone-mode #detail,
+body.phone-mode #paneSeparator,
+body.phone-mode #phoneBack {
+  display: none;
+}
+body.phone-mode.phone-detail main {
+  grid-template-columns: 17px minmax(0, 1fr);
+}
+body.phone-mode.phone-detail #list {
+  display: none;
+}
+body.phone-mode.phone-detail #detail {
+  display: block;
+  grid-column: 2;
+  grid-row: 1;
+}
+body.phone-mode.phone-detail #phoneBack {
+  display: block;
+  grid-column: 1;
+  grid-row: 1;
+  align-self: stretch;
+  width: 17px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: #eaf2fb;
+  color: #173f6b;
+  font-size: 24px;
+}
+body.phone-mode .compact-card {
+  padding: 7px 8px;
+}
+body.phone-mode .tree-children {
+  margin-left: 10px;
+  padding-left: 7px;
+}
+body.phone-mode .actions {
+  gap: 5px;
+  margin: 7px 0;
+  flex-wrap: wrap;
+}
+body.phone-mode .actions button {
+  font-size: 12px;
+  padding: 7px;
+}
+body.phone-mode .timeline-section > .detail-section > summary {
+  max-width: 100%;
+}
+body.phone-mode dialog {
+  width: calc(100vw - 12px);
+  max-width: none;
+  max-height: calc(100dvh - 12px);
+  margin: auto;
+  padding: 11px;
+  border-radius: 8px;
+}
+body.phone-mode .dialoghead {
+  gap: 7px;
+  align-items: center;
+  flex-wrap: wrap;
+  position: sticky;
+  top: -11px;
+  background: white;
+  z-index: 35;
+  padding: 7px 0;
+}
+body.phone-mode .dialoghead h2 {
+  font-size: 16px;
+  margin: 4px 0;
+}
+body.phone-mode #fields label {
+  margin: 8px 0;
+  gap: 4px;
+}
+body.phone-mode #fields input,
+body.phone-mode #fields textarea,
+body.phone-mode #fields select {
+  font-size: 16px;
+}
+body.phone-mode textarea {
+  min-height: 85px;
+}
+body.phone-mode .editor-actions {
+  margin-left: auto;
+}
+body.phone-mode .reference-options {
+  max-height: 30dvh;
+}
+body.phone-mode #fields .grid {
+  grid-template-columns: minmax(0, 1fr);
+}

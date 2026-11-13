@@ -175,3 +175,11 @@ La table et ses contrôles sont repliés à chaque ouverture ; **Afficher la tab
 En création et en modification dans le suivi, les listes de choix utilisent un seul champ **Choisir ou rechercher…**. Cliquez pour afficher les options ou tapez quelques lettres pour ne garder que les libellés contenant ce texte, sans distinction de casse ni d’accents. Les résultats respectent les projets et chantiers sélectionnés. Choisissez un résultat par clic, ou avec les flèches puis Entrée. Échap ou un clic extérieur ferme la liste en conservant la sélection.
 
 Les listes multiples affichent les choix cochés ; un clic coche ou décoche une option. À la fermeture, le champ affiche les libellés sélectionnés. Rechercher ou saisir un texte libre ne modifie aucun rattachement : seul un choix dans la liste change la sélection, et **Enregistrer** valide les données.
+
+## Présentation téléphone
+
+Sur un écran tactile dont le petit côté mesure moins de 600 pixels CSS, et lorsque le widget dispose au plus de 1000 pixels de largeur, une présentation compacte s’active. La taille de l’écran physique en pixels CSS est utilisée en plus de la largeur du widget : un volet PC étroit ou une tablette de 600 pixels et plus conserve l’interface habituelle. Le mode téléphone reste actif en paysage.
+
+Le téléphone démarre sur **Actions**, avec ajout d’action en haut de liste. Le menu unique permet de choisir **Projets**, **Chantiers** ou **Actions**. **Filtres** rassemble la recherche, les filtres rapides et les filtres avancés. Le titre général, Mapping, Actualiser et les liens de timeline sont masqués. Le petit bouton **Édition** conserve le contrôle des modifications.
+
+La liste occupe seule l’écran. Ouvrir un élément affiche uniquement le détail, avec une bande cliquable à gauche pour revenir à la liste et retrouver son défilement. Une modification en cours doit être enregistrée ou annulée avant ce retour. Les formulaires de création occupent la largeur disponible, avec saisie adaptée au tactile et commandes Enregistrer/Annuler regroupées. Ces règles sont limitées au mode téléphone ; les vues PC et tablette conservent leur présentation et leur fonctionnement.

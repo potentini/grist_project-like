@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Projets, notes et actions — Grist</title>
-    <link rel="stylesheet" href="workspace.css?v=20261113-combobox" />
+    <link rel="stylesheet" href="workspace.css?v=20261113-phone" />
     <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
   </head>
   <body>
@@ -18,6 +18,23 @@
         ><button data-view="notes">Notes et réunions</button
         ><button data-view="actions">À faire</button>
       </nav>
+      <details id="phoneNav" class="phone-only">
+        <summary id="phoneViewLabel">Actions</summary>
+        <div>
+          <button data-view="projects">Projets</button
+          ><button data-view="streams">Chantiers</button
+          ><button data-view="actions">Actions</button>
+        </div>
+      </details>
+      <button
+        id="phoneFilters"
+        class="phone-only"
+        type="button"
+        aria-expanded="false"
+        aria-controls="filterPanel"
+      >
+        Filtres
+      </button>
       <button id="editionButton" aria-pressed="false">Édition désactivée</button
       ><button id="mappingButton">Mapping</button
       ><button id="refresh">Actualiser</button
@@ -29,51 +46,62 @@
       hidden
       aria-label="Configuration des tables"
     ></section>
-    <div class="filters">
-      <label
-        ><span id="projectFilterLabel">Projet</span>
-        <select id="projectFilter"></select></label
-      ><label
-        ><span id="ownerFilterLabel">Responsable</span>
-        <select id="ownerFilter"></select></label
-      ><label
-        ><span id="statusFilterLabel">Statut</span>
-        <select id="statusFilter"></select></label
-      ><label class="search"
-        >Rechercher
-        <input
-          id="search"
-          type="search"
-          placeholder="Titre, notes, action…" /></label
-      ><label
-        ><input id="unlinked" type="checkbox" /> Actions sans
-        rattachement</label
-      ><label><input id="overdue" type="checkbox" /> Actions en retard</label>
-      <label
-        ><input id="showArchived" type="checkbox" /> Afficher les
-        archivés</label
-      >
-    </div>
-    <details id="advancedFilters">
-      <summary>Filtres par niveau <span id="advancedCount"></span></summary>
-      <div class="advanced-controls">
+    <div id="filterPanel">
+      <div class="filters">
         <label
-          >Niveau
-          <select id="advancedKind"></select></label
+          ><span id="projectFilterLabel">Projet</span>
+          <select id="projectFilter"></select></label
         ><label
-          >Champ
-          <select id="advancedField"></select></label
-        ><label>Contient <input id="advancedValue" type="search" /></label
-        ><button id="advancedAdd" type="button">Ajouter le filtre</button
-        ><button id="advancedClear" type="button">Tout effacer</button>
+          ><span id="ownerFilterLabel">Responsable</span>
+          <select id="ownerFilter"></select></label
+        ><label
+          ><span id="statusFilterLabel">Statut</span>
+          <select id="statusFilter"></select></label
+        ><label class="search"
+          >Rechercher
+          <input
+            id="search"
+            type="search"
+            placeholder="Titre, notes, action…" /></label
+        ><label
+          ><input id="unlinked" type="checkbox" /> Actions sans
+          rattachement</label
+        ><label><input id="overdue" type="checkbox" /> Actions en retard</label>
+        <label
+          ><input id="showArchived" type="checkbox" /> Afficher les
+          archivés</label
+        >
       </div>
-      <div
-        id="advancedChoices"
-        aria-label="Valeurs disponibles du filtre"
-      ></div>
-      <div id="advancedChips" class="actions"></div>
-    </details>
+      <details id="advancedFilters">
+        <summary>Filtres par niveau <span id="advancedCount"></span></summary>
+        <div class="advanced-controls">
+          <label
+            >Niveau
+            <select id="advancedKind"></select></label
+          ><label
+            >Champ
+            <select id="advancedField"></select></label
+          ><label>Contient <input id="advancedValue" type="search" /></label
+          ><button id="advancedAdd" type="button">Ajouter le filtre</button
+          ><button id="advancedClear" type="button">Tout effacer</button>
+        </div>
+        <div
+          id="advancedChoices"
+          aria-label="Valeurs disponibles du filtre"
+        ></div>
+        <div id="advancedChips" class="actions"></div>
+      </details>
+    </div>
     <main>
+      <button
+        id="phoneBack"
+        class="phone-only"
+        type="button"
+        aria-label="Retour à la liste"
+        title="Retour à la liste"
+      >
+        ‹
+      </button>
       <section id="list" tabindex="0" aria-label="Liste des éléments"></section>
       <div
         id="paneSeparator"
@@ -154,6 +182,6 @@
       </header>
       <iframe id="timelineFrame" title="Table et timeline du projet"></iframe>
     </dialog>
-    <script src="workspace.js?v=20261113-combobox"></script>
+    <script src="workspace.js?v=20261113-phone"></script>
   </body>
 </html>

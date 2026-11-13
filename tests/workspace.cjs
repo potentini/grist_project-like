@@ -28,7 +28,7 @@ const fixture = require("../demo.json");
   await page.route("https://docs.getgrist.com/**", (r) =>
     r.fulfill({ body: "" }),
   );
-  await page.addInitScript((fixture) => {
+  const setupGrist = (fixture) => {
     const db = structuredClone(fixture);
     if (location.search.includes("points=1")) {
       db.tables.push({ id: 6, tableId: "Points", label: "Points" });
@@ -528,7 +528,8 @@ const fixture = require("../demo.json");
         },
       };
     }
-  }, fixture);
+  };
+  await page.addInitScript(setupGrist, fixture);
   await page.goto("http://127.0.0.1:8766");
   await page
     .getByRole("button", { name: "Confirmer les participants", exact: false })
@@ -2369,6 +2370,122 @@ const fixture = require("../demo.json");
   assert.equal(await page.evaluate(() => window.writes.length), 0);
   console.log(
     "PASS multi-step back/forward restores exact pane scrolls, fold states, filters and view without writes",
+  );
+  const phoneContext = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    screen: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+  });
+  const phone = await phoneContext.newPage();
+  phone.on("pageerror", (error) => errors.push(error.message));
+  await phone.route("https://docs.getgrist.com/**", (r) =>
+    r.fulfill({ body: "" }),
+  );
+  await phone.addInitScript(setupGrist, fixture);
+  await phone.goto("http://127.0.0.1:8766/?tree=1");
+  await phone.locator("#list [data-kind=actions]").first().waitFor();
+  assert.equal(
+    await phone.locator("body").getAttribute("data-current-view"),
+    "actions",
+  );
+  assert.equal(await phone.locator("#detail").isVisible(), false);
+  for (const selector of [
+    "header > div:first-child",
+    "header > nav",
+    "#mappingButton",
+    "#refresh",
+    'header > a[href="timeline.html"]',
+    "#filterPanel",
+  ])
+    assert.equal(await phone.locator(selector).isVisible(), false);
+  assert.equal(await phone.locator("#phoneNav").isVisible(), true);
+  await phone.locator("#phoneFilters").click();
+  assert.equal(await phone.locator("#filterPanel").isVisible(), true);
+  await phone.locator("#phoneFilters").click();
+  assert.equal(await phone.locator("#filterPanel").isVisible(), false);
+  await phone.locator("#editionButton").click();
+  await phone.locator("#list [data-new=actions]").click();
+  await phone.locator("#editor").waitFor();
+  const formBounds = await phone.locator("#editor").boundingBox();
+  assert.ok(formBounds.x >= 0 && formBounds.x + formBounds.width <= 391);
+  await phone
+    .locator("#editForm [name=Titre]")
+    .fill("Action depuis le téléphone");
+  await phone.locator("#save").click();
+  await phone.waitForFunction(() =>
+    window.testDb.data.actions.some(
+      (a) => a.Titre === "Action depuis le téléphone",
+    ),
+  );
+  await phone.locator("#list [data-kind=actions]").first().click();
+  assert.equal(await phone.locator("#list").isVisible(), false);
+  assert.equal(await phone.locator("#detail").isVisible(), true);
+  assert.equal(await phone.locator("#phoneBack").isVisible(), true);
+  await phone.locator("#phoneBack").click();
+  assert.equal(await phone.locator("#list").isVisible(), true);
+  await phone.locator("#phoneNav summary").click();
+  await phone.locator("#phoneNav [data-view=streams]").click();
+  assert.equal(
+    await phone.locator("body").getAttribute("data-current-view"),
+    "streams",
+  );
+  await phone.locator("#list [data-kind=streams]").first().click();
+  assert.equal(
+    await phone.locator("[data-project-timeline]").isVisible(),
+    false,
+  );
+  await phone.locator("#phoneBack").click();
+  await phone.screenshot({
+    path: "/workspace/exports/widget-phone.png",
+    fullPage: true,
+  });
+  assert.equal(
+    await phone.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+    true,
+  );
+  await phone.setViewportSize({ width: 844, height: 390 });
+  assert.equal(
+    await phone
+      .locator("body")
+      .evaluate((el) => el.classList.contains("phone-mode")),
+    true,
+  );
+  await phoneContext.close();
+  for (const [width, height, touch] of [
+    [768, 1024, true],
+    [600, 960, true],
+    [390, 844, false],
+  ]) {
+    const context = await browser.newContext({
+      viewport: { width, height },
+      screen: { width, height },
+      hasTouch: touch,
+      isMobile: touch,
+    });
+    const check = await context.newPage();
+    await check.route("https://docs.getgrist.com/**", (r) =>
+      r.fulfill({ body: "" }),
+    );
+    await check.addInitScript(setupGrist, fixture);
+    await check.goto("http://127.0.0.1:8766/?tree=1");
+    await check.locator("#list [data-kind=projects]").first().waitFor();
+    assert.equal(
+      await check
+        .locator("body")
+        .evaluate((el) => el.classList.contains("phone-mode")),
+      false,
+    );
+    assert.equal(await check.locator("#mappingButton").isVisible(), true);
+    assert.equal(await check.locator("#refresh").isVisible(), true);
+    assert.equal(await check.locator("#phoneNav").isVisible(), false);
+    assert.equal(await check.locator("#detail").isVisible(), true);
+    await context.close();
+  }
+  console.log(
+    "PASS phone touch-only layout, default Actions, grouped navigation/filters, quick creation, single panes/back, hidden timelines, landscape and unchanged tablet/narrow desktop",
   );
   await page.goto("http://127.0.0.1:8766/?demo=1");
   await page

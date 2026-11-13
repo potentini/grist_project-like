@@ -14,6 +14,21 @@
           "'": "&#39;",
         })[c],
     );
+  const phonePointer = window.matchMedia("(pointer: coarse)");
+  const isPhone = () =>
+    phonePointer.matches &&
+    Math.min(screen.width, screen.height) < 600 &&
+    window.innerWidth <= 1000;
+  let phoneMode = isPhone(),
+    phoneListScroll = 0;
+  document.body.classList.toggle("phone-mode", phoneMode);
+  function phoneDetail(show) {
+    if (!phoneMode) return;
+    if (show && !document.body.classList.contains("phone-detail"))
+      phoneListScroll = $("list").scrollTop;
+    document.body.classList.toggle("phone-detail", show);
+    if (!show) $("list").scrollTop = phoneListScroll;
+  }
   const norm = (s) =>
     String(s ?? "")
       .normalize("NFD")
@@ -176,7 +191,7 @@
     meta = [],
     tables = [],
     data = {},
-    view = "projects",
+    view = phoneMode ? "actions" : "projects",
     selection = null,
     editing = null,
     busy = false,
@@ -1690,7 +1705,14 @@
   function syncEdition() {
     updateHistoryControls();
     $("editionButton").setAttribute("aria-pressed", String(editionEnabled));
-    $("editionButton").textContent = editionEnabled
+    $("editionButton").textContent = phoneMode
+      ? editionEnabled
+        ? "Édition ✓"
+        : "Édition ×"
+      : editionEnabled
+        ? "Édition activée"
+        : "Édition désactivée";
+    $("editionButton").title = editionEnabled
       ? "Édition activée"
       : "Édition désactivée";
     document
@@ -1717,6 +1739,12 @@
     scopeAllowed = new WeakMap();
     advancedSets = null;
     document.body.dataset.currentView = view;
+    $("phoneViewLabel").textContent =
+      view === "streams"
+        ? cfg("streams").label || "Chantiers"
+        : view === "actions"
+          ? "Actions"
+          : cfg(view).label || schemas[view].label;
     advancedUI();
     document
       .querySelectorAll("[data-view]")
@@ -1728,6 +1756,10 @@
     if (view === "notes")
       html = outlineRows("notes")
         .map((r) => branch(tree("notes", r, true), context))
+        .join("");
+    else if (view === "streams" || (phoneMode && view === "actions"))
+      html = outlineRows(view)
+        .map((r) => branch(tree(view, r, true), context))
         .join("");
     else {
       html = outlineRows("projects")
@@ -1751,7 +1783,7 @@
       html += `<section class="unassigned" data-drop-kind="unassigned" data-drop-id="0"><h3>Actions sans rattachement au projet</h3>${standalone || '<p class="muted">Aucune action autonome.</p>'}</section>`;
     }
     $("list").innerHTML =
-      `<div class="actions"><button data-new="${view === "projects" ? "projects" : view}">+ ${view === "projects" ? cfg("projects").label || "Projet" : view === "notes" ? cfg("notes").label || "Note / réunion" : cfg("actions").label || "Action"}</button><button data-fold-all="close">Tout plier</button><button data-fold-all="open">Tout déplier</button></div>` +
+      `<div class="actions"><button data-new="${view === "projects" ? "projects" : view}">+ ${view === "projects" ? cfg("projects").label || "Projet" : view === "notes" ? cfg("notes").label || "Note / réunion" : view === "streams" ? cfg("streams").label || "Chantier" : cfg("actions").label || "Action"}</button><button data-fold-all="close">Tout plier</button><button data-fold-all="open">Tout déplier</button></div>` +
       (html ||
         '<p class="empty">Aucun élément. Vérifiez le mapping ou ajustez les filtres.</p>');
     renderDetail();
@@ -2263,6 +2295,7 @@
     restoreLocation(from.pop());
   }
   function selectRecord(k, id, source) {
+    phoneDetail(true);
     if (selection?.k === k && selection.id === id) return;
     rememberLocation(source);
     const left = { top: $("list").scrollTop, left: $("list").scrollLeft };
@@ -3504,6 +3537,35 @@
       message(e.message, true);
     }
   }
+  $("phoneFilters").onclick = () => {
+    const open = document.body.classList.toggle("phone-filters-open");
+    $("phoneFilters").setAttribute("aria-expanded", String(open));
+  };
+  $("phoneBack").onclick = () => {
+    if (editing || moving) {
+      message(
+        "Enregistrez ou annulez la modification avant de revenir à la liste.",
+      );
+      return;
+    }
+    phoneDetail(false);
+  };
+  const updatePhoneMode = () => {
+    const next = isPhone();
+    if (next === phoneMode) return;
+    phoneMode = next;
+    document.body.classList.toggle("phone-mode", phoneMode);
+    document.body.classList.remove("phone-detail", "phone-filters-open");
+    $("phoneFilters").setAttribute("aria-expanded", "false");
+    if (!editing) {
+      if (phoneMode) view = "actions";
+      else if (view === "streams") view = "projects";
+      filterOptions();
+      render();
+    } else syncEdition();
+  };
+  window.addEventListener("resize", updatePhoneMode);
+  phonePointer.addEventListener("change", updatePhoneMode);
   document.querySelectorAll("[data-view]").forEach(
     (b) =>
       (b.onclick = () => {
@@ -3513,9 +3575,12 @@
           );
           return;
         }
+        $("phoneNav").open = false;
         if (view === b.dataset.view) return;
         rememberLocation();
         view = b.dataset.view;
+        $("phoneNav").open = false;
+        phoneDetail(false);
         selection = null;
         quickSelections.ownerFilter = [];
         quickSelections.statusFilter = [];
