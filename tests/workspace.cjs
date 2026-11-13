@@ -2038,14 +2038,8 @@ const fixture = require("../demo.json");
         fill: s.webkitTextFillColor,
       };
     });
-    assert.equal(
-      colors.color,
-      scheme === "dark" ? "rgb(241, 245, 249)" : "rgb(35, 51, 74)",
-    );
-    assert.equal(
-      colors.background,
-      scheme === "dark" ? "rgb(31, 41, 55)" : "rgb(255, 255, 255)",
-    );
+    assert.equal(colors.color, "rgb(35, 51, 74)");
+    assert.equal(colors.background, "rgb(255, 255, 255)");
     assert.notEqual(colors.fill, colors.background);
     const area = page.locator("#editForm textarea").first();
     if (await area.count())
@@ -2068,7 +2062,7 @@ const fixture = require("../demo.json");
       const s = getComputedStyle(el);
       return [s.color, s.backgroundColor];
     });
-  assert.deepEqual(filterColors, ["rgb(241, 245, 249)", "rgb(31, 41, 55)"]);
+  assert.deepEqual(filterColors, ["rgb(35, 51, 74)", "rgb(255, 255, 255)"]);
   await page.locator(".quick-search").first().press("Escape");
   await page.emulateMedia({ colorScheme: "light" });
   console.log(

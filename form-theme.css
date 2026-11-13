@@ -1,52 +1,44 @@
-/* Keep form foreground/background pairs explicit, including native controls and autofill. */
+/* Forms keep dark text on white backgrounds, regardless of the system theme. */
 input,
 select,
-textarea {
+textarea,
+select option {
   color: #23334a !important;
-  -webkit-text-fill-color: currentColor;
+  background-color: #fff !important;
+  -webkit-text-fill-color: #23334a !important;
+  caret-color: #23334a;
   color-scheme: light;
 }
-@media (prefers-color-scheme: dark) {
-  input,
-  select,
-  textarea,
-  select option {
-    color: #f1f5f9 !important;
-    background-color: #1f2937 !important;
-    border-color: #64748b;
-    -webkit-text-fill-color: #f1f5f9;
-    caret-color: #f1f5f9;
-    color-scheme: dark;
-  }
-  input::placeholder,
-  textarea::placeholder {
-    color: #b6c2d2 !important;
-    -webkit-text-fill-color: #b6c2d2;
-    opacity: 1;
-  }
-  input:autofill {
-    -webkit-text-fill-color: #f1f5f9 !important;
-    box-shadow: 0 0 0 1000px #1f2937 inset !important;
-  }
-  .reference-options,
-  .quick-multiple > div {
-    background: #1f2937 !important;
-    color: #f1f5f9 !important;
-    border-color: #64748b;
-    color-scheme: dark;
-  }
-  .reference-options > [role="option"] {
-    color: #f1f5f9 !important;
-  }
-  .reference-options > [aria-selected="true"] {
-    color: #bfdbfe !important;
-  }
-  .reference-options > [role="option"]:hover,
-  .reference-options > .active {
-    background: #334155 !important;
-  }
-  .reference-options .muted,
-  .quick-multiple > div .muted {
-    color: #b6c2d2;
-  }
+input::placeholder,
+textarea::placeholder {
+  color: #64748b !important;
+  -webkit-text-fill-color: #64748b !important;
+  opacity: 1;
+}
+input:autofill {
+  -webkit-text-fill-color: #23334a !important;
+  box-shadow: 0 0 0 1000px #fff inset !important;
+}
+.reference-options,
+.quick-multiple > div {
+  background: #fff !important;
+  color: #23334a !important;
+  color-scheme: light;
+}
+.reference-options > [role="option"],
+.reference-options > [role="option"]:hover,
+.reference-options > .active {
+  color: #23334a !important;
+  background: #fff !important;
+}
+.reference-options > [aria-selected="true"] {
+  font-weight: 600;
+}
+.reference-options > [role="option"]:hover,
+.reference-options > .active {
+  text-decoration: underline;
+}
+.reference-options .muted,
+.quick-multiple > div .muted {
+  color: #64748b;
 }

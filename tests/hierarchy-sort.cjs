@@ -253,7 +253,7 @@ const assert = require("node:assert/strict");
         const s = getComputedStyle(el);
         return [s.color, s.backgroundColor];
       }),
-      ["rgb(241, 245, 249)", "rgb(31, 41, 55)"],
+      ["rgb(35, 51, 74)", "rgb(255, 255, 255)"],
     );
     assert.deepEqual(errors, []);
     console.log(
