@@ -247,6 +247,14 @@ const assert = require("node:assert/strict");
     await progress.fill("35");
     await progress.dispatchEvent("change");
     await page.waitForFunction(() => window.db.Taches[0].Avancement === 0.35);
+    await page.emulateMedia({ colorScheme: "dark" });
+    assert.deepEqual(
+      await progress.evaluate((el) => {
+        const s = getComputedStyle(el);
+        return [s.color, s.backgroundColor];
+      }),
+      ["rgb(241, 245, 249)", "rgb(31, 41, 55)"],
+    );
     assert.deepEqual(errors, []);
     console.log(
       "PASS shared hierarchical ordering, parent date fallback, undated last, priority/manual, persisted tracking/timeline/popup settings and original-repo editing",

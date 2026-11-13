@@ -2024,8 +2024,60 @@ const fixture = require("../demo.json");
     "PASS owner column conflict rejected and visible primary/blank external mappings persist after reload even without change event",
   );
 
+  await page.goto("http://127.0.0.1:8766/?tree=1");
+  await page.locator("#editionButton").click();
+  await page.locator("#list [data-new=projects]").click();
+  for (const scheme of ["dark", "light"]) {
+    await page.emulateMedia({ colorScheme: scheme });
+    const title = page.locator("#editForm [name=Titre]");
+    const colors = await title.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return {
+        color: s.color,
+        background: s.backgroundColor,
+        fill: s.webkitTextFillColor,
+      };
+    });
+    assert.equal(
+      colors.color,
+      scheme === "dark" ? "rgb(241, 245, 249)" : "rgb(35, 51, 74)",
+    );
+    assert.equal(
+      colors.background,
+      scheme === "dark" ? "rgb(31, 41, 55)" : "rgb(255, 255, 255)",
+    );
+    assert.notEqual(colors.fill, colors.background);
+    const area = page.locator("#editForm textarea").first();
+    if (await area.count())
+      assert.equal(
+        await area.evaluate((el) => getComputedStyle(el).color),
+        colors.color,
+      );
+  }
+  await page.getByRole("button", { name: "Annuler", exact: true }).click();
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page
+    .locator("#projectFilter")
+    .locator("..")
+    .locator(".quick-search")
+    .fill("exemple");
+  const filterColors = await page
+    .locator(".quick-search")
+    .first()
+    .evaluate((el) => {
+      const s = getComputedStyle(el);
+      return [s.color, s.backgroundColor];
+    });
+  assert.deepEqual(filterColors, ["rgb(241, 245, 249)", "rgb(31, 41, 55)"]);
+  await page.locator(".quick-search").first().press("Escape");
+  await page.emulateMedia({ colorScheme: "light" });
+  console.log(
+    "PASS dark/light form foregrounds, backgrounds, text fill, textarea and searchable filter contrast",
+  );
+
   await page.goto("http://127.0.0.1:8766/?cards=1");
   const card = page.locator('#list [data-kind=tasks][data-id="1"]');
+  await page.locator("#list [data-fold-all=open]").click();
   await card.waitFor();
   assert.match(await card.innerText(), /Date de début : 01\/11\/2026/);
   assert.match(await card.innerText(), /Date de fin : 20\/12\/2026/);
