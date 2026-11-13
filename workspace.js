@@ -214,7 +214,12 @@
   let editionEnabled = false,
     moving = false,
     dragged = null;
-  const folded = new Set();
+  const folded = new Set(),
+    searchFolded = new Set();
+  let treeSearch = "";
+  function foldState(key) {
+    return key.startsWith("left-") && treeSearch ? searchFolded : folded;
+  }
   const knownBranches = new Set();
   let mappingSaving = false;
   let mappingWasSaved = false,
@@ -1840,6 +1845,7 @@
       kids.length ||
       (filtered &&
         editionEnabled &&
+        !norm($("search").value) &&
         nativeMatch(k, r) &&
         advancedMatch(k, r) &&
         !["notes", "points", "actions"].includes(k))
@@ -1855,7 +1861,7 @@
       if (context.startsWith("right-") || context.startsWith("left-"))
         folded.add(key);
     }
-    const open = !folded.has(key);
+    const open = !foldState(key).has(key);
     const movable =
       ["streams", "tasks", "actions"].includes(k) && !inactive(k, r);
     return `<div class="tree-node" data-tree-kind="${k}" data-tree-id="${r.id}"><div class="tree-row" data-drop-kind="${k}" data-drop-id="${r.id}" ${movable ? `draggable="${editionEnabled && !editing && !moving && !demo}" data-drag-kind="${k}" data-drag-id="${r.id}"` : ""}>${kids.length ? `<button class="fold" type="button" data-fold="${key}" aria-expanded="${open}" aria-label="${open ? "Plier" : "Déplier"} ${esc(title(k, r))}">${open ? "▾" : "▸"}</button>` : '<span class="fold-spacer"></span>'}${item(k, r, 0, context.startsWith("left-"))}${editionEnabled && movable ? `<button class="move-button" type="button" data-move-kind="${k}" data-move-id="${r.id}" aria-label="Déplacer ${esc(title(k, r))}" title="Déplacer"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20 20 4M7 4h13v13"/></svg></button>` : ""}</div>${kids.length ? `<div class="tree-children" ${open ? "" : "hidden"}>${kids.map((n) => branch(n, context)).join("")}</div>` : ""}</div>`;
@@ -1894,6 +1900,11 @@
       );
   }
   function render() {
+    const query = norm($("search").value);
+    if (query !== treeSearch) {
+      searchFolded.clear();
+      treeSearch = query;
+    }
     sortDescriptors.clear();
     sortUI();
     scopeAllowed = new WeakMap();
@@ -2378,6 +2389,7 @@
         ]),
       ),
       folded: [...folded],
+      searchFolded: [...searchFolded],
       known: [...knownBranches],
       scroll: Object.fromEntries(
         ["list", "detail"].map((id) => [
@@ -2425,6 +2437,9 @@
     view = location.view;
     folded.clear();
     location.folded.forEach((key) => folded.add(key));
+    searchFolded.clear();
+    (location.searchFolded || []).forEach((key) => searchFolded.add(key));
+    treeSearch = norm(location.filters.search || "");
     knownBranches.clear();
     location.known.forEach((key) => knownBranches.add(key));
     filterOptions();
@@ -4127,12 +4142,13 @@
     }
     const fold = e.target.closest("[data-fold]");
     if (fold) {
-      folded.has(fold.dataset.fold)
-        ? folded.delete(fold.dataset.fold)
-        : folded.add(fold.dataset.fold);
+      const state = foldState(fold.dataset.fold);
+      state.has(fold.dataset.fold)
+        ? state.delete(fold.dataset.fold)
+        : state.add(fold.dataset.fold);
       const wrapper = fold.closest(".tree-node");
       const kids = wrapper.querySelector(":scope > .tree-children");
-      const open = !folded.has(fold.dataset.fold);
+      const open = !state.has(fold.dataset.fold);
       kids.hidden = !open;
       fold.setAttribute("aria-expanded", String(open));
       fold.setAttribute(
@@ -4154,8 +4170,8 @@
         .querySelectorAll("[data-fold]")
         .forEach((b) =>
           all.dataset.foldAll === "close"
-            ? folded.add(b.dataset.fold)
-            : folded.delete(b.dataset.fold),
+            ? foldState(b.dataset.fold).add(b.dataset.fold)
+            : foldState(b.dataset.fold).delete(b.dataset.fold),
         );
       render();
       return;
