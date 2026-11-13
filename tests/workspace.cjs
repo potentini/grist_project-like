@@ -1826,61 +1826,66 @@ const fixture = require("../demo.json");
   await page.locator("#detail [data-new=actions]").click();
   const searchField = (field) =>
     page.locator(`#editForm [data-search-for="${field}"]`);
-  const optionsFor = (field) =>
+  const sourceField = (field) =>
     page.locator(`#editForm select[name="${field}"]`);
+  const choices = (field) =>
+    searchField(field).locator("..").locator("[role=option]");
+  assert.equal(await searchField("Projet").getAttribute("role"), "combobox");
   await searchField("Projet").fill("AUTRE");
-  assert.equal(await optionsFor("Projet").inputValue(), "1");
-  assert.deepEqual(
-    await optionsFor("Projet")
-      .locator("option:not([hidden])")
-      .evaluateAll((opts) => opts.map((o) => o.value)),
-    ["1", "2"],
-  );
-  await optionsFor("Projet").selectOption("2");
-  assert.equal(await searchField("Projet").inputValue(), "");
-  await searchField("Chantier").fill("lancement");
+  assert.equal(await sourceField("Projet").inputValue(), "1");
+  assert.deepEqual(await choices("Projet").allTextContents(), ["Autre projet"]);
+  await choices("Projet").first().click();
+  assert.equal(await searchField("Projet").inputValue(), "Autre projet");
   assert.equal(
-    await optionsFor("Chantier").locator('option[value="1"]').count(),
-    0,
+    await searchField("Projet").getAttribute("aria-expanded"),
+    "false",
   );
+  assert.equal(await sourceField("Projet").inputValue(), "2");
+  await searchField("Chantier").fill("lancement");
+  assert.equal(await choices("Chantier").count(), 0);
   assert.match(
     await searchField("Chantier").locator("..").innerText(),
     /Aucun résultat/,
   );
   await searchField("Chantier").press("Escape");
-  assert.deepEqual(
-    await optionsFor("Chantier")
-      .locator("option:not([hidden])")
-      .evaluateAll((opts) => opts.map((o) => o.value)),
-    ["", "2"],
+  assert.equal(
+    await searchField("Chantier").getAttribute("aria-expanded"),
+    "false",
   );
-  await optionsFor("Chantier").selectOption("2");
-  assert.equal(await optionsFor("Projet").inputValue(), "2");
+  await searchField("Chantier").fill("autre");
+  await searchField("Chantier").press("ArrowDown");
+  await searchField("Chantier").press("Enter");
+  assert.equal(await sourceField("Chantier").inputValue(), "2");
   await page.getByRole("button", { name: "Annuler", exact: true }).click();
   assert.equal(await page.evaluate(() => window.writes.length), 0);
   await page.locator("nav [data-view=notes]").click();
   await page.locator('#list [data-kind=notes][data-id="1"]').click();
   await page.getByRole("button", { name: "Modifier", exact: true }).click();
-  await optionsFor("Projet").selectOption("");
-  await optionsFor("Chantiers").selectOption(["1", "2"]);
-  await searchField("Chantiers").fill("introuvable");
+  await sourceField("Projet").selectOption("");
+  await searchField("Chantiers").fill("autre");
+  await choices("Chantiers").first().click();
   assert.deepEqual(
-    await optionsFor("Chantiers").evaluate((el) =>
+    await sourceField("Chantiers").evaluate((el) =>
+      [...el.selectedOptions].map((o) => o.value),
+    ),
+    ["1", "2"],
+  );
+  await searchField("Chantiers").fill("introuvable");
+  assert.equal(await choices("Chantiers").count(), 0);
+  assert.deepEqual(
+    await sourceField("Chantiers").evaluate((el) =>
       [...el.selectedOptions].map((o) => o.value),
     ),
     ["1", "2"],
   );
   await searchField("Chantiers").fill("preparer");
-  assert.match(
-    await searchField("Chantiers").locator("..").innerText(),
-    /1 résultat/,
-  );
+  assert.equal(await choices("Chantiers").count(), 1);
   await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
   await page.waitForFunction(
     () => window.testDb.data.notes[0].Chantiers === "C001, C002",
   );
   console.log(
-    "PASS searchable create/inline choices, accent-insensitive matches, cascading scope, Escape reset, no search writes and preserved multi-selection on save",
+    "PASS single combobox field, filtered results, click/keyboard selection, hierarchy constraints, cancel and preserved multiple links",
   );
 
   await page.goto("http://127.0.0.1:8766/?cards=1");

@@ -825,19 +825,57 @@ body[data-current-view="notes"] .item[data-kind="actions"] {
 }
 
 .reference-picker {
-  display: grid;
-  gap: 5px;
+  position: relative;
   min-width: 0;
 }
-.reference-picker > input[type="search"],
-.reference-picker > select {
+.reference-picker > input {
   width: 100%;
   min-width: 0;
+  padding-right: 24px;
 }
-.reference-picker > small {
-  font-size: 12px;
+.reference-picker::after {
+  content: "▾";
+  position: absolute;
+  right: 9px;
+  top: 9px;
+  pointer-events: none;
+  color: #64748b;
+}
+.reference-picker > select.reference-source {
+  position: absolute;
+  width: 1px !important;
+  height: 1px;
+  opacity: 0;
+  padding: 0;
+  border: 0;
+  pointer-events: none;
+}
+.reference-options {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  max-height: 230px;
+  overflow: auto;
+  background: white;
+  border: 1px solid #ccd5e2;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px #18253822;
+  padding: 4px;
+  font-size: 14px;
   font-weight: normal;
 }
-.reference-picker option[hidden] {
-  display: none;
+.reference-options > div {
+  padding: 7px 9px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.reference-options > [role="option"]:hover,
+.reference-options > .active {
+  background: #eaf2fb;
+}
+.reference-options > [aria-selected="true"] {
+  color: #173f6b;
+  font-weight: 600;
 }

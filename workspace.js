@@ -2884,71 +2884,175 @@
       origin.dispatchEvent(new Event("change", { bubbles: true }));
   }
   const editorSearchObservers = [];
+  document.addEventListener("pointerdown", (event) => {
+    document.querySelectorAll(".reference-picker").forEach((wrapper) => {
+      if (!wrapper.contains(event.target))
+        wrapper.dispatchEvent(new Event("pickerclose"));
+    });
+  });
   function searchableEditorFields(kind) {
     editorSearchObservers
       .splice(0)
       .forEach((observer) => observer.disconnect());
+    let number = 0;
     for (const select of $("editForm").querySelectorAll("select[name]")) {
       const wrapper = document.createElement("div");
       wrapper.className = "reference-picker";
-      const search = document.createElement("input");
-      search.type = "search";
-      search.autocomplete = "off";
-      search.placeholder = "Rechercher dans les options…";
-      search.setAttribute(
-        "aria-label",
-        "Rechercher dans " + fieldLabel(kind, select.name),
-      );
-      search.dataset.searchFor = select.name;
-      const status = document.createElement("small");
-      status.className = "muted";
-      status.setAttribute("role", "status");
+      const input = document.createElement("input"),
+        list = document.createElement("div");
+      input.type = "text";
+      input.autocomplete = "off";
+      input.placeholder = "Choisir ou rechercher…";
+      input.dataset.searchFor = select.name;
+      input.setAttribute("aria-label", fieldLabel(kind, select.name));
+      input.setAttribute("role", "combobox");
+      input.setAttribute("aria-autocomplete", "list");
+      input.setAttribute("aria-expanded", "false");
+      list.id = "editor-options-" + ++number;
+      list.className = "reference-options";
+      list.setAttribute("role", "listbox");
+      list.setAttribute("aria-label", fieldLabel(kind, select.name));
+      if (select.multiple) list.setAttribute("aria-multiselectable", "true");
+      input.setAttribute("aria-controls", list.id);
       select.before(wrapper);
-      wrapper.append(search, select, status);
-      if (!select.hasAttribute("aria-label"))
-        select.setAttribute("aria-label", fieldLabel(kind, select.name));
-      const originalSize = select.size;
-      const filter = () => {
-        const query = norm(search.value);
-        let matches = 0,
-          visible = 0;
-        for (const option of select.options) {
-          const match = !query || norm(option.textContent).includes(query);
-          if (option.value && match) matches++;
-          // A search never clears an existing link, including multiple selections.
-          option.hidden = !!query && !match && !option.selected;
-          if (!option.hidden) visible++;
-        }
-        select.size = query ? Math.max(2, Math.min(6, visible)) : originalSize;
-        status.textContent = query
-          ? matches
-            ? `${matches} résultat${matches > 1 ? "s" : ""}.`
-            : "Aucun résultat. Les sélections existantes sont conservées."
-          : "";
-        status.hidden = !query;
+      wrapper.append(input, select, list);
+      select.classList.add("reference-source");
+      select.tabIndex = -1;
+      select.setAttribute("aria-hidden", "true");
+      let open = false,
+        query = "",
+        active = -1;
+      const label = () =>
+        [...select.selectedOptions]
+          .filter((o) => o.value)
+          .map((o) => o.textContent)
+          .join(" ; ");
+      const close = () => {
+        open = false;
+        query = "";
+        active = -1;
+        input.value = label();
+        list.hidden = true;
+        input.setAttribute("aria-expanded", "false");
+        input.removeAttribute("aria-activedescendant");
       };
-      search.addEventListener("input", filter);
-      search.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" || event.key === "ArrowDown") {
-          event.preventDefault();
-          select.focus();
-        } else if (event.key === "Escape" && search.value) {
-          event.preventDefault();
-          event.stopPropagation();
-          search.value = "";
-          filter();
+      const draw = () => {
+        const options = [...select.options].filter(
+          (o) =>
+            !o.disabled &&
+            (!query || norm(o.textContent).includes(norm(query))),
+        );
+        list.replaceChildren();
+        for (const [i, option] of options.entries()) {
+          const item = document.createElement("div");
+          item.id = list.id + "-" + i;
+          item.setAttribute("role", "option");
+          item.setAttribute("aria-selected", String(option.selected));
+          item.textContent =
+            (select.multiple ? (option.selected ? "☑ " : "☐ ") : "") +
+            option.textContent;
+          if (i === active) {
+            item.classList.add("active");
+            input.setAttribute("aria-activedescendant", item.id);
+          }
+          item.onpointerdown = (e) => e.preventDefault();
+          item.onclick = (event) => {
+            event.preventDefault();
+            if (select.multiple) {
+              if (!option.value) {
+                for (const o of select.options) o.selected = false;
+              } else {
+                option.selected = !option.selected;
+                const blank = select.querySelector('option[value=""]');
+                if (blank) blank.selected = false;
+              }
+            } else select.value = option.value;
+            select.dispatchEvent(new Event("change", { bubbles: true }));
+            if (select.multiple) {
+              query = "";
+              input.value = "";
+              draw();
+            } else close();
+          };
+          list.append(item);
         }
+        if (!options.length) {
+          const empty = document.createElement("div");
+          empty.className = "muted";
+          empty.setAttribute("role", "status");
+          empty.textContent = "Aucun résultat";
+          list.append(empty);
+        }
+        list.hidden = !open;
+        input.setAttribute("aria-expanded", String(open));
+        if (active < 0) input.removeAttribute("aria-activedescendant");
+      };
+      input.onfocus = () => {
+        open = true;
+        query = "";
+        active = -1;
+        draw();
+        input.select();
+      };
+      input.onclick = () => {
+        if (!open) {
+          open = true;
+          draw();
+          input.select();
+        }
+      };
+      input.oninput = () => {
+        query = input.value;
+        open = true;
+        active = -1;
+        draw();
+      };
+      input.onkeydown = (e) => {
+        if (["ArrowDown", "ArrowUp", "Enter", "Escape"].includes(e.key)) {
+          if (e.key === "Escape" && !open) return;
+          e.preventDefault();
+          e.stopPropagation();
+          if (e.key === "Escape") {
+            close();
+            return;
+          }
+          if (e.key === "Enter") {
+            if (open) {
+              const items = list.querySelectorAll('[role="option"]');
+              items[active < 0 ? 0 : active]?.click();
+            }
+            return;
+          }
+          open = true;
+          const count = list.querySelectorAll('[role="option"]').length;
+          active = count
+            ? Math.max(
+                0,
+                Math.min(count - 1, active + (e.key === "ArrowDown" ? 1 : -1)),
+              )
+            : -1;
+          draw();
+          list.querySelector(".active")?.scrollIntoView({ block: "nearest" });
+        }
+      };
+      wrapper.addEventListener("focusout", (e) => {
+        if (!wrapper.contains(e.relatedTarget)) close();
       });
       select.addEventListener("change", () => {
-        if (!select.multiple) search.value = "";
-        filter();
+        input.value = label();
+        if (open) draw();
       });
-      const observer = new MutationObserver(filter);
+      wrapper.addEventListener("pickerclose", close);
+      const observer = new MutationObserver(() => {
+        if (open) draw();
+        else input.value = label();
+      });
       observer.observe(select, { childList: true });
       editorSearchObservers.push(observer);
-      filter();
+      close();
     }
   }
+
   // Form-only hierarchy: selections remain drafts until Save.
   function syncHierarchy(changed = "", infer = false) {
     if (!editing) return;
