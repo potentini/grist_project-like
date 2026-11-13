@@ -1267,7 +1267,8 @@
         <button class="btn btn-small" id="groupChildrenBtn">Niveaux bas : multi-lignes</button>
         <button class="btn btn-small" id="toggleDateEditBtn">Édition bloquée</button>
         <div class="timeline-sort-control">
-          <label for="timelineDateSortSelect">Trier par date</label>
+          <label for="projectSortSelect">Projets</label><select id="projectSortSelect"></select>
+          <label for="timelineDateSortSelect">Niveaux inférieurs</label>
           <select id="timelineDateSortSelect"></select>
         </div>
         <button class="btn btn-small" id="prevBtn" title="Période précédente">◀</button>
@@ -1328,7 +1329,8 @@
     <div class="toast-container" id="toastContainer"></div>
     <div class="drag-bubble" id="dragBubble"></div>
 
+    <script src="hierarchy-sort.js?v=20261113-sorting"></script>
     <script src="timeline-popup.js?v=20261112-popup-3"></script>
-    <script src="widget.js?v=20261112-popup-3-{{ site.github.build_revision }}"></script>
+    <script src="widget.js?v=20261113-sorting-{{ site.github.build_revision }}"></script>
   </body>
 </html>

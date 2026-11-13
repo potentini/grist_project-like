@@ -431,6 +431,11 @@ const fixture = require("../demo.json");
       window.testOptions = JSON.parse(
         sessionStorage.getItem("progressOptions") || "{}",
       );
+    // Legacy workflows specify their historical manual ordering explicitly.
+    window.testOptions.hierarchySortV1 ||= {
+      projects: "manual",
+      children: "manual",
+    };
     window.writes = [];
     window.batches = [];
     const table = (k) => db.tables.find((t) => t.tableId === k);

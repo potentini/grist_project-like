@@ -193,3 +193,11 @@ Le widget laisse Grist calculer cette valeur lorsqu’un nouvel élément est en
 Dans **Filtres par niveau**, seuls les champs mappés pour le niveau sélectionné sont proposés, y compris les champs supplémentaires et les colonnes calculées mappées. Les libellés personnalisés sont repris. Retirer un champ du mapping retire également les filtres actifs qui utilisaient ce champ.
 
 À l’ouverture, les branches du panneau gauche démarrent repliées dans chaque vue, sur téléphone, tablette et PC. Le pliage/dépliage manuel et les boutons Tout plier/Tout déplier restent disponibles. Les choix sont conservés pendant la session et l’historique de navigation ; un rechargement démarre de nouveau replié. Vérification dédiée : `node tests/initial-fold.cjs` (serveur local sur le port 8766).
+
+## Tri hiérarchique commun
+
+Le volet de suivi (**Filtres → Tri**), la table et la timeline proposent deux réglages : **Projets** (titre par défaut) et **Niveaux inférieurs** (date de fin croissante par défaut). Les autres critères sont la date de début, le titre, la priorité lorsqu’elle est mappée et l’ordre manuel. Le tri s’applique aux frères, sans séparer les éléments de leurs parents. Sans date propre, un parent utilise la dernière date de fin / première date de début de ses descendants actifs. Les dates absentes viennent en dernier ; les égalités de fin utilisent le début puis le titre. Le tri ne modifie aucune date ni relation.
+
+Les choix sont mémorisés dans l’option Grist `hierarchySortV1`, commune au suivi et à sa fenêtre Table/Timeline. Les options des instances de widgets distinctes restent propres à chaque instance. Le widget dual autonome permet de mapper Priorité et Ordre manuel dans le mapping interne. L’avancement propose explicitement les bases 1, 100 ou le comportement automatique historique.
+
+Le dépôt d’origine `potentini/dev_grist_3_level_dual_widget` utilise le même moteur `widget.js` et `hierarchy-sort.js`. Pour reporter les évolutions à venir : `python scripts/export-dual-widget.py /chemin/vers/dev_grist_3_level_dual_widget`. Le script génère les trois fichiers autonomes sans le pont spécifique à la fenêtre du suivi ; les changements sont ensuite à vérifier, committer et publier dans le dépôt cible. Vérification croisée : `node tests/hierarchy-sort.cjs`, avec les serveurs locaux du suivi sur 8766 et du dual sur 8767.

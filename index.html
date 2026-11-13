@@ -92,6 +92,18 @@
         ></div>
         <div id="advancedChips" class="actions"></div>
       </details>
+      <details id="hierarchySortSettings">
+        <summary>Tri</summary>
+        <div class="actions">
+          <label
+            >Projets
+            <select id="trackingProjectSort"></select></label
+          ><label
+            >Niveaux inférieurs
+            <select id="trackingChildSort"></select
+          ></label>
+        </div>
+      </details>
     </div>
     <main>
       <button
@@ -183,6 +195,7 @@
       </header>
       <iframe id="timelineFrame" title="Table et timeline du projet"></iframe>
     </dialog>
-    <script src="workspace.js?v=20261113-folded-left"></script>
+    <script src="hierarchy-sort.js?v=20261113-sorting"></script>
+    <script src="workspace.js?v=20261113-sorting"></script>
   </body>
 </html>

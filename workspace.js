@@ -1235,15 +1235,18 @@
     return archived(k, r) || transformed(k, r);
   }
   function outlineRows(k) {
-    return (data[k] || []).filter(
-      (r) =>
-        !transformed(k, r) &&
-        (!archived(k, r) ||
-          $("showArchived").checked ||
-          children(k, r).some(
-            ([kind, row]) => !inactive(kind, row) || children(kind, row).length,
-          )),
-    );
+    return (data[k] || [])
+      .filter(
+        (r) =>
+          !transformed(k, r) &&
+          (!archived(k, r) ||
+            $("showArchived").checked ||
+            children(k, r).some(
+              ([kind, row]) =>
+                !inactive(kind, row) || children(kind, row).length,
+            )),
+      )
+      .sort((a, b) => compareTrackingRows(k, a, b));
   }
   let removal = null;
   async function incomingLinks(k, row) {
@@ -1433,20 +1436,131 @@
     }
   };
 
+  let hierarchySort = HierarchySort.normalize(),
+    sortDescriptors = new Map();
+  function sortColumn(kind, name) {
+    const direct = cfg(kind).fields?.[name];
+    if (direct) return direct;
+    return Object.values(cfg(kind).fields || {}).find((id) => {
+      const names = [name === "Priorite" ? "priority" : "order", norm(name)];
+      return (
+        names.includes(norm(id)) ||
+        names.includes(
+          norm(
+            meta.find((m) => m.table === cfg(kind).table && m.colId === id)
+              ?.label,
+          ),
+        ) ||
+        (cfg(kind).extraFields || []).some(
+          (f) =>
+            cfg(kind).fields?.[f.id] === id && names.includes(norm(f.label)),
+        )
+      );
+    });
+  }
+  function sortDescriptor(kind, row) {
+    const key = kind + ":" + row.id;
+    if (sortDescriptors.has(key)) return sortDescriptors.get(key);
+    const children = [];
+    const childKind =
+      kind === "projects" ? "streams" : kind === "streams" ? "tasks" : null;
+    if (childKind)
+      for (const child of data[childKind] || [])
+        if (
+          !inactive(childKind, child) &&
+          has(
+            childKind,
+            child,
+            kind === "projects" ? "Projet" : "Chantier",
+            row,
+          )
+        )
+          children.push(sortDescriptor(childKind, child));
+    if (kind !== "actions")
+      for (const action of data.actions || []) {
+        const parent = actionParent(action);
+        if (
+          !inactive("actions", action) &&
+          parent?.[0] === kind &&
+          parent[1].id === row.id
+        )
+          children.push(sortDescriptor("actions", action));
+      }
+    const dates = (field) =>
+      children.map((c) => c[field]).filter((v) => v !== null);
+    const ends = dates("end"),
+      starts = dates("start"),
+      priorityCol = sortColumn(kind, "Priorite");
+    let choices = [];
+    try {
+      choices =
+        JSON.parse(
+          meta.find(
+            (m) => m.table === cfg(kind).table && m.colId === priorityCol,
+          )?.widgetOptions || "{}",
+        ).choices || [];
+    } catch {}
+    const descriptor = {
+      id: row.id,
+      title: title(kind, row),
+      start:
+        HierarchySort.date(val(kind, row, "DateDebut")) ??
+        (starts.length ? Math.min(...starts) : null),
+      end:
+        HierarchySort.date(val(kind, row, "DateFin")) ??
+        (ends.length ? Math.max(...ends) : null),
+      manual: row[sortColumn(kind, "Ordre")] ?? row.manualSort ?? row.id,
+      priority: HierarchySort.priority(row[priorityCol], choices),
+    };
+    sortDescriptors.set(key, descriptor);
+    return descriptor;
+  }
+  function sortUI() {
+    for (const [id, scope] of [
+      ["trackingProjectSort", "projects"],
+      ["trackingChildSort", "children"],
+    ]) {
+      const select = $(id);
+      select.innerHTML = HierarchySort.options
+        .map(
+          ([key, label]) =>
+            `<option value="${key}" ${key === "priority" && !(scope === "projects" ? ["projects"] : ["streams", "tasks", "actions"]).some((kind) => sortColumn(kind, "Priorite")) ? "disabled" : ""}>${label}</option>`,
+        )
+        .join("");
+      select.value = hierarchySort[scope];
+    }
+  }
+  for (const [id, scope] of [
+    ["trackingProjectSort", "projects"],
+    ["trackingChildSort", "children"],
+  ])
+    $(id).onchange = async () => {
+      hierarchySort = { ...hierarchySort, [scope]: $(id).value };
+      render();
+      if (!demo) await grist.setOption(HierarchySort.key, hierarchySort);
+    };
+  function compareTrackingRows(k, a, b) {
+    if (k === "notes")
+      return dateText(val(k, b, "Date")).localeCompare(
+        dateText(val(k, a, "Date")),
+      );
+    if (["projects", "streams", "tasks", "actions"].includes(k))
+      return HierarchySort.compare(
+        sortDescriptor(k, a),
+        sortDescriptor(k, b),
+        hierarchySort[k === "projects" ? "projects" : "children"],
+      );
+    return (
+      Number(val(k, a, "Ordre") || a.id) - Number(val(k, b, "Ordre") || b.id)
+    );
+  }
   function ordered(k) {
     return [...(data[k] || [])]
       .filter(
         (r) =>
           !transformed(k, r) && (!archived(k, r) || $("showArchived").checked),
       )
-      .sort((a, b) =>
-        k === "notes"
-          ? dateText(val(k, b, "Date")).localeCompare(
-              dateText(val(k, a, "Date")),
-            )
-          : Number(val(k, a, "Ordre") || a.id) -
-            Number(val(k, b, "Ordre") || b.id),
-      );
+      .sort((a, b) => compareTrackingRows(k, a, b));
   }
   function matches(k, r) {
     const p = quickChoice("projectFilter"),
@@ -1780,6 +1894,8 @@
       );
   }
   function render() {
+    sortDescriptors.clear();
+    sortUI();
     scopeAllowed = new WeakMap();
     advancedSets = null;
     document.body.dataset.currentView = view;
@@ -2632,6 +2748,7 @@
       );
       if (token !== request) return;
       data = Object.fromEntries(pairs);
+      sortDescriptors.clear();
       await loadReferences();
       applyLabels();
       filterOptions();
@@ -3622,6 +3739,17 @@
         );
       grist.ready({ requiredAccess: "full" });
       grist.onOptions(async (opts) => {
+        const sorting = HierarchySort.normalize(opts?.[HierarchySort.key]);
+        if (JSON.stringify(sorting) !== JSON.stringify(hierarchySort)) {
+          hierarchySort = sorting;
+          if (loaded && !editing) {
+            const positions = ["list", "detail"].map((id) => $(id).scrollTop);
+            render();
+            ["list", "detail"].forEach(
+              (id, i) => ($(id).scrollTop = positions[i]),
+            );
+          }
+        }
         const width = opts?.[layoutKey]?.leftFraction;
         if (typeof width === "number" && Number.isFinite(width)) {
           preferredSplit = Math.max(0.05, Math.min(0.95, width));
@@ -3805,6 +3933,8 @@
         statusCol: c.fields?.Statut || "",
         responsibleCol: c.fields?.Responsable || "",
         progressCol: c.fields?.Avancement || "",
+        orderCol: sortColumn(kind, "Ordre") || "",
+        priorityCol: sortColumn(kind, "Priorite") || "",
         progressBaseOne: progressBaseOne(kind),
         archivedCol: c.fields?.Transforme || "",
         manualArchivedCol: c.fields?.Archive || "",
@@ -3819,6 +3949,7 @@
       onOptions(cb) {
         cb({
           directMapping: config,
+          [HierarchySort.key]: hierarchySort,
           uiState: {
             allowEditing: false,
             tableAllowEditing: false,
@@ -3831,6 +3962,11 @@
       },
       selectedTable: { getTableId: async () => null },
       setOption: async (key, value) => {
+        if (key === HierarchySort.key) {
+          hierarchySort = HierarchySort.normalize(value);
+          await grist.setOption(key, hierarchySort);
+          render();
+        }
         if (key === "uiState")
           popupEditing =
             value?.allowEditing === true || value?.tableAllowEditing === true;
@@ -4315,6 +4451,8 @@
             endCol: c.fields.DateFin || "",
             statusCol: c.fields.Statut || "",
             responsibleCol: c.fields.Responsable || "",
+            orderCol: sortColumn(k, "Ordre") || "",
+            priorityCol: sortColumn(k, "Priorite") || "",
             progressCol: c.fields.Avancement || "",
             progressBaseOne: progressBaseOne(k),
             archivedCol: c.fields.Transforme || "",

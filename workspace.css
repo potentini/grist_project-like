@@ -1180,3 +1180,17 @@ body.phone-mode #advancedChoices label {
   font-size: 12px;
   padding: 2px 0;
 }
+
+#hierarchySortSettings {
+  margin: 0 16px 8px;
+  font-size: 13px;
+}
+#hierarchySortSettings label {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+}
+body.phone-mode #hierarchySortSettings {
+  margin: 0 9px 5px;
+  font-size: 12px;
+}

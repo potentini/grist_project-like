@@ -81,6 +81,7 @@
   let tableSelection = new Set();
   let tableSelectionAnchor = null;
   let timelineSortField = "default";
+  let hierarchySort = HierarchySort.normalize();
   let tableVisibleFields = [...TABLE_DEFAULT_VISIBLE_FIELDS];
   let tableColumnFilters = {};
   let openTableFilterField = null;
@@ -808,11 +809,14 @@
     node.fallbackAliases = data.fallbackAliases || node.fallbackAliases;
   }
 
+  function hierarchyDescriptor(node) {
+    const childDates=key=>(node.children||[]).map(child=>hierarchyDescriptor(child)[key]).filter(value=>value!==null);
+    const starts=childDates('start'),ends=childDates('end');
+    return {id:node.source?.rowId ?? node.id,title:node.label,start:HierarchySort.date(node.startDate) ?? (starts.length?Math.min(...starts):null),end:HierarchySort.date(node.endDate) ?? (ends.length?Math.max(...ends):null),priority:node.sortPriority ?? null,manual:node.order ?? node.source?.rowId ?? node.sourceIndex};
+  }
   function sortNodes(a, b) {
-    const ao = a.order != null ? a.order : Infinity;
-    const bo = b.order != null ? b.order : Infinity;
-    if (ao !== bo) return ao - bo;
-    return sourceOrderComparison(a, b);
+    if ((a.level===1)!==(b.level===1)) return a.level===1?-1:1;
+    return HierarchySort.compare(hierarchyDescriptor(a),hierarchyDescriptor(b),hierarchySort[a.level===1?'projects':'children']);
   }
 
   function sourceOrderComparison(a, b) {
@@ -1417,6 +1421,8 @@
       sourceRowId: rowId,
       source
     });
+    node.order = row[cfg.orderCol] ?? row.manualSort ?? rowId;
+    node.sortPriority = HierarchySort.priority(row[cfg.priorityCol],sourceColumnMetaCache.get(metadataKey(cfg.tableId,cfg.priorityCol))?.choices||[]);
     node.startDate = startDate;
     node.endDate = endDate;
     node.explicitDates = !!(startDate || endDate);
@@ -2632,17 +2638,10 @@
   }
 
   function updateTimelineDateSortSelect() {
-    if (!timelineDateSortSelect) return;
-    const dateOptions = LEVELS.flatMap((levelInfo) => [
-      { value: `dateStart${levelInfo.level}`, label: `DateDebut${levelInfo.level}` },
-      { value: `dateEnd${levelInfo.level}`, label: `DateFin${levelInfo.level}` }
-    ]);
-    const options = [{ value: "default", label: "Ordre par défaut" }, ...dateOptions];
-    const html = options.map((option) =>
-      `<option value="${escapeHtml(option.value)}" ${option.value === timelineSortField ? "selected" : ""}>${escapeHtml(option.label)}</option>`
-    ).join("");
-    if (timelineDateSortSelect.innerHTML !== html) timelineDateSortSelect.innerHTML = html;
-    timelineDateSortSelect.value = timelineSortField;
+    for(const [id,scope] of [['projectSortSelect','projects'],['timelineDateSortSelect','children']]) {
+      const select=document.getElementById(id);if(!select)continue;
+      select.innerHTML=HierarchySort.options.map(([key,label])=>`<option value="${key}" ${key==='priority' && !(scope==='projects'?[1]:LEVELS.filter(l=>l.level>1).map(l=>l.level)).some(level=>directMappingConfig.levels[level]?.priorityCol)?'disabled':''}>${label}</option>`).join('');select.value=hierarchySort[scope];
+    }
   }
 
   function updateViewModeButtons() {
@@ -2702,19 +2701,7 @@
     return selected;
   }
 
-  function compareNodesForTimeline(a, b) {
-    const config = timelineSortConfig();
-    if (!config) return sortNodes(a, b);
-    const ad = dateValueForTimelineSort(a, config);
-    const bd = dateValueForTimelineSort(b, config);
-    if (ad && bd) {
-      const diff = ad.getTime() - bd.getTime();
-      if (diff) return diff;
-    } else if (ad || bd) {
-      return ad ? -1 : 1;
-    }
-    return sortNodes(a, b);
-  }
+  function compareNodesForTimeline(a, b) { return sortNodes(a,b); }
 
   function sortedTimelineChildren(node) {
     return [...(node.children || [])].sort(compareNodesForTimeline);
@@ -3392,12 +3379,10 @@
     if (tableAddLevel1Btn) tableAddLevel1Btn.disabled = !canAddLevel(1);
     renderTableView();
   });
-  timelineDateSortSelect?.addEventListener("change", (e) => {
-    const nextSort = isValidDateSortField(e.target.value) ? e.target.value : "default";
-    timelineSortField = nextSort;
-    flatTracks = [];
-    saveState();
-    renderTimelinePane();
+  for(const [id,scope] of [['projectSortSelect','projects'],['timelineDateSortSelect','children']])document.getElementById(id)?.addEventListener('change',async(event)=>{
+    hierarchySort={...hierarchySort,[scope]:event.target.value};flatTracks=[];
+    render();
+    try {await grist.setOption(HierarchySort.key,hierarchySort);}catch(error){showToast(error.message,'error');}
   });
   expandAllBtn.addEventListener("click", () => toggleAllNodes(false));
   tableExpandAllBtn?.addEventListener("click", () => toggleAllNodes(true));
@@ -3471,6 +3456,9 @@
           <div class="row"><label>Statut</label><select data-direct-level="${levelInfo.level}" data-direct-field="statusCol">${columnOptionsHtml(tableId, cfg.statusCol)}</select></div>
           <div class="row"><label>Responsable</label><select data-direct-level="${levelInfo.level}" data-direct-field="responsibleCol">${columnOptionsHtml(tableId, cfg.responsibleCol)}</select></div>
           <div class="row"><label>Avancement</label><select data-direct-level="${levelInfo.level}" data-direct-field="progressCol">${columnOptionsHtml(tableId, cfg.progressCol)}</select></div>
+          <div class="row"><label>Base avancement</label><select data-direct-level="${levelInfo.level}" data-direct-field="progressBaseOne"><option value="auto" ${typeof cfg.progressBaseOne!=='boolean'?'selected':''}>Automatique (ancien comportement)</option><option value="true" ${cfg.progressBaseOne===true?'selected':''}>Base 1 : 0,1 = 10 %</option><option value="false" ${cfg.progressBaseOne===false?'selected':''}>Base 100 : 0,1 = 0,1 %</option></select></div>
+          <div class="row"><label>Priorité (tri)</label><select data-direct-level="${levelInfo.level}" data-direct-field="priorityCol">${columnOptionsHtml(tableId,cfg.priorityCol)}</select></div>
+          <div class="row"><label>Ordre manuel</label><select data-direct-level="${levelInfo.level}" data-direct-field="orderCol">${columnOptionsHtml(tableId,cfg.orderCol)}</select></div>
           ${extraRows}
           <div class="mapping-actions"><button type="button" class="btn btn-small" data-add-extra-field="${levelInfo.level}">+ Ajouter un champ</button></div>
         </fieldset>`;
@@ -3507,9 +3495,9 @@
       const field = select.dataset.directField;
       const cfg = directMappingConfig.levels[level];
       if (!cfg) return;
-      cfg[field] = select.value;
+      cfg[field] = field === "progressBaseOne" ? (select.value==='auto'?undefined:select.value==='true') : select.value;
       if (field === "tableId") {
-        for (const directField of ["parentCol", ...DIRECT_FIELDS.map((name) => `${name}Col`)]) cfg[directField] = "";
+        for (const directField of ["parentCol", "orderCol", "priorityCol", ...DIRECT_FIELDS.map((name) => `${name}Col`)]) cfg[directField] = "";
         cfg.extraFields = [];
         automapDirectLevelConfig(cfg);
       }
@@ -3606,13 +3594,25 @@
   grist.ready({ requiredAccess: "full", allowSelectBy: true });
 
   grist.onOptions(function (options) {
+    hierarchySort=HierarchySort.normalize(options?.[HierarchySort.key]);
+    flatTracks=[];
     const widgetState = options?.[WIDGET_STATE_OPTION_KEY];
     const optionMapping = options?.[DIRECT_MAPPING_OPTION_KEY];
-    let shouldRender = false;
+    let shouldRender = true;
 
     if (optionMapping) {
       const previousMappingSignature = directMappingSignature();
       directMappingConfig = normalizeDirectMappingConfig(optionMapping);
+      const tracking=options?.projectWorkspaceMappingV1;
+      for(const [i,kind] of ['projects','streams','tasks'].entries()) {
+        const source=tracking?.[kind],config=directMappingConfig.levels[i+1];
+        if(!source || source.table!==config?.tableId)continue;
+        for(const [property,field,alias] of [['orderCol','Ordre','order'],['priorityCol','Priorite','priority']]) {
+          const normalize=value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/gi,'').toLowerCase();
+          const col=source.fields?.[field] || Object.values(source.fields||{}).find(id=>[normalize(field),alias].includes(normalize(id))) || (source.extraFields||[]).filter(extra=>[normalize(field),alias].includes(normalize(extra.label))).map(extra=>source.fields?.[extra.id]).find(Boolean);
+          if(col)config[property]=col;
+        }
+      }
       if (previousMappingSignature !== directMappingSignature()) invalidateDirectTableCache();
       directMappingModeActive = hasDirectMappingConfig(directMappingConfig);
       if (!directMappingModeActive) clearDirectRecords();
