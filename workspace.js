@@ -2646,7 +2646,7 @@
     true,
   );
   let timelineHeadingObserver;
-  function renderDetail() {
+  function renderDetail(showMapped = false) {
     timelineHeadingObserver?.disconnect();
     if (editing?.inline) return;
     const k = selection?.k,
@@ -2691,7 +2691,9 @@
         "Etat",
         "Vigilance",
       ]
-        .filter((f) => val(k, r, f) !== "")
+        .filter((f) =>
+          showMapped ? !!cfg(k).fields?.[f] : val(k, r, f) !== "",
+        )
         .map(
           (f) =>
             `<dt>${esc(fieldLabel(k, f))}</dt><dd data-slot="${f}">${esc(f.startsWith("Date") && f !== "DateSource" ? dateText(val(k, r, f)) : displayValue(k, r, f))}</dd>`,
@@ -2706,7 +2708,7 @@
         !values(val(k, r, f)).some(
           (value) => value !== 0 && String(value ?? "").trim() !== "",
         );
-      if (cfg(k).fields?.[f] && !emptyOrigin) {
+      if (cfg(k).fields?.[f] && (!emptyOrigin || showMapped)) {
         html += `<section class="relation-field"><h3>${esc(fieldLabel(k, f))}</h3><div data-slot="${f}">${rs.length ? rs.map((x) => item(target, x)).join("") : '<span class="muted">Aucun rattachement</span>'}</div></section>`;
       }
     }
@@ -2723,7 +2725,7 @@
       "PointEtape",
       "Commentaire",
     ])
-      if (val(k, r, f))
+      if (val(k, r, f) || (showMapped && cfg(k).fields?.[f]))
         html += `<h3>${esc(cfg(k).fieldLabels?.[f] || (f === "Contenu" ? "Notes et décisions" : f))}</h3><div class="text" data-slot="${f}">${esc(displayValue(k, r, f))}</div>`;
     if (["projects", "streams", "tasks"].includes(k))
       html += `<div class="actions">${k !== "tasks" ? `<button data-new="${k === "projects" ? "streams" : "tasks"}">+ ${k === "projects" ? cfg("streams").label || "Chantier" : cfg("tasks").label || "Tâche"}</button>` : ""}<button data-new="notes">+ Note</button><button data-new="actions">+ Action</button></div>`;
@@ -3135,7 +3137,11 @@
       })
       .join("");
     if (r) {
+      renderDetail(true);
       const controls = [...$("fields").children];
+      const editableFields = new Set(
+        controls.map((label) => label.querySelector("[name]")?.name),
+      );
       const form = $("editForm");
       const display = document.createElement("div");
       display.className = "inline-content";
@@ -3147,6 +3153,7 @@
         .forEach((x) => x.remove());
       const extras = document.createElement("details");
       extras.innerHTML = "<summary>Autres champs</summary>";
+      extras.open = true;
       for (const label of controls) {
         const control = label.querySelector("[name]");
         const slot =
@@ -3159,6 +3166,18 @@
           }
           control.setAttribute("aria-label", fieldLabel(k, control.name));
         } else extras.append(label);
+      }
+      for (const field of fieldsFor(k)) {
+        if (!cfg(k).fields?.[field] || editableFields.has(field)) continue;
+        const slot = display.querySelector(`[data-slot="${field}"]`);
+        const badge = '<small class="muted"> (lecture seule)</small>';
+        if (slot) slot.insertAdjacentHTML("beforeend", badge);
+        else {
+          const label = document.createElement("label");
+          label.dataset.readonlyField = field;
+          label.innerHTML = `${esc(fieldLabel(k, field))}<span>${esc(displayValue(k, r, field)) || "Non renseigné"}</span>${badge}`;
+          extras.append(label);
+        }
       }
       $("fields").replaceChildren(display);
       if (extras.children.length > 1) $("fields").append(extras);

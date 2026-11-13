@@ -205,3 +205,5 @@ Le dépôt d’origine `potentini/dev_grist_3_level_dual_widget` utilise le mêm
 La recherche du suivi ouvre temporairement les branches du panneau gauche qui contiennent des résultats, même si elles étaient repliées. Le pliage de la recherche est indépendant : effacer la recherche rétablit le pliage précédent. Les résultats sans correspondance ne sont pas conservés comme cibles de déplacement en mode Édition. Vérification dédiée : `node tests/search-reveal.cjs`.
 
 La feuille partagée `form-theme.css` fixe le contraste des champs natifs et des listes de choix, en mode jour et nuit (`prefers-color-scheme`), y compris le texte de saisie automatique des navigateurs WebKit. Elle doit être publiée avec les fichiers du widget.
+
+En mode Modification, les champs mappés sont affichés même lorsqu’ils sont vides, à leur emplacement habituel. La section Autres champs est ouverte par défaut. Les champs calculés et les champs protégés restent visibles en lecture seule ; ils ne sont pas réécrits par le formulaire. L’affichage hors modification conserve ses règles de masquage des champs vides.

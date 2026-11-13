@@ -2075,6 +2075,55 @@ const fixture = require("../demo.json");
     "PASS dark/light form foregrounds, backgrounds, text fill, textarea and searchable filter contrast",
   );
 
+  await page.goto("http://127.0.0.1:8766/?tree=1");
+  await page.evaluate(() =>
+    Object.assign(window.testDb.data.projects[0], {
+      Responsable: "",
+      DateDebut: "",
+      DateFin: "",
+      Description: "",
+      PointEtape: "",
+    }),
+  );
+  await page.locator("#refresh").click();
+  await page.locator('#list [data-kind=projects][data-id="1"]').click();
+  assert.equal(await page.locator("#detail [data-slot=DateDebut]").count(), 0);
+  await page.locator("#editionButton").click();
+  await page.getByRole("button", { name: "Modifier", exact: true }).click();
+  for (const field of [
+    "Responsable",
+    "DateDebut",
+    "DateFin",
+    "Description",
+    "PointEtape",
+  ]) {
+    const fieldControl = page.locator(
+      `#detail [data-slot="${field}"] [name="${field}"]`,
+    );
+    assert.equal(await fieldControl.isVisible(), true);
+    assert.equal(
+      await page.locator(`#detail [data-readonly-field="${field}"]`).count(),
+      0,
+    );
+  }
+  assert.equal(
+    await page.locator("#detail [data-readonly-field=Code]").isVisible(),
+    true,
+  );
+  await page.locator("#detail [name=Description]").fill("Description ajoutée");
+  await page.locator("#detail [name=DateDebut]").fill("2026-11-14");
+  await page.locator("#save").click();
+  await page.waitForFunction(
+    () => window.testDb.data.projects[0].Description === "Description ajoutée",
+  );
+  assert.equal(
+    await page.evaluate(() => window.testDb.data.projects[0].DateDebut),
+    Date.parse("2026-11-14T00:00:00Z") / 1000,
+  );
+  console.log(
+    "PASS empty mapped fields visible in place during inline edit, read-only fields exposed and new values saved",
+  );
+
   await page.goto("http://127.0.0.1:8766/?cards=1");
   const card = page.locator('#list [data-kind=tasks][data-id="1"]');
   await page.locator("#list [data-fold-all=open]").click();
