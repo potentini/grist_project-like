@@ -153,6 +153,12 @@
   const aliases = {
     Titre: ["Titre", "Nom", "Name", "Title", "Tache"],
     Responsable: ["Responsable", "Owner", "AssignedTo"],
+    ResponsableDiPSi: [
+      "ResponsableExterne",
+      "Responsable externe",
+      "ResponsableDiPSi",
+      "Responsable DiPSi",
+    ],
     DateDebut: ["DateDebut", "Debut", "StartDate"],
     DateFin: ["DateFin", "Deadline", "Fin", "DueDate"],
     Contenu: ["Contenu", "CompteRendu", "Notes", "Texte"],
@@ -276,11 +282,14 @@
     Object.entries(schemas).map(([k, v]) => [k, v.label]),
   );
   function fieldLabel(k, f) {
+    const custom = cfg(k).fieldLabels?.[f];
     return (
       cfg(k).extraFields?.find((x) => x.id === f)?.label ||
-      cfg(k).fieldLabels?.[f] ||
+      (f === "ResponsableDiPSi" && norm(custom) === "responsabledipsi"
+        ? ""
+        : custom) ||
       {
-        ResponsableDiPSi: "Responsable DiPSi",
+        ResponsableDiPSi: "Responsable externe",
         DateFin: "Date de fin (date précise)",
         Echeance: "Échéance (texte libre)",
       }[f] ||
@@ -2663,7 +2672,7 @@
             s.fields
               .map(
                 (f) =>
-                  `<label>${esc(f)}${f === "Titre" ? " *" : ""}<select data-map="${k}" data-field="${f}">${options(
+                  `<label>${esc(f === "ResponsableDiPSi" ? "Responsable externe" : f)}${f === "Titre" ? " *" : ""}<select data-map="${k}" data-field="${f}">${options(
                     meta
                       .filter((x) => x.table === c.table)
                       .map((x) => [x.colId, x.label || x.colId]),
@@ -2883,12 +2892,7 @@
             const help = label.querySelector("small");
             if (help) slot.append(help);
           }
-          control.setAttribute(
-            "aria-label",
-            links[k]?.[control.name]
-              ? relationLabel(control.name)
-              : control.name,
-          );
+          control.setAttribute("aria-label", fieldLabel(k, control.name));
         } else extras.append(label);
       }
       $("fields").replaceChildren(display);
@@ -3373,6 +3377,17 @@
         if (r && el.dataset.initialValue === current) continue;
         const m = col(k, f);
         if (m?.isFormula) continue;
+        // Let Grist evaluate its authenticated-user initial formula on new rows.
+        // Sending an explicit empty value would suppress that native default.
+        if (
+          !r &&
+          f === "Responsable" &&
+          m?.formula &&
+          (el.multiple
+            ? ![...el.selectedOptions].some((o) => o.value)
+            : !el.value.trim())
+        )
+          continue;
         let v = el.value;
         const target = links[k]?.[f];
         if (target) {

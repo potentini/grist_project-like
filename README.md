@@ -144,9 +144,9 @@ Les filtres rapides Projet, Responsable et Statut proposent chacun un seul menu 
 
 Dans **Filtres par niveau**, une liste de valeurs disponibles apparaît après sélection du champ. Plusieurs valeurs peuvent être cochées puis ajoutées comme un critère. La zone Contient sert à chercher dans les options ; sans case cochée, elle garde son filtrage textuel « contient ». Les champs sans valeur proposent « (Vide) ». Les valeurs sont calculées dans le périmètre natif Grist courant et utilisent les libellés des références, pas les identifiants. Les sélections multiples sont conservées dans l’historique de navigation de la session.
 
-## Responsable DiPSi et champs supplémentaires
+## Responsable externe et champs supplémentaires
 
-Les quatre niveaux Projets, Chantiers, Taches et Actions proposent un champ ResponsableDiPSi, affiché « Responsable DiPSi », en plus de Responsable. Chaque niveau permet d’ajouter des colonnes existantes comme champs supplémentaires dans le mapping. Voir [les consignes](imports/CHAMPS_SUPPLEMENTAIRES.md) pour préparer ces colonnes et les associer. Aucune colonne n’est créée automatiquement.
+Les quatre niveaux Projets, Chantiers, Taches et Actions proposent un champ ResponsableDiPSi, affiché « Responsable externe », en plus de Responsable. Chaque niveau permet d’ajouter des colonnes existantes comme champs supplémentaires dans le mapping. Voir [les consignes](imports/CHAMPS_SUPPLEMENTAIRES.md) pour préparer ces colonnes et les associer. Aucune colonne n’est créée automatiquement.
 
 Dans le panneau droit, **Éléments dépendants**, **Notes et réunions associées** et **Actions associées** disposent d’une flèche de pliage/dépliage. Leur état est propre à l’élément et conservé pendant la navigation et les retours de la session. Le pliage reste possible en lecture seule.
 
@@ -183,3 +183,9 @@ Sur un écran tactile dont le petit côté mesure moins de 600 pixels CSS, et lo
 Le téléphone démarre sur **Actions**, avec ajout d’action en haut de liste. Le menu unique permet de choisir **Projets**, **Chantiers** ou **Actions**. **Filtres** rassemble la recherche, les filtres rapides et les filtres avancés. Le titre général, Mapping, Actualiser et les liens de timeline sont masqués. Le petit bouton **Édition** conserve le contrôle des modifications.
 
 La liste occupe seule l’écran. Ouvrir un élément affiche uniquement le détail, avec une bande cliquable à gauche pour revenir à la liste et retrouver son défilement. Une modification en cours doit être enregistrée ou annulée avant ce retour. Les formulaires de création occupent la largeur disponible, avec saisie adaptée au tactile et commandes Enregistrer/Annuler regroupées. Ces règles sont limitées au mode téléphone ; les vues PC et tablette conservent leur présentation et leur fonctionnement.
+
+## Responsable par défaut à la création
+
+L’API publique du widget ne fournit pas l’identité de l’utilisateur connecté. L’affectation peut être confiée à une formule d’initialisation Grist sur la colonne de données Responsable : `user.Name` pour une colonne Texte, ou `Collaborateurs.lookupOne(Email=user.Email)` pour une référence (en adaptant les noms réels de table et de colonne). La formule doit s’appliquer aux nouvelles lignes, pas aux modifications ultérieures.
+
+Le widget laisse Grist calculer cette valeur lorsqu’un nouvel élément est enregistré sans responsable choisi. Un responsable explicitement sélectionné reste prioritaire ; la modification d’un élément existant ne réaffecte pas son responsable. Ce mécanisme attribue la valeur à l’enregistrement : il ne permet pas d’afficher l’identité dans le formulaire avant sa création.

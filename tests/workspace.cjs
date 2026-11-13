@@ -1889,6 +1889,41 @@ const fixture = require("../demo.json");
     "PASS single combobox field, filtered results, click/keyboard selection, hierarchy constraints, cancel and preserved multiple links",
   );
 
+  await page.goto("http://127.0.0.1:8766/?tree=1");
+  await page.locator("#list [data-kind=projects]").first().waitFor();
+  await page.evaluate(() => {
+    window.testDb.meta.find(
+      (m) => m.table === "Actions" && m.colId === "Responsable",
+    ).formula = "user.Name";
+  });
+  await page.locator("#mappingButton").click();
+  await page.locator("#mappingButton").click();
+  await page.locator("nav [data-view=actions]").click();
+  await page.locator("#editionButton").click();
+  await page.locator("#list [data-new=actions]").click();
+  await page.locator("#editForm [name=Titre]").fill("Valeur initiale Grist");
+  await page.locator("#save").click();
+  await page.waitForFunction(() => window.writes.length > 0);
+  assert.equal(
+    Object.hasOwn(
+      await page.evaluate(() => window.writes[0][3]),
+      "Responsable",
+    ),
+    false,
+  );
+  await page.locator("#list [data-new=actions]").click();
+  await page.locator("#editForm [name=Titre]").fill("Choix manuel");
+  await page.locator("#editForm [name=Responsable]").fill("Responsable choisi");
+  await page.locator("#save").click();
+  await page.waitForFunction(() => window.writes.length === 2);
+  assert.equal(
+    await page.evaluate(() => window.writes[1][3].Responsable),
+    "Responsable choisi",
+  );
+  console.log(
+    "PASS new-row owner leaves native initial formula intact and preserves explicit owner",
+  );
+
   await page.goto("http://127.0.0.1:8766/?cards=1");
   const card = page.locator('#list [data-kind=tasks][data-id="1"]');
   await card.waitFor();
@@ -2184,7 +2219,10 @@ const fixture = require("../demo.json");
   );
   await page.reload();
   await page.locator('#list [data-kind=tasks][data-id="1"]').click();
-  assert.match(await page.locator("#detail").innerText(), /Responsable DiPSi/);
+  assert.match(
+    await page.locator("#detail").innerText(),
+    /Responsable externe/,
+  );
   assert.match(await page.locator("#detail").innerText(), /Camille Pilote/);
   assert.match(
     await page.locator("#detail").innerText(),
@@ -2428,22 +2466,18 @@ const fixture = require("../demo.json");
   );
   await phoneSearch("Projet").fill("exemple");
   // A touch browser may deliver pointerup without a compatibility click.
-  await phoneOption("Projet")
-    .first()
-    .dispatchEvent("pointerdown", {
-      pointerType: "touch",
-      pointerId: 42,
-      clientX: 10,
-      clientY: 10,
-    });
-  await phoneOption("Projet")
-    .first()
-    .dispatchEvent("pointerup", {
-      pointerType: "touch",
-      pointerId: 42,
-      clientX: 10,
-      clientY: 10,
-    });
+  await phoneOption("Projet").first().dispatchEvent("pointerdown", {
+    pointerType: "touch",
+    pointerId: 42,
+    clientX: 10,
+    clientY: 10,
+  });
+  await phoneOption("Projet").first().dispatchEvent("pointerup", {
+    pointerType: "touch",
+    pointerId: 42,
+    clientX: 10,
+    clientY: 10,
+  });
   assert.equal(
     await phone.locator("#editForm select[name=Projet]").inputValue(),
     "1",
