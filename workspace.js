@@ -2939,7 +2939,12 @@
         list = document.createElement("div");
       input.type = "text";
       input.autocomplete = "off";
-      input.placeholder = "Choisir ou rechercher…";
+      input.placeholder =
+        !editing?.r &&
+        select.name === "Responsable" &&
+        col(kind, "Responsable")?.formula
+          ? "Choisir ou rechercher… (vous si laissé vide)"
+          : "Choisir ou rechercher…";
       input.dataset.searchFor = select.name;
       input.setAttribute("aria-label", fieldLabel(kind, select.name));
       input.setAttribute("role", "combobox");

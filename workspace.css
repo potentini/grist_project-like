@@ -1074,3 +1074,8 @@ body.phone-mode #fields .grid {
 .reference-options {
   touch-action: pan-y;
 }
+
+#editForm [data-search-for="Responsable"]::placeholder {
+  color: #748094;
+  opacity: 1;
+}
