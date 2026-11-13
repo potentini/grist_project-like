@@ -1194,3 +1194,21 @@ body.phone-mode #hierarchySortSettings {
   margin: 0 9px 5px;
   font-size: 12px;
 }
+
+.quick-multiple > summary > input.quick-search {
+  width: calc(100% - 16px);
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+}
+.quick-multiple > summary:focus-within {
+  outline: 2px solid #7ca5ce;
+  outline-offset: 1px;
+}
+body.phone-mode .quick-multiple > summary > input.quick-search {
+  font-size: 16px;
+}

@@ -515,7 +515,8 @@
     if (!popup) {
       popup = document.createElement("details");
       popup.className = "quick-multiple";
-      popup.innerHTML = "<summary>Choix multiples</summary><div></div>";
+      popup.innerHTML =
+        '<summary><input class="quick-search" type="text" autocomplete="off" role="combobox" aria-autocomplete="list" aria-haspopup="dialog"></summary><div role="dialog"></div>';
       wrapper.append(popup);
     }
     const selected = quickChoice(id),
@@ -525,11 +526,14 @@
           : selected.length
             ? opts.find(([v]) => String(v) === selected[0])?.[1] || selected[0]
             : "Tous";
-    popup.querySelector("summary").textContent = text;
-    popup
-      .querySelector("summary")
-      .setAttribute("aria-label", caption + " : " + text);
-    popup.querySelector("summary").title = caption + " : " + text;
+    const input = popup.querySelector(".quick-search");
+    input.value = popup.dataset.query || text;
+    input.setAttribute("aria-label", caption);
+    input.setAttribute("aria-expanded", String(popup.open));
+    input.setAttribute("aria-controls", id + "-choices");
+    input.title = caption + " : " + text;
+    popup.querySelector("div").id = id + "-choices";
+    popup.querySelector("div").setAttribute("aria-label", caption);
     popup.querySelector("div").innerHTML =
       `<label><input type="checkbox" data-quick-all="${id}" ${!selected.length ? "checked" : ""}>Tous</label>` +
       opts
@@ -541,14 +545,70 @@
       (!opts.length
         ? '<span class="muted">Aucune valeur dans le périmètre courant.</span>'
         : "");
+    const filterChoices = () => {
+      const query = norm(popup.dataset.query || "");
+      let count = 0;
+      for (const label of popup.querySelectorAll("div > label")) {
+        const option = label.querySelector("[data-quick]");
+        label.hidden =
+          !!option && !!query && !norm(label.textContent).includes(query);
+        if (option && !label.hidden) count++;
+      }
+      let empty = popup.querySelector("div > .muted");
+      if (!empty) {
+        empty = document.createElement("span");
+        empty.className = "muted";
+        empty.setAttribute("role", "status");
+        popup.querySelector("div").append(empty);
+      }
+      empty.hidden = count > 0;
+      empty.textContent = query
+        ? "Aucun résultat"
+        : "Aucune valeur dans le périmètre courant.";
+    };
+    input.onfocus = () => {
+      if (popup.dataset.closing) return;
+      popup.open = true;
+      popup.dataset.query = "";
+      filterChoices();
+      input.select();
+    };
+    input.onclick = () => {
+      popup.open = true;
+    };
+    input.oninput = () => {
+      popup.dataset.query = input.value;
+      popup.open = true;
+      filterChoices();
+    };
+    input.onkeydown = (e) => {
+      if (e.key === "Enter" || e.key === "ArrowDown") {
+        e.preventDefault();
+        const option = [
+          ...popup.querySelectorAll("div > label:not([hidden]) input"),
+        ].find((o) =>
+          popup.dataset.query ? o.hasAttribute("data-quick") : true,
+        );
+        if (e.key === "Enter") option?.click();
+        else option?.focus();
+      }
+    };
     popup.ontoggle = () => {
+      input.setAttribute("aria-expanded", String(popup.open));
       if (popup.open)
         document.querySelectorAll(".quick-multiple").forEach((other) => {
           if (other !== popup) other.open = false;
         });
+      else {
+        popup.dataset.query = "";
+        input.value = text;
+        filterChoices();
+      }
     };
+    filterChoices();
     popup.onchange = (e) => {
       if (!e.target.matches("[data-quick],[data-quick-all]")) return;
+      const searching = document.activeElement === input;
       const all = e.target.hasAttribute("data-quick-all"),
         value = e.target.value;
       quickSelections[id] = all
@@ -558,6 +618,10 @@
           );
       filterOptions();
       render();
+      if (searching) {
+        input.select();
+        return;
+      }
       [...popup.querySelectorAll("input")]
         .find((x) =>
           all
@@ -570,7 +634,13 @@
       if (e.key === "Escape") {
         e.preventDefault();
         popup.open = false;
-        popup.querySelector("summary").focus({ preventScroll: true });
+        popup.dataset.query = "";
+        input.value = text;
+        input.setAttribute("aria-expanded", "false");
+        filterChoices();
+        popup.dataset.closing = "true";
+        input.focus({ preventScroll: true });
+        delete popup.dataset.closing;
       }
     };
   }
