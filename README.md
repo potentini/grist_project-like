@@ -208,6 +208,12 @@ La feuille partagée `form-theme.css` impose un texte foncé sur fond blanc dans
 
 En mode Modification, les champs mappés sont affichés même lorsqu’ils sont vides, à leur emplacement habituel. La section Autres champs est ouverte par défaut. Les champs calculés et les champs protégés restent visibles en lecture seule ; ils ne sont pas réécrits par le formulaire. L’affichage hors modification conserve ses règles de masquage des champs vides.
 
+## Cadrage et navigation de la timeline
+
+Le zoom **Tout** est proposé par défaut : il couvre la première et la dernière date du périmètre sélectionné, avec une marge de 5 % de cet intervalle de chaque côté (arrondie au jour supérieur, au minimum un jour). Les autres zooms couvrent respectivement **7 jours**, **4 semaines**, **3 mois (91 jours)** et **1 an (365 jours)**. Chaque période annoncée tient intégralement dans la largeur du panneau, même après redimensionnement.
+
+Changer de zoom ou cliquer **Aujourd’hui** place la date du jour à environ 25 % de la période (arrondi au jour) : un quart vers le passé, trois quarts vers le futur. Cela reste vrai quand les données sont entièrement passées ou futures. Dans le zoom Tout, Aujourd’hui rétablit le cadrage des données avec ses marges. Les flèches et Aujourd’hui restent regroupés sur une seule ligne. Les anciens cadrages sont migrés vers Tout lors du premier chargement de cette version ; les choix suivants sont mémorisés.
+
 ## Commandes tactiles de la timeline
 
 Avec **Édition autorisée**, un appui court sur une barre ouvre la fenêtre de modification des données. Un appui long (environ une demi-seconde) active cette seule barre : elle est entourée de bleu et ses poignées de début/fin apparaissent. Glisser ensuite le centre déplace les dates en conservant la durée ; glisser une poignée ajuste une seule date. Les jalons se déplacent aussi. Un nouvel appui long sur la barre active, ou un appui court/long sur un autre élément ou en dehors de la timeline, désactive cette sélection. Les mêmes gestes fonctionnent dans la timeline générale, la timeline projet et le dual widget original. La souris conserve ses commandes habituelles.

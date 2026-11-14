@@ -1212,3 +1212,11 @@ body.phone-mode #hierarchySortSettings {
 body.phone-mode .quick-multiple > summary > input.quick-search {
   font-size: 16px;
 }
+
+/* Explicit contrast for native dialog buttons, including dark system themes. */
+#timelineClose {
+  color: #23334a;
+  -webkit-text-fill-color: #23334a;
+  background: #fff;
+  color-scheme: light;
+}

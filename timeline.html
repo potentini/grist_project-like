@@ -381,6 +381,9 @@
         border-radius: 8px;
         border: 1px solid var(--border);
         background: var(--card-bg);
+        color: var(--text);
+        -webkit-text-fill-color: currentColor;
+        color-scheme: light;
         font-weight: 600;
         cursor: pointer;
         display: inline-flex;
@@ -404,6 +407,19 @@
         padding: 3px 7px;
       }
 
+      .timeline-navigation {
+        display: inline-flex;
+        flex: 0 0 auto;
+        flex-wrap: nowrap;
+        align-items: center;
+        gap: 4px;
+        white-space: nowrap;
+      }
+      .timeline-navigation .btn {
+        height: 28px;
+        min-width: 28px;
+        justify-content: center;
+      }
       .zoom-controls {
         display: flex;
         gap: 4px;
@@ -450,6 +466,7 @@
 
       .timeline-header {
         flex: 1;
+        min-width: 0;
         display: flex;
         flex-direction: column;
         overflow: hidden;
@@ -464,7 +481,8 @@
       }
 
       .time-cell {
-        min-width: var(--cell-width);
+        min-width: 0;
+        overflow: hidden;
         padding: 2px 2px;
         text-align: center;
         font-size: 0.72rem;
@@ -508,6 +526,7 @@
 
       .timeline-body {
         flex: 1;
+        min-width: 0;
         position: relative;
         overflow: visible;
         background: var(--card-bg);
@@ -1286,16 +1305,18 @@
           <label for="timelineDateSortSelect">Niveaux inférieurs</label>
           <select id="timelineDateSortSelect"></select>
         </div>
+        <div class="timeline-navigation" role="group" aria-label="Navigation dans le calendrier">
         <button class="btn btn-small" id="prevBtn" title="Période précédente">◀</button>
         <button class="btn btn-small" id="todayBtn" title="Positionner aujourd’hui">Aujourd’hui</button>
         <button class="btn btn-small" id="nextBtn" title="Période suivante">▶</button>
+        </div>
 
         <div class="zoom-controls">
-          <button class="btn active" data-zoom="day">Jour</button>
-          <button class="btn" data-zoom="week">Semaine</button>
-          <button class="btn" data-zoom="month">Mois</button>
-          <button class="btn" data-zoom="year">Année</button>
-          <button class="btn" data-zoom="all">Tout</button>
+          <button class="btn" data-zoom="day" title="7 jours">Jour</button>
+          <button class="btn" data-zoom="week" title="4 semaines">Semaine</button>
+          <button class="btn" data-zoom="month" title="3 mois (91 jours)">Mois</button>
+          <button class="btn" data-zoom="year" title="1 an (365 jours)">Année</button>
+          <button class="btn active" data-zoom="all" title="Toutes les dates, avec 5 % de marge de chaque côté">Tout</button>
         </div>
 
         <div class="current-period" id="currentPeriod">–</div>
@@ -1346,6 +1367,6 @@
 
     <script src="hierarchy-sort.js?v=20261113-sorting"></script>
     <script src="timeline-popup.js?v=20261112-popup-3"></script>
-    <script src="widget.js?v=20261114-touch-hold-{{ site.github.build_revision }}"></script>
+    <script src="widget.js?v=20261114-zoom-fit-{{ site.github.build_revision }}"></script>
   </body>
 </html>

@@ -1,9 +1,9 @@
 (function () {
   const ZOOMS = {
-    day: { key: "day", spanDays: 21 },
-    week: { key: "week", spanDays: 56 },
-    month: { key: "month", spanDays: 365 },
-    year: { key: "year", spanDays: 365 * 3 },
+    day: { key: "day", spanDays: 7 },
+    week: { key: "week", spanDays: 28 },
+    month: { key: "month", spanDays: 91 },
+    year: { key: "year", spanDays: 365 },
     all: { key: "all", spanDays: null }
   };
 
@@ -31,9 +31,8 @@
     sourceTable: "Table source"
   };
 
-  const TODAY_POSITION_RATIO = 1 / 10;
+  const TODAY_POSITION_RATIO = 1 / 4;
   const NAVIGATION_STEP_RATIO = 1 / 24;
-  const DAY_VIEW_CELL_WIDTH = 32;
   const NO_DATE_RANGE_MESSAGE = "Les éléments du niveau 1 sont chargés, mais aucune date n’est mappée ou renseignée. Mappez Date début/Date fin pour afficher les barres de timeline.";
 
   const POPUP_SUFFIX = document.documentElement.dataset.projectPopup === "true" ? "_project_popup" : "";
@@ -60,7 +59,7 @@
     progress: "120px"
   };
 
-  let zoomMode = "day";
+  let zoomMode = "all";
   let allRecords = [];
   let treeRoots = [];
   let flatTracks = [];
@@ -184,6 +183,7 @@
   function serializedState() {
     return {
       zoomMode,
+      rangeLayoutVersion: 2,
       colorField,
       labelsVisible,
       compactChildren,
@@ -204,7 +204,7 @@
   function applyState(s, options = {}) {
     if (!s || typeof s !== "object") return;
     const { includeViewMode = true } = options;
-    if (s.zoomMode) zoomMode = s.zoomMode;
+    zoomMode = s.rangeLayoutVersion === 2 && ZOOMS[s.zoomMode] ? s.zoomMode : "all";
     if (s.colorField) colorField = s.colorField;
     if (typeof s.labelsVisible === "boolean") labelsVisible = s.labelsVisible;
     if (typeof s.compactChildren === "boolean") compactChildren = s.compactChildren;
@@ -220,8 +220,8 @@
     if (s.expandedNodes && typeof s.expandedNodes === "object") expandedNodes = { ...s.expandedNodes };
     const savedTableExpansion = s.tableExpandedNodes ?? s.expandedNodes;
     if (savedTableExpansion && typeof savedTableExpansion === "object") tableExpandedNodes = { ...savedTableExpansion };
-    if (s.visibleStart) visibleStart = normalizeDate(s.visibleStart);
-    if (s.visibleEnd) visibleEnd = normalizeDate(s.visibleEnd);
+    if (s.rangeLayoutVersion === 2 && s.visibleStart) visibleStart = normalizeDate(s.visibleStart);
+    if (s.rangeLayoutVersion === 2 && s.visibleEnd) visibleEnd = normalizeDate(s.visibleEnd);
   }
 
   function saveStateToLocalStorage(state) {
@@ -923,7 +923,11 @@
     const fullSpan = diffInDays(minDate, maxDate) + 1;
     const requested = ZOOMS[zoomMode]?.spanDays || fullSpan;
     const marginDays = Math.max(15, requested);
-    return { minAllowed: addDays(minDate, -marginDays), maxAllowed: addDays(maxDate, marginDays) };
+    const todayRange = positionRangeAroundToday(getZoomSpan());
+    return {
+      minAllowed: new Date(Math.min(addDays(minDate, -marginDays), addDays(todayRange.start, -marginDays))),
+      maxAllowed: new Date(Math.max(addDays(maxDate, marginDays), addDays(todayRange.end, marginDays)))
+    };
   }
 
   function positionRangeAroundReferenceDate(referenceDate, span) {
@@ -933,28 +937,21 @@
   }
 
   function positionRangeAroundToday(span) {
-    const today = normalizeDate(new Date());
-    let referenceDate = today;
-    if (globalMinDate && today < globalMinDate) referenceDate = globalMinDate;
-    else if (globalMaxDate && today > globalMaxDate) referenceDate = globalMaxDate;
-    return positionRangeAroundReferenceDate(referenceDate, span);
+    return positionRangeAroundReferenceDate(normalizeDate(new Date()), span);
   }
 
-  function setAllZoomRangeAroundToday() {
-    visibleStart = new Date(globalMinDate.getTime());
-    visibleEnd = new Date(globalMaxDate.getTime());
+  function setAllZoomRange() {
+    const interval = Math.max(1, diffInDays(globalMinDate, globalMaxDate));
+    const margin = Math.max(1, Math.ceil(interval * 0.05));
+    visibleStart = addDays(globalMinDate, -margin);
+    visibleEnd = addDays(globalMaxDate, margin);
   }
 
   function getTimelineAvailableWidth() {
     return timelineBodyEl?.clientWidth || timelineHeaderEl?.clientWidth || 800;
   }
 
-  function getDayZoomSpan() {
-    return Math.max(1, Math.floor(getTimelineAvailableWidth() / DAY_VIEW_CELL_WIDTH));
-  }
-
   function getZoomSpan() {
-    if (zoomMode === "day") return getDayZoomSpan();
     return ZOOMS[zoomMode]?.spanDays || 30;
   }
 
@@ -965,7 +962,7 @@
       return;
     }
     if (zoomMode === "all") {
-      setAllZoomRangeAroundToday();
+      setAllZoomRange();
       return;
     }
     const span = getZoomSpan();
@@ -983,7 +980,7 @@
     if (!visibleStart || !visibleEnd) return setVisibleRangeForZoom();
     const { minAllowed, maxAllowed } = getNavigationBounds();
     if (!minAllowed || !maxAllowed) return setVisibleRangeForZoom();
-    const span = zoomMode === "day" ? getDayZoomSpan() : diffInDays(visibleStart, visibleEnd) + 1;
+    const span = getZoomSpan();
     let start = new Date(visibleStart.getTime());
     let end = addDays(start, span - 1);
     if (start < minAllowed) { start = new Date(minAllowed.getTime()); end = addDays(start, span - 1); }
@@ -1020,23 +1017,11 @@
 
   function recomputeCellWidth(totalDays) {
     const bodyWidth = getTimelineAvailableWidth();
-    let cellWidth = 32;
-    let containerWidth = null;
-
-    if (zoomMode === "day") cellWidth = DAY_VIEW_CELL_WIDTH;
-    else if (zoomMode === "all") {
-      // Le zoom « Tout » doit réellement contenir toute la plage visible dans la
-      // largeur disponible. Un minimum fixe par jour crée une grille plus large
-      // que le viewport pour les longues périodes, ce qui laisse des barres
-      // dépasser vers la droite alors que la navigation est déjà bornée.
-      containerWidth = Math.max(1, bodyWidth);
-      cellWidth = containerWidth / Math.max(1, totalDays);
-    } else if (zoomMode === "year") cellWidth = Math.max(3, Math.min(10, Math.floor(bodyWidth / Math.max(1, totalDays))));
-    else if (zoomMode === "month") cellWidth = Math.max(9, Math.min(24, Math.floor(bodyWidth / Math.max(1, totalDays))));
-    else if (zoomMode === "week") cellWidth = Math.max(16, Math.min(32, Math.floor(bodyWidth / Math.max(1, totalDays))));
-
+    // Every zoom must display its entire announced period inside the viewport.
+    const containerWidth = Math.max(1, bodyWidth);
+    const cellWidth = containerWidth / Math.max(1, totalDays);
     document.documentElement.style.setProperty("--cell-width", cellWidth + "px");
-    return { cellWidth, containerWidth: containerWidth || totalDays * cellWidth };
+    return { cellWidth, containerWidth };
   }
 
   function updateZoomButtons() {
@@ -3097,6 +3082,7 @@
   }
 
   function render() {
+    updateZoomButtons();
     updateViewModeButtons();
     if (!allRecords.length) {
       const waitMessage = directMappingWaitMessage();
