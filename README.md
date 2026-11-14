@@ -207,3 +207,7 @@ La recherche du suivi ouvre temporairement les branches du panneau gauche qui co
 La feuille partagée `form-theme.css` impose un texte foncé sur fond blanc dans les champs natifs et les listes de choix, en mode jour comme en mode nuit, y compris le texte de saisie automatique des navigateurs WebKit. Elle doit être publiée avec les fichiers du widget.
 
 En mode Modification, les champs mappés sont affichés même lorsqu’ils sont vides, à leur emplacement habituel. La section Autres champs est ouverte par défaut. Les champs calculés et les champs protégés restent visibles en lecture seule ; ils ne sont pas réécrits par le formulaire. L’affichage hors modification conserve ses règles de masquage des champs vides.
+
+## Commandes tactiles de la timeline
+
+Avec **Édition autorisée**, glisser le centre d’une barre déplace ses dates en conservant sa durée. Les poignées de début et de fin ajustent une seule date ; leur zone de saisie est agrandie sur écran tactile et reste accessible au bord du calendrier. Les jalons se déplacent également au doigt ou au stylet. La souris reste utilisable. Un appui simple sélectionne sans écrire de date. Annuler le geste (ou Échap) rétablit l’affichage sans modification. Les dates calculées, les périodes agrégées sans dates propres et les éléments sans colonnes sources éditables restent protégés. En lecture seule, les barres permettent le défilement tactile et aucune date n’est modifiée. Les confirmations n’interceptent pas les appuis.

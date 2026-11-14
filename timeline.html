@@ -1146,6 +1146,8 @@
       }
 
       .toast-container {
+        pointer-events: none;
+        max-width: calc(100vw - 28px);
         position: fixed;
         bottom: 14px;
         right: 14px;
@@ -1206,6 +1208,13 @@
           width: 200px;
           min-width: 200px;
         }
+      }
+      .bar-resize-handle { display:none; }
+      @media (pointer: coarse) {
+        body.timeline-editing .gantt-bar .bar-resize-handle { display:block; position:absolute; top:-7px; width:18px; height:32px; border-radius:5px; touch-action:none; }
+        .bar-resize-handle.start { left:-14px; }
+        .bar-resize-handle.end { right:-14px; }
+        .bar-resize-handle::after { content:''; position:absolute; top:9px; bottom:9px; left:7px; width:3px; border-radius:2px; background:#fff; box-shadow:0 0 1px #23334a; }
       }
     </style>
     <link rel="stylesheet" href="form-theme.css?v=20261113-white-fields" />
@@ -1332,6 +1341,6 @@
 
     <script src="hierarchy-sort.js?v=20261113-sorting"></script>
     <script src="timeline-popup.js?v=20261112-popup-3"></script>
-    <script src="widget.js?v=20261113-sorting-{{ site.github.build_revision }}"></script>
+    <script src="widget.js?v=20261114-touch-{{ site.github.build_revision }}"></script>
   </body>
 </html>

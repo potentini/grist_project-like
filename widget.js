@@ -2176,7 +2176,8 @@
         m.style.top = centerY.toFixed(1) + "px";
         m.style.background = getColorForNode(node);
         m.dataset.nodeId = node.id;
-        m.addEventListener("click", () => selectNodeLocally(node));
+        m.style.touchAction=allowEditing&&dragFieldsWritable(node,'move-milestone')?'none':'auto';
+        m.addEventListener("click", () => {if(Date.now()>=suppressTimelineClickUntil)selectNodeLocally(node);});
         m.addEventListener("mousemove", (ev) => showTooltip(ev.clientX, ev.clientY, node, node.milestoneDate, node.milestoneDate));
         m.addEventListener("mouseenter", (ev) => showTooltip(ev.clientX, ev.clientY, node, node.milestoneDate, node.milestoneDate));
         m.addEventListener("mouseleave", () => scheduleTooltipHide());
@@ -2223,7 +2224,14 @@
         label.textContent = node.label;
         bar.appendChild(label);
       }
-      bar.addEventListener("click", () => selectNodeLocally(node));
+      for(const [edge,label] of [['start','Déplacer la date de début'],['end','Déplacer la date de fin']]){
+        const handle=document.createElement('span');handle.className='bar-resize-handle '+edge;handle.dataset.dateEdge=edge;handle.setAttribute('aria-hidden','true');handle.title=label;
+        const clipped=edge==='start'?leftPx<14:leftPx+widthPx>containerWidth-14;
+        if(clipped){handle.style[edge==='start'?'left':'right']='0';if(widthPx<54)handle.style.width=Math.max(4,widthPx/3)+'px';}
+        handle.hidden=!node.explicitDates||!writableDate(node,edge==='start'?'start':'end');bar.append(handle);
+      }
+      bar.style.touchAction=allowEditing&&node.explicitDates&&(writableDate(node,'start')||writableDate(node,'end'))?'none':'auto';
+      bar.addEventListener("click", () => {if(Date.now()>=suppressTimelineClickUntil)selectNodeLocally(node);});
       bar.addEventListener("mousemove", (ev) => {
         setBarCursor(bar, ev);
         showTooltip(ev.clientX, ev.clientY, node, s, e);
@@ -2254,63 +2262,52 @@
     else bar.style.cursor = "grab";
   }
 
-  function attachBarDrag(bar) {
-    bar.addEventListener("mousedown", (e) => {
-      if (e.button !== 0 || !allowEditing) return;
-      const node = nodeById.get(bar.dataset.nodeId);
-      if (!node || !node.explicitDates) {
-        showToast("Cette barre est agrégée : mappez les dates/source du niveau pour l’éditer.", "error");
-        return;
-      }
-      e.preventDefault();
-      hideTooltip();
-      const rect = bar.getBoundingClientRect();
-      const totalDays = diffInDays(visibleStart, visibleEnd) + 1;
-      const containerWidth = timelineBodyEl.clientWidth || timelineHeaderEl.clientWidth || rect.width;
-      dragState.pxPerDay = containerWidth / Math.max(1, totalDays);
-      dragState.active = true;
-      dragState.bar = bar;
-      dragState.milestone = null;
-      dragState.nodeId = node.id;
-      dragState.originalStart = normalizeDate(bar.dataset.start);
-      dragState.originalEnd = normalizeDate(bar.dataset.end);
-      dragState.startX = e.clientX;
-      const offsetX = e.clientX - rect.left;
-      if (offsetX < 8) dragState.type = "resize-left";
-      else if (rect.right - e.clientX < 8) dragState.type = "resize-right";
-      else dragState.type = "move";
-      showDragBubble(`${formatDate(dragState.originalStart)} → ${formatDate(dragState.originalEnd)}<span class="muted">édition</span>`, e.clientX, rect.top + rect.height / 2);
-      document.addEventListener("mousemove", onDragMove);
-      document.addEventListener("mouseup", onDragEnd);
+  let suppressTimelineClickUntil = 0;
+  function writableDate(node, field) {
+    return !!fieldSourceColumn(node,field) && !sourceColumnMeta(node,field)?.isFormula;
+  }
+  function dragFieldsWritable(node,type) {
+    if(type==='resize-left') return writableDate(node,'start');
+    if(type==='resize-right') return writableDate(node,'end');
+    return (!node.startDate || writableDate(node,'start')) && (!node.endDate || writableDate(node,'end')) && !!(node.startDate||node.endDate);
+  }
+  function bindDatePointer(element, milestone) {
+    element.addEventListener('pointerdown',event=>{
+      if(event.button!==0 || event.isPrimary===false || !allowEditing || dragState.active)return;
+      const node=nodeById.get(element.dataset.nodeId);
+      if(!node || !node.explicitDates)return;
+      const rect=element.getBoundingClientRect(),touch=event.pointerType!=='mouse';
+      const edge=event.target.closest('[data-date-edge]')?.dataset.dateEdge;
+      const padding=touch?Math.min(18,rect.width/3):8;
+      const type=milestone?'move-milestone':edge==='start'?'resize-left':edge==='end'?'resize-right':event.clientX-rect.left<padding?'resize-left':rect.right-event.clientX<padding?'resize-right':'move';
+      if(!dragFieldsWritable(node,type)){showToast('Cette date est calculée ou non mappée : modifiez une date source éditable.','error');return;}
+      event.preventDefault();hideTooltip();
+      Object.assign(dragState,{active:true,ending:false,pointerId:event.pointerId,element,type,nodeId:node.id,bar:milestone?null:element,milestone:milestone?element:null,originalStart:normalizeDate(element.dataset.start),originalEnd:normalizeDate(element.dataset.end),originalMilestoneDate:node.milestoneDate?new Date(node.milestoneDate):null,startX:event.clientX,originalLeft:element.style.left,originalWidth:element.style.width,pxPerDay:(timelineBodyEl.clientWidth||timelineHeaderEl.clientWidth||rect.width)/Math.max(1,diffInDays(visibleStart,visibleEnd)+1)});
+      try{element.setPointerCapture(event.pointerId);}catch{}
+      document.addEventListener('pointermove',onDragMove,{passive:false});
+      document.addEventListener('pointerup',onDragEnd,{passive:false});
+      document.addEventListener('pointercancel',cancelDateDrag);
+      window.addEventListener('blur',cancelDateDrag);
+      document.addEventListener('keydown',dateDragKey);
     });
   }
-
-  function attachMilestoneDrag(m) {
-    m.addEventListener("mousedown", (e) => {
-      if (e.button !== 0 || !allowEditing) return;
-      const node = nodeById.get(m.dataset.nodeId);
-      if (!node || !node.source.rowId) return;
-      e.preventDefault();
-      hideTooltip();
-      const rect = m.getBoundingClientRect();
-      const totalDays = diffInDays(visibleStart, visibleEnd) + 1;
-      const containerWidth = timelineBodyEl.clientWidth || timelineHeaderEl.clientWidth || rect.width;
-      dragState.pxPerDay = containerWidth / Math.max(1, totalDays);
-      dragState.active = true;
-      dragState.bar = null;
-      dragState.milestone = m;
-      dragState.nodeId = node.id;
-      dragState.originalMilestoneDate = new Date(node.milestoneDate.getTime());
-      dragState.type = "move-milestone";
-      dragState.startX = e.clientX;
-      showDragBubble(`${formatDate(node.milestoneDate)}<span class="muted">jalon</span>`, e.clientX, rect.top + rect.height / 2);
-      document.addEventListener("mousemove", onDragMove);
-      document.addEventListener("mouseup", onDragEnd);
-    });
+  function attachBarDrag(bar) { bindDatePointer(bar,false); }
+  function attachMilestoneDrag(milestone) { bindDatePointer(milestone,true); }
+  function unbindDatePointer() {
+    document.removeEventListener('pointermove',onDragMove);document.removeEventListener('pointerup',onDragEnd);document.removeEventListener('pointercancel',cancelDateDrag);
+    window.removeEventListener('blur',cancelDateDrag);document.removeEventListener('keydown',dateDragKey);
+    try{if(dragState.element?.hasPointerCapture(dragState.pointerId))dragState.element.releasePointerCapture(dragState.pointerId);}catch{}
   }
-
+  function clearDateDrag() {
+    Object.assign(dragState,{active:false,ending:false,type:null,bar:null,milestone:null,nodeId:null,element:null,pointerId:null});hideDragBubble();
+  }
+  function cancelDateDrag(event) {
+    if(!dragState.active||dragState.ending || (event?.pointerId!=null&&event.pointerId!==dragState.pointerId))return;
+    unbindDatePointer();clearDateDrag();renderTimelinePane();
+  }
+  function dateDragKey(event) { if(event.key==='Escape'){event.preventDefault();cancelDateDrag();} }
   function onDragMove(e) {
-    if (!dragState.active) return;
+    if (!dragState.active || dragState.ending || e.pointerId!==dragState.pointerId) return;
     e.preventDefault();
     const deltaDays = Math.round((e.clientX - dragState.startX) / dragState.pxPerDay);
     const totalDays = diffInDays(visibleStart, visibleEnd) + 1;
@@ -2348,34 +2345,33 @@
     }
   }
 
-  async function onDragEnd(e) {
-    if (!dragState.active) return;
-    e.preventDefault();
-    document.removeEventListener("mousemove", onDragMove);
-    document.removeEventListener("mouseup", onDragEnd);
-    hideDragBubble();
-
-    try {
-      const node = nodeById.get(dragState.nodeId);
-      if (!node) return;
-      if (dragState.type === "move-milestone") {
-        const deltaDays = Math.round((e.clientX - dragState.startX) / dragState.pxPerDay);
-        const newDate = addDays(dragState.originalMilestoneDate, deltaDays);
-        await updateNodeDates(node, node.startDate ? newDate : undefined, node.endDate ? newDate : undefined);
-      } else {
-        await updateNodeDates(node, normalizeDate(dragState.bar.dataset.start), normalizeDate(dragState.bar.dataset.end));
-      }
-      showToast("Dates mises à jour dans la table source", "success");
-    } catch (err) {
-      console.error(err);
-      showToast(err.message || "Erreur lors de la mise à jour", "error");
-    } finally {
-      dragState.active = false;
-      dragState.type = null;
-      dragState.bar = null;
-      dragState.milestone = null;
-      dragState.nodeId = null;
+  async function onDragEnd(event) {
+    if(!dragState.active||dragState.ending||event.pointerId!==dragState.pointerId)return;
+    event.preventDefault();
+    const deltaDays=Math.round((event.clientX-dragState.startX)/dragState.pxPerDay);
+    if(deltaDays)onDragMove(event);
+    else {
+      dragState.element.style.left=dragState.originalLeft;
+      if(dragState.bar){dragState.bar.style.width=dragState.originalWidth;dragState.bar.dataset.start=dragState.originalStart.toISOString();dragState.bar.dataset.end=dragState.originalEnd.toISOString();}
     }
+    dragState.ending=true;unbindDatePointer();hideDragBubble();
+    try {
+      const node=nodeById.get(dragState.nodeId);
+      if(!node||!deltaDays)return;
+      if(!allowEditing||!dragFieldsWritable(node,dragState.type))throw new Error('L’édition des dates est bloquée.');
+      suppressTimelineClickUntil=Date.now()+600;
+      if(dragState.type==='move-milestone') {
+        const date=addDays(dragState.originalMilestoneDate,deltaDays);
+        await updateNodeDates(node,node.startDate?date:undefined,node.endDate?date:undefined);
+      } else {
+        const start=normalizeDate(dragState.bar.dataset.start),end=normalizeDate(dragState.bar.dataset.end);
+        if(start.getTime()===dragState.originalStart.getTime()&&end.getTime()===dragState.originalEnd.getTime())return;
+        await updateNodeDates(node,dragState.type==='resize-right'?undefined:start,dragState.type==='resize-left'?undefined:end);
+      }
+      showToast('Dates mises à jour dans la table source','success');
+    } catch(error) {
+      showToast(error.message || 'Erreur lors de la mise à jour','error');
+    } finally { clearDateDrag();if(deltaDays)renderTimelinePane(); }
   }
 
   function fieldSourceColumn(node, field) {
@@ -2552,6 +2548,12 @@
   }
 
   function updateEditButtons() {
+    document.body.classList.toggle('timeline-editing',allowEditing);
+    if(!allowEditing)cancelDateDrag();
+    document.querySelectorAll('.gantt-bar,.gantt-milestone').forEach(element=>{
+      const node=nodeById.get(element.dataset.nodeId);
+      element.style.touchAction=allowEditing&&node?.explicitDates&&(writableDate(node,'start')||writableDate(node,'end'))?'none':'auto';
+    });
     for (const [button, enabled] of [[toggleDateEditBtn, allowEditing], [tableToggleEditBtn, tableAllowEditing]]) {
       if (!button) continue;
       if (document.documentElement.dataset.projectPopup === "true") button.disabled = false;
@@ -3028,6 +3030,7 @@
 
   function toggleEditing() {
     allowEditing = !allowEditing;
+    if(allowEditing&&matchMedia('(pointer: coarse)').matches)showToast('Glissez une barre pour la déplacer, ou ses poignées pour ajuster les dates.','success');
     if (document.documentElement.dataset.projectPopup === "true") {
       tableAllowEditing = allowEditing;
       grist.setPopupEditing(allowEditing);
