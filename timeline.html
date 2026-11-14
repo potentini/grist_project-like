@@ -1210,12 +1210,16 @@
         }
       }
       .bar-resize-handle { display:none; }
-      @media (pointer: coarse) {
-        body.timeline-editing .gantt-bar .bar-resize-handle { display:block; position:absolute; top:-7px; width:18px; height:32px; border-radius:5px; touch-action:none; }
+      /* Armed only by a touch/stylus gesture, including hybrid mouse/touch screens. */
+        body.timeline-editing .gantt-bar.touch-armed .bar-resize-handle { display:block; position:absolute; top:-7px; width:18px; height:32px; border-radius:5px; touch-action:none; }
         .bar-resize-handle.start { left:-14px; }
         .bar-resize-handle.end { right:-14px; }
         .bar-resize-handle::after { content:''; position:absolute; top:9px; bottom:9px; left:7px; width:3px; border-radius:2px; background:#fff; box-shadow:0 0 1px #23334a; }
-      }
+      .gantt-bar,.gantt-milestone { -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+      .touch-armed { outline:3px solid #2563eb; outline-offset:3px; }
+      .tooltip.touch-editor { max-height:calc(100dvh - 24px); overflow:auto; width:min(370px,calc(100vw - 24px)); }
+      [data-touch-close] { display:none; }
+      .touch-editor [data-touch-close] { display:block; float:right; padding:2px 7px; margin:0 0 5px 6px; }
     </style>
     <link rel="stylesheet" href="form-theme.css?v=20261113-white-fields" />
   </head>
@@ -1235,6 +1239,7 @@
       </div>
 
       <div class="header-actions">
+        <button class="btn btn-small" id="timelineUndo" type="button" aria-label="Annuler la dernière modification" title="Annuler la dernière modification" disabled>↶</button><button class="btn btn-small" id="timelineRedo" type="button" aria-label="Rétablir la dernière modification" title="Rétablir la dernière modification" disabled>↷</button>
         <button class="btn btn-small" id="timelineViewBtn" type="button" aria-controls="ganttContainer" aria-pressed="true">Masquer la timeline</button>
 
         <div class="table-toolbar-actions" id="tableToolbarActions" hidden>
@@ -1341,6 +1346,6 @@
 
     <script src="hierarchy-sort.js?v=20261113-sorting"></script>
     <script src="timeline-popup.js?v=20261112-popup-3"></script>
-    <script src="widget.js?v=20261114-touch-{{ site.github.build_revision }}"></script>
+    <script src="widget.js?v=20261114-touch-hold-{{ site.github.build_revision }}"></script>
   </body>
 </html>

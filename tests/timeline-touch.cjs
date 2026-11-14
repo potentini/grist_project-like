@@ -16,8 +16,10 @@ const fixture = require("./timeline-fixture.cjs");
           viewport: { width, height: 1000 },
           hasTouch: true,
         });
+        console.log("TOUCH",width,url);
         const page = await context.newPage(),
           errors = [];
+        page.setDefaultTimeout(10000);
         page.on("pageerror", (e) => errors.push(e.message));
         await page.route("https://docs.getgrist.com/**", (r) =>
           r.fulfill({ body: "" }),
@@ -64,6 +66,21 @@ const fixture = require("./timeline-fixture.cjs");
         };
         await prepare();
         const cdp = await context.newCDPSession(page);
+        const hold = async (locator) => {
+          await locator.scrollIntoViewIfNeeded();
+          const r = await locator.boundingBox();
+          await cdp.send("Input.dispatchTouchEvent", {
+            type: "touchStart",
+            touchPoints: [
+              { x: r.x + r.width / 2, y: r.y + r.height / 2, id: 1 },
+            ],
+          });
+          await page.waitForTimeout(600);
+          await cdp.send("Input.dispatchTouchEvent", {
+            type: "touchEnd",
+            touchPoints: [],
+          });
+        };
         const gesture = async (locator, dx, { cancel = false } = {}) => {
           await locator.scrollIntoViewIfNeeded();
           const r = await locator.boundingBox(),
@@ -89,9 +106,26 @@ const fixture = require("./timeline-fixture.cjs");
         await page.locator("#toggleDateEditBtn").click();
         const before = await page.evaluate(() => ({ ...window.db.Taches[0] }));
         await bar.tap();
-        assert.match(await bar.getAttribute("class"), /selected/);
+        await page.locator("#tooltip.touch-editor.visible").waitFor();
+        assert.equal(
+          await bar.locator("[data-date-edge=end]").isVisible(),
+          false,
+        );
+        await page.locator("[data-touch-close]").click();
         assert.equal(await page.evaluate(() => window.writes.length), 0);
         await prepare();
+        await hold(bar);
+        assert.match(await bar.getAttribute("class"), /touch-armed/);
+        await hold(bar);
+        assert.doesNotMatch(await bar.getAttribute("class"), /touch-armed/);
+        await hold(bar);
+        await page.locator('.gantt-milestone[data-node-id="L3:src:Taches:2"]').tap();
+        assert.doesNotMatch(await bar.getAttribute("class"), /touch-armed/);
+        assert.equal(await page.locator("#tooltip.touch-editor.visible").count(), 0);
+        await hold(bar);
+        await page.locator(".header > strong").tap();
+        assert.doesNotMatch(await bar.getAttribute("class"), /touch-armed/);
+        await hold(bar);
         await gesture(bar, 40);
         await page.waitForFunction(
           () => window.writes.length === 1 && window.dateSaves === 1,
@@ -165,6 +199,7 @@ const fixture = require("./timeline-fixture.cjs");
         const oldMilestone = await page.evaluate(
           () => window.db.Taches[1].DateFin,
         );
+        await hold(milestone);
         await gesture(milestone, 40);
         await page.waitForFunction(
           () => window.writes.length === 5 && window.dateSaves === 5,
@@ -173,9 +208,22 @@ const fixture = require("./timeline-fixture.cjs");
           await page.evaluate(() => window.db.Taches[1].DateFin),
           oldMilestone,
         );
+        await page.locator("#timelineUndo").click();
+        await page.waitForFunction(
+          (value) => window.db.Taches[1].DateFin === value,
+          oldMilestone,
+        );
+        await page.waitForFunction(() => !document.querySelector("#timelineRedo").disabled);
+        await page.locator("#timelineRedo").click();
+        await page.waitForFunction(
+          (value) => window.db.Taches[1].DateFin !== value,
+          oldMilestone,
+        );
+        await page.waitForFunction(() => !document.querySelector("#timelineUndo").disabled);
+        await prepare();
         await page.locator("#toggleDateEditBtn").click();
         await gesture(bar, 40);
-        assert.equal(await page.evaluate(() => window.writes.length), 5);
+        assert.equal(await page.evaluate(() => window.writes.length), 7);
         await page.goto(url + "?formula=1");
         await page.locator(".hierarchy-table").waitFor();
         await prepare();
@@ -187,6 +235,8 @@ const fixture = require("./timeline-fixture.cjs");
         await gesture(bar, 40);
         assert.equal(await page.evaluate(() => window.writes.length), 0);
         await prepare();
+        await hold(bar);
+        assert.equal(await bar.locator("[data-date-edge=end]").isVisible(), false);
         await gesture(bar.locator("[data-date-edge=start]"), 20);
         await page.waitForFunction(() => window.writes.length === 1);
         assert.equal(
@@ -196,11 +246,32 @@ const fixture = require("./timeline-fixture.cjs");
           ),
           false,
         );
+        await page.waitForFunction(() => !document.querySelector("#timelineUndo").disabled);
+        await page.locator('#timelineUndo').click();
+        await page.waitForFunction(() => !document.querySelector("#timelineRedo").disabled);
+        await prepare();
+        const titleBefore = await page.evaluate(() => window.db.Taches[0].Titre);
+        await bar.tap();
+        await page.locator('#tooltip.touch-editor.visible [data-field=name]').tap();
+        await page.locator('#tooltip [data-edit-input]').fill('Titre tactile');
+        await page.locator('#tooltip .tooltip-save').tap();
+        await page.waitForFunction(() => window.db.Taches[0].Titre === 'Titre tactile');
+        await page.locator('#timelineUndo').click();
+        await page.waitForFunction(value => window.db.Taches[0].Titre === value,titleBefore);
+        await page.locator('#timelineRedo').click();
+        await page.waitForFunction(() => window.db.Taches[0].Titre === 'Titre tactile');
+        await page.waitForFunction(() => !document.querySelector("#timelineUndo").disabled);
+        await page.evaluate(() => { window.db.Taches[0].Titre = 'Changement externe'; });
+        const countBeforeConflict = await page.evaluate(() => window.writes.length);
+        await page.locator('#timelineUndo').click();
+        await page.getByText('Cette valeur a changé depuis votre modification : annulation ou rétablissement impossible.',{exact:true}).waitFor();
+        assert.equal(await page.evaluate(() => window.writes.length),countBeforeConflict);
+        assert.equal(await page.evaluate(() => window.db.Taches[0].Titre),'Changement externe');
         assert.deepEqual(errors, []);
         await context.close();
       }
     console.log(
-      "PASS real touch drag/resize/milestone, mouse compatibility, tap/cancel without writes and edit-mode gating in both repositories",
+      "PASS real touch tap editor, long-press arming/toggle/dismissal, drag/resize/milestone, undo/redo dates and fields, conflict protection, mouse compatibility and edit-mode gating in both repositories",
     );
   } finally {
     await browser.close();

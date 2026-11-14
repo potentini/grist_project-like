@@ -2028,6 +2028,7 @@
   }
 
   function scheduleTooltipHide(delay = 120) {
+    if(touchEditorPinned)return;
     cancelTooltipHide();
     tooltipHideTimer = window.setTimeout(() => {
       tooltipHideTimer = null;
@@ -2051,6 +2052,8 @@
 
   function showTooltip(x, y, node, start, end) {
     if (!tooltipEl) return;
+    if(!touchEditorPinned && Date.now()-lastTimelineTouchAt<1000)return;
+    if(touchEditorPinned && tooltipState.nodeId && (tooltipState.nodeId!==node.id || !tooltipState.forceRefresh))return;
     cancelTooltipHide();
     scheduleTooltipMetadataRefresh(node);
     scheduleRefOptionsRefresh(node);
@@ -2092,6 +2095,8 @@
   }
 
   function hideTooltip() {
+    touchEditorPinned=false;
+    tooltipEl?.classList.remove('touch-editor');
     cancelTooltipHide();
     if (tooltipEl) tooltipEl.classList.remove("visible", "editing");
     tooltipState.nodeId = null;
@@ -2250,6 +2255,7 @@
       if (track.kind === "node") addNodeBar(i, track.node, false);
       else if (track.kind === "compact") track.nodes.forEach((node) => addNodeBar(i, node, true));
     }
+    syncTouchState();
   }
 
   function setBarCursor(bar, e) {
@@ -2262,7 +2268,7 @@
     else bar.style.cursor = "grab";
   }
 
-  let suppressTimelineClickUntil = 0;
+  let suppressTimelineClickUntil = 0, lastTimelineTouchAt = 0;
   function writableDate(node, field) {
     return !!fieldSourceColumn(node,field) && !sourceColumnMeta(node,field)?.isFormula;
   }
@@ -2271,15 +2277,84 @@
     if(type==='resize-right') return writableDate(node,'end');
     return (!node.startDate || writableDate(node,'start')) && (!node.endDate || writableDate(node,'end')) && !!(node.startDate||node.endDate);
   }
-  function bindDatePointer(element, milestone) {
+  let touchArmedId = null, pendingTouch = null, touchEditorPinned = false, ignoredTouchPointer = null;
+  function syncTouchState() {
+    document.querySelectorAll('.gantt-bar,.gantt-milestone').forEach(element=>{
+      const armed=allowEditing && element.dataset.nodeId===touchArmedId;
+      element.classList.toggle('touch-armed',armed);
+      element.style.touchAction=!allowEditing?'auto':armed?'none':'pan-y';
+    });
+  }
+  function clearPendingTouch() {
+    if(pendingTouch)clearTimeout(pendingTouch.timer);
+    pendingTouch=null;
+    document.removeEventListener('pointermove',pendingTouchMove);
+    document.removeEventListener('pointerup',pendingTouchEnd);
+    document.removeEventListener('pointercancel',pendingTouchCancel);
+  }
+  function resetTouchInteraction() {
+    clearPendingTouch();touchArmedId=null;syncTouchState();
+  }
+  function openTouchEditor(node,event) {
+    resetTouchInteraction();hideTooltip();touchEditorPinned=true;
+    tooltipEl.classList.add('touch-editor');tooltipEl.setAttribute('role','dialog');tooltipEl.setAttribute('aria-label','Modifier '+node.label);
+    let close=tooltipEl.querySelector('[data-touch-close]');
+    if(!close){close=document.createElement('button');close.type='button';close.dataset.touchClose='';close.textContent='×';close.setAttribute('aria-label','Fermer');close.onclick=()=>hideTooltip();tooltipEl.prepend(close);}
+    showTooltip(event.clientX,event.clientY,node,node.startDate||node.milestoneDate||node.aggStart,node.endDate||node.aggEnd||node.milestoneDate);
+  }
+  function pendingTouchMove(event) {
+    const pending=pendingTouch;if(!pending||event.pointerId!==pending.event.pointerId)return;
+    if(Math.hypot(event.clientX-pending.event.clientX,event.clientY-pending.event.clientY)<8)return;
+    if(touchArmedId===pending.element.dataset.nodeId && (pending.long || pending.wasArmed)) {
+      clearPendingTouch();startDatePointer(pending.element,pending.milestone,pending.event);if(dragState.active)onDragMove(event);
+    } else {pending.moved=true;clearTimeout(pending.timer);}
+  }
+  function pendingTouchEnd(event) {
+    const pending=pendingTouch;if(!pending||event.pointerId!==pending.event.pointerId)return;
+    clearPendingTouch();suppressTimelineClickUntil=Date.now()+700;
+    if(!pending.long&&!pending.moved){const node=nodeById.get(pending.element.dataset.nodeId);if(node)openTouchEditor(node,event);}
+  }
+  function pendingTouchCancel(event) { if(pendingTouch?.event.pointerId===event.pointerId)clearPendingTouch(); }
+  document.addEventListener('pointerdown',event=>{
+    if(tooltipEl?.contains(event.target))return;
+    if(touchEditorPinned)hideTooltip();
+    if(event.pointerType==='mouse')return;
+    lastTimelineTouchAt=Date.now();
+    const element=event.target.closest('.gantt-bar,.gantt-milestone');
+    if(touchArmedId && element?.dataset.nodeId!==touchArmedId){ignoredTouchPointer=event.pointerId;resetTouchInteraction();suppressTimelineClickUntil=Date.now()+700;}
+    else ignoredTouchPointer=null;
+  },true);
+  document.addEventListener('pointerup',event=>{if(event.pointerType!=='mouse')lastTimelineTouchAt=Date.now();if(ignoredTouchPointer===event.pointerId){suppressTimelineClickUntil=Date.now()+700;ignoredTouchPointer=null;}});
+  document.addEventListener('keydown',event=>{if(event.key==='Escape'&&(touchArmedId||pendingTouch||touchEditorPinned)){resetTouchInteraction();hideTooltip();}});
+  window.addEventListener('blur',()=>{resetTouchInteraction();hideTooltip();});
+  function bindDatePointer(element,milestone) {
+    element.addEventListener('contextmenu',event=>{if(allowEditing)event.preventDefault();});
     element.addEventListener('pointerdown',event=>{
-      if(event.button!==0 || event.isPrimary===false || !allowEditing || dragState.active)return;
+      if(event.button!==0||event.isPrimary===false||!allowEditing||dragState.active||historyBusy)return;
+      if(event.pointerType==='mouse'){resetTouchInteraction();startDatePointer(element,milestone,event);return;}
+      if(ignoredTouchPointer===event.pointerId)return;
+      hideTooltip();clearPendingTouch();
+      const pending={element,milestone,event,wasArmed:touchArmedId===element.dataset.nodeId,long:false,moved:false};pendingTouch=pending;
+      pending.timer=setTimeout(()=>{
+        if(pendingTouch!==pending||pending.moved)return;
+        pending.long=true;suppressTimelineClickUntil=Date.now()+700;
+        if(pending.wasArmed){touchArmedId=null;syncTouchState();return;}
+        const node=nodeById.get(element.dataset.nodeId);
+        if(!node?.explicitDates || !(writableDate(node,'start')||writableDate(node,'end'))){showToast('Cet élément ne possède pas de date source éditable.','error');return;}
+        touchArmedId=node.id;syncTouchState();
+      },500);
+      document.addEventListener('pointermove',pendingTouchMove,{passive:false});
+      document.addEventListener('pointerup',pendingTouchEnd);
+      document.addEventListener('pointercancel',pendingTouchCancel);
+    });
+  }
+  function startDatePointer(element,milestone,event) {
       const node=nodeById.get(element.dataset.nodeId);
       if(!node || !node.explicitDates)return;
       const rect=element.getBoundingClientRect(),touch=event.pointerType!=='mouse';
       const edge=event.target.closest('[data-date-edge]')?.dataset.dateEdge;
       const padding=touch?Math.min(18,rect.width/3):8;
-      const type=milestone?'move-milestone':edge==='start'?'resize-left':edge==='end'?'resize-right':event.clientX-rect.left<padding?'resize-left':rect.right-event.clientX<padding?'resize-right':'move';
+      const type=milestone?'move-milestone':edge==='start'?'resize-left':edge==='end'?'resize-right':touch?'move':event.clientX-rect.left<padding?'resize-left':rect.right-event.clientX<padding?'resize-right':'move';
       if(!dragFieldsWritable(node,type)){showToast('Cette date est calculée ou non mappée : modifiez une date source éditable.','error');return;}
       event.preventDefault();hideTooltip();
       Object.assign(dragState,{active:true,ending:false,pointerId:event.pointerId,element,type,nodeId:node.id,bar:milestone?null:element,milestone:milestone?element:null,originalStart:normalizeDate(element.dataset.start),originalEnd:normalizeDate(element.dataset.end),originalMilestoneDate:node.milestoneDate?new Date(node.milestoneDate):null,startX:event.clientX,originalLeft:element.style.left,originalWidth:element.style.width,pxPerDay:(timelineBodyEl.clientWidth||timelineHeaderEl.clientWidth||rect.width)/Math.max(1,diffInDays(visibleStart,visibleEnd)+1)});
@@ -2289,7 +2364,6 @@
       document.addEventListener('pointercancel',cancelDateDrag);
       window.addEventListener('blur',cancelDateDrag);
       document.addEventListener('keydown',dateDragKey);
-    });
   }
   function attachBarDrag(bar) { bindDatePointer(bar,false); }
   function attachMilestoneDrag(milestone) { bindDatePointer(milestone,true); }
@@ -2387,9 +2461,47 @@
   }
 
 
+  // Local history covers updates in this Table/Timeline session. Creation/deletion starts a new history.
+  const undoEdits=[],redoEdits=[];
+  let historyBusy=false;
+  function syncHistoryButtons() {
+    for(const [id,stack] of [['timelineUndo',undoEdits],['timelineRedo',redoEdits]]){
+      const button=document.getElementById(id);if(button)button.disabled=historyBusy||!(allowEditing||tableAllowEditing)||!stack.length;
+    }
+  }
+  async function writeWithHistory(node,sourceFields) {
+    if(historyBusy)throw new Error('Une modification est déjà en cours.');
+    historyBusy=true;syncHistoryButtons();
+    try{
+      const beforeRow=rowsFromGristTable(await grist.docApi.fetchTable(node.source.tableId)).find(row=>Number(row.id)===Number(node.source.rowId));
+      if(!beforeRow)throw new Error('La ligne source n’est plus disponible.');
+      const before=Object.fromEntries(Object.keys(sourceFields).map(key=>[key,structuredClone(beforeRow[key]??null)]));
+      await grist.docApi.applyUserActions([['UpdateRecord',node.source.tableId,node.source.rowId,sourceFields]]);
+      let afterRow;
+      try { afterRow=rowsFromGristTable(await grist.docApi.fetchTable(node.source.tableId)).find(row=>Number(row.id)===Number(node.source.rowId)); }
+      catch(error) { console.warn("Relecture après enregistrement indisponible",error); }
+      const after=Object.fromEntries(Object.keys(sourceFields).map(key=>[key,structuredClone(afterRow?.[key]??sourceFields[key]??null)]));
+      if(JSON.stringify(before)!==JSON.stringify(after)){undoEdits.push({table:node.source.tableId,id:node.source.rowId,before,after});if(undoEdits.length>100)undoEdits.shift();redoEdits.length=0;}
+    }finally{historyBusy=false;syncHistoryButtons();}
+  }
+  async function replayHistory(redo) {
+    if(historyBusy||!(allowEditing||tableAllowEditing))return;
+    const from=redo?redoEdits:undoEdits,to=redo?undoEdits:redoEdits,edit=from.at(-1);if(!edit)return;
+    resetTouchInteraction();cancelDateDrag();hideTooltip();historyBusy=true;syncHistoryButtons();
+    try{
+      const row=rowsFromGristTable(await grist.docApi.fetchTable(edit.table)).find(row=>Number(row.id)===Number(edit.id));
+      const expected=redo?edit.before:edit.after;
+      if(!row||Object.entries(expected).some(([key,value])=>JSON.stringify(row[key]??null)!==JSON.stringify(value)))throw new Error('Cette valeur a changé depuis votre modification : annulation ou rétablissement impossible.');
+      await grist.docApi.applyUserActions([['UpdateRecord',edit.table,edit.id,redo?edit.after:edit.before]]);
+      from.pop();to.push(edit);await scheduleDirectMappingRefresh('write');
+    }catch(error){showToast(error.message,'error');}
+    finally{historyBusy=false;syncHistoryButtons();}
+  }
+  document.getElementById('timelineUndo')?.addEventListener('click',()=>replayHistory(false));
+  document.getElementById('timelineRedo')?.addEventListener('click',()=>replayHistory(true));
   async function writeNodeFields(node, sourceFields, debugLabel) {
     if (node.source.tableId && node.source.rowId != null && Object.keys(sourceFields).length) {
-      await grist.docApi.applyUserActions([["UpdateRecord", node.source.tableId, node.source.rowId, sourceFields]]);
+      await writeWithHistory(node,sourceFields);
       setDebugSyncMode("docApi.applyUserActions (vraie table source)");
       setDebugAction(`Update ${node.source.tableId}#${node.source.rowId}: ${Object.keys(sourceFields).join(", ")}`);
       return;
@@ -2550,10 +2662,8 @@
   function updateEditButtons() {
     document.body.classList.toggle('timeline-editing',allowEditing);
     if(!allowEditing)cancelDateDrag();
-    document.querySelectorAll('.gantt-bar,.gantt-milestone').forEach(element=>{
-      const node=nodeById.get(element.dataset.nodeId);
-      element.style.touchAction=allowEditing&&node?.explicitDates&&(writableDate(node,'start')||writableDate(node,'end'))?'none':'auto';
-    });
+    if(!allowEditing)resetTouchInteraction();
+    syncTouchState();syncHistoryButtons();
     for (const [button, enabled] of [[toggleDateEditBtn, allowEditing], [tableToggleEditBtn, tableAllowEditing]]) {
       if (!button) continue;
       if (document.documentElement.dataset.projectPopup === "true") button.disabled = false;
@@ -2959,6 +3069,7 @@
     const confirmed = window.confirm(`Supprimer définitivement « ${node.label || "cet élément"} » ?${childWarning}`);
     if (!confirmed) return false;
     await grist.docApi.applyUserActions([["RemoveRecord", node.source.tableId, node.source.rowId]]);
+    undoEdits.length=redoEdits.length=0;syncHistoryButtons();
     setDebugSyncMode("docApi.applyUserActions (suppression table source)");
     setDebugAction(`Remove ${node.source.tableId}#${node.source.rowId}`);
     if (selectedNodeId === node.id) selectedNodeId = null;
@@ -2977,6 +3088,7 @@
     const fields = { [cfg.nameCol]: `Nouveau niveau ${level}` };
     if (level > 1) fields[cfg.parentCol] = parentValueForAdd(level, parentNode);
     await grist.docApi.applyUserActions([["AddRecord", cfg.tableId, null, fields]]);
+    undoEdits.length=redoEdits.length=0;syncHistoryButtons();
     setDebugSyncMode("docApi.applyUserActions (ajout table source)");
     setDebugAction(`Add ${cfg.tableId}: ${Object.keys(fields).join(", ")}`);
     if (parentNode) tableExpandedNodes[parentNode.id] = true;
@@ -3030,7 +3142,7 @@
 
   function toggleEditing() {
     allowEditing = !allowEditing;
-    if(allowEditing&&matchMedia('(pointer: coarse)').matches)showToast('Glissez une barre pour la déplacer, ou ses poignées pour ajuster les dates.','success');
+    if(allowEditing&&matchMedia('(pointer: coarse)').matches)showToast('Appui court : données. Appui long : déplacer ou ajuster les dates.','success');
     if (document.documentElement.dataset.projectPopup === "true") {
       tableAllowEditing = allowEditing;
       grist.setPopupEditing(allowEditing);

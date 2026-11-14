@@ -1835,6 +1835,24 @@ const fixture = require("../demo.json");
     await page.locator("#editionButton").getAttribute("aria-pressed"),
     "false",
   );
+  await popup.locator("#timelineUndo").click();
+  await page.waitForFunction(() => window.testDb.data.tasks[0].Titre !== "Modification indépendante");
+  await popup.locator("#timelineRedo").click();
+  await page.waitForFunction(() => window.testDb.data.tasks[0].Titre === "Modification indépendante");
+  await page.waitForFunction(() => !document.querySelector("#timelineFrame").contentDocument.querySelector("#timelineUndo").disabled);
+  if ((await popup.locator("#expandAllBtn").innerText()).includes("déplier")) await popup.locator("#expandAllBtn").click();
+  const touchBar = popup.locator('.gantt-bar[data-node-id="L3:src:Taches:1"]');
+  await touchBar.dispatchEvent("pointerdown", {pointerType:"touch",pointerId:71,button:0,isPrimary:true});
+  await touchBar.dispatchEvent("pointerup", {pointerType:"touch",pointerId:71,button:0,isPrimary:true});
+  await popup.locator("#tooltip.touch-editor.visible").waitFor();
+  await popup.locator("[data-touch-close]").click();
+  const touchMilestone = popup.locator('.gantt-milestone[data-node-id="L4:src:Actions:1"]');
+  await touchMilestone.dispatchEvent("pointerdown", {pointerType:"touch",pointerId:72,button:0,isPrimary:true});
+  await page.waitForTimeout(600);
+  await touchMilestone.dispatchEvent("pointerup", {pointerType:"touch",pointerId:72,button:0,isPrimary:true});
+  assert.match(await touchMilestone.getAttribute("class"), /touch-armed/);
+  await popup.locator(".header").dispatchEvent("pointerdown", {pointerType:"touch",pointerId:73,button:0});
+  assert.doesNotMatch(await touchMilestone.getAttribute("class"), /touch-armed/);
   await popup.locator("#tableToggleEditBtn").click();
   assert.equal(await popupTitle.count(), 0);
   await popup.locator("#popupTableToggle").click();
