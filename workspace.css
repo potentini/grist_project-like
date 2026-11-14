@@ -1220,3 +1220,28 @@ body.phone-mode .quick-multiple > summary > input.quick-search {
   background: #fff;
   color-scheme: light;
 }
+
+/* The same form moves between the creation dialog and inline editing.
+   Keep both actions explicit, including WebKit's independently inherited fill. */
+#editForm .editor-actions #cancel {
+  color: #23334a !important;
+  -webkit-text-fill-color: #23334a !important;
+  background: #fff !important;
+  border-color: #94a3b8;
+  color-scheme: light;
+}
+#editForm .editor-actions #cancel:hover,
+#editForm .editor-actions #cancel:focus-visible {
+  background: #edf1ff !important;
+}
+#editForm .editor-actions #save {
+  color: #fff !important;
+  -webkit-text-fill-color: #fff !important;
+  background: #4338ca !important;
+  border-color: #4338ca;
+  color-scheme: light;
+}
+#editForm .editor-actions #save:hover,
+#editForm .editor-actions #save:focus-visible {
+  background: #3730a3 !important;
+}
