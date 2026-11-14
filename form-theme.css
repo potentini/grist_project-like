@@ -1,3 +1,13 @@
+/* Native controls and dialogs use the same light surfaces as the widget,
+   even when Grist or the operating system requests a dark color scheme. */
+:root { color-scheme: light; }
+dialog { color: #23334a; background-color: #fff; }
+button {
+  color: #23334a;
+  background-color: #fff;
+  -webkit-text-fill-color: currentColor;
+}
+
 /* Forms keep dark text on white backgrounds, regardless of the system theme. */
 input,
 select,

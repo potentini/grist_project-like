@@ -13,14 +13,14 @@
       :root {
         --primary: #4f46e5;
         --primary-dark: #4338ca;
-        --success: #10b981;
+        --success: #047857;
         --warning: #f59e0b;
-        --danger: #ef4444;
+        --danger: #b91c1c;
         --info: #3b82f6;
         --bg: #f8fafc;
         --card-bg: #ffffff;
         --text: #1e293b;
-        --text-muted: #64748b;
+        --text-muted: #475569;
         --border: #e2e8f0;
         --shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         --cell-width: 32px;
@@ -390,7 +390,7 @@
         align-items: center;
         gap: 4px;
         font-size: 0.78rem;
-        transition: all 0.12s ease;
+        transition: box-shadow 0.12s ease;
         user-select: none;
       }
 
@@ -672,7 +672,7 @@
       }
 
       .gantt-bar.parent,
-      .gantt-zero-duration.parent { opacity: 0.9; }
+      .gantt-zero-duration.parent { opacity: 1; }
       .gantt-bar.level-1 { height: 20px; border-radius: 10px; }
       .gantt-bar.level-2 { height: 18px; border-radius: 9px; }
       .gantt-bar.level-3 { height: 16px; border-radius: 8px; margin-top: 1px; }
@@ -688,8 +688,9 @@
       .bar-label.inside {
         position: relative;
         z-index: 1;
-        color: #fff;
-        text-shadow: 0 1px 1px rgba(0,0,0,0.28);
+        color: var(--bar-text, #fff);
+        background-color: var(--bar-color);
+        text-shadow: none;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -1240,7 +1241,7 @@
       [data-touch-close] { display:none; }
       .touch-editor [data-touch-close] { display:block; float:right; padding:2px 7px; margin:0 0 5px 6px; }
     </style>
-    <link rel="stylesheet" href="form-theme.css?v=20261113-white-fields" />
+    <link rel="stylesheet" href="form-theme.css?v=20261114-control-contrast" />
   </head>
 
   <body>
@@ -1367,6 +1368,6 @@
 
     <script src="hierarchy-sort.js?v=20261113-sorting"></script>
     <script src="timeline-popup.js?v=20261112-popup-3"></script>
-    <script src="widget.js?v=20261114-zoom-fit-{{ site.github.build_revision }}"></script>
+    <script src="widget.js?v=20261114-contrast-{{ site.github.build_revision }}"></script>
   </body>
 </html>

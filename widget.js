@@ -1053,6 +1053,13 @@
     return node.label;
   }
 
+  function textForBackground(hex) {
+    const channels=hex.replace('#','').match(/../g).map(x=>parseInt(x,16)/255);
+    const luminance=channels.map(c=>c<=0.04045?c/12.92:((c+0.055)/1.055)**2.4)
+      .reduce((sum,c,i)=>sum+c*[0.2126,0.7152,0.0722][i],0);
+    return luminance>0.179?'#000000':'#ffffff';
+  }
+
   function getColorForNode(node) {
     if (colorField === "level") return node.level === 1 ? "#4f46e5" : node.level === 2 ? "#0ea5e9" : "#10b981";
     if (colorField === "status") {
@@ -2197,7 +2204,10 @@
       bar.style.left = leftPx.toFixed(1) + "px";
       bar.style.width = widthPx.toFixed(1) + "px";
       bar.style.top = trackIndex * rowHeight + 8 + "px";
-      bar.style.background = getColorForNode(node);
+      const barColor=getColorForNode(node);
+      bar.style.background = barColor;
+      bar.style.setProperty('--bar-color',barColor);
+      bar.style.setProperty('--bar-text',textForBackground(barColor));
       bar.dataset.nodeId = node.id;
       bar.dataset.start = s.toISOString();
       bar.dataset.end = e.toISOString();
