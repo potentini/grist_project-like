@@ -402,6 +402,15 @@
     if (!source || !nativeIds) return true;
     const nativeMatch = (kind, row) => scopeMatch(source, nativeIds, kind, row);
     if (k === source) return nativeIds.has(r.id);
+    const sourceRows=data[source]||[];
+    let allowed=scopeAllowed.get(nativeIds);
+    if(!allowed) {
+      allowed=sourceRows.filter(row=>nativeIds.has(row.id));
+      scopeAllowed.set(nativeIds,allowed);
+    }
+    // A full source view does not impose a relationship on independent records.
+    // An empty filtered selection remains restrictive when the source has rows.
+    if(nativeIds.size===sourceRows.length && allowed.length===sourceRows.length)return true;
     if (k === "notes" && ["projects", "streams", "tasks"].includes(source)) {
       const direct = (data[source] || [])
         .filter((x) => nativeIds.has(x.id))
@@ -414,11 +423,6 @@
             scopeMatch(source, nativeIds, "points", p),
         )
       );
-    }
-    let allowed = scopeAllowed.get(nativeIds);
-    if (!allowed) {
-      allowed = (data[source] || []).filter((r) => nativeIds.has(r.id));
-      scopeAllowed.set(nativeIds, allowed);
     }
     if (source === "projects")
       return k === "points"
@@ -2041,7 +2045,18 @@
       const total=data.notes.length;
       if(shown<total) {
         const info=document.createElement('p');info.className='muted';info.dataset.filteredNotes='';
-        info.textContent=`${total} réunion(s) chargée(s) depuis « ${cfg('notes').table} », ${shown} affichée(s). Vérifiez les filtres Grist, les rattachements, les filtres du widget et les archivés.`;
+        const visible=new Set([...$("list").querySelectorAll('[data-tree-kind="notes"]')].map(e=>Number(e.dataset.treeId)));
+        const reasons={native:0,state:0,local:0};
+        for(const record of data.notes)if(!visible.has(record.id)) {
+          if(!nativeMatch('notes',record))reasons.native++;
+          else if(transformed('notes',record)||archived('notes',record)&&!$("showArchived").checked)reasons.state++;
+          else reasons.local++;
+        }
+        info.textContent=`${total} réunion(s) chargée(s) depuis « ${cfg('notes').table} », ${shown} affichée(s). ` + [
+          reasons.native?`${reasons.native} hors du périmètre Grist de « ${nativeTable} ».`:'',
+          reasons.state?`${reasons.state} archivée(s) ou transformée(s).`:'',
+          reasons.local?`${reasons.local} masquée(s) par les filtres ou la recherche du widget.`:'',
+        ].filter(Boolean).join(' ');
         $("list").append(info);
       }
     }
@@ -2859,6 +2874,7 @@
       );
       if (token !== request) return;
       data = Object.fromEntries(pairs);
+      scopeAllowed=new WeakMap();
       sortDescriptors.clear();
       await loadReferences();
       applyLabels();
