@@ -228,6 +228,7 @@
   let nativeRevision = 0,
     nativePending = false,
     nativeWarning = "",
+    referenceWarning = "",
     resumeTimer = null;
   function selectedViewFetcher() {
     return grist.viewApi?.fetchSelectedTable
@@ -359,6 +360,8 @@
     return refText(col(k, f), val(k, r, f), r);
   }
   async function loadReferences() {
+    const missing=[];
+    referenceWarning="";
     let frontier = Object.keys(schemas)
       .flatMap((k) => Object.keys(cfg(k).fields || {}).map((f) => col(k, f)))
       .filter((c) => /^Ref(List)?:/.test(c?.type || ""));
@@ -373,6 +376,11 @@
       await Promise.all(
         needed.map(async (table) => {
           doneTables.add(table);
+          if (!tables.some(t=>t.tableId===table)) {
+            refRows.delete(table);
+            missing.push(...columns.filter(c=>c.type.split(':')[1]===table).map(c=>`${c.table}.${c.colId} → ${table}`));
+            return;
+          }
           if (!Object.values(mapping).some((c) => c.table === table))
             refRows.set(table, rows(await grist.docApi.fetchTable(table)));
         }),
@@ -381,6 +389,7 @@
         .map((c) => meta.find((m) => m.id === Number(c.visibleCol)))
         .filter((c) => /^Ref(List)?:/.test(c?.type || ""));
     }
+    if(missing.length)referenceWarning="Références vers des tables introuvables : " + [...new Set(missing)].join(" ; ") + ". Vérifiez le type de ces colonnes dans Grist. Les autres données restent affichées.";
   }
   function nativeKind() {
     return Object.keys(schemas).find((k) => cfg(k).table === nativeTable);
@@ -2847,7 +2856,7 @@
       filterOptions();
       render();
       message(
-        nativeWarning ||
+        [referenceWarning,nativeWarning ||
           (demo
             ? "Démonstration : données fictives, édition désactivée."
             : Object.keys(schemas).filter(
@@ -2855,7 +2864,7 @@
                     k !== "points" && (!cfg(k).table || !cfg(k).fields?.Titre),
                 ).length
               ? "Mapping incomplet : choisissez les tables et leurs champs."
-              : `Données actualisées — ${Object.values(data).reduce((n, r) => n + r.length, 0)} lignes chargées.${nativeTable ? (nativeKind() ? " Filtres Grist appliqués depuis « " + nativeTable + " »." : " La table source « " + nativeTable + " » n’est pas mappée : ses filtres ne s’appliquent pas à cette hiérarchie.") : ""}`),
+              : `Données actualisées — ${Object.values(data).reduce((n, r) => n + r.length, 0)} lignes chargées.${nativeTable ? (nativeKind() ? " Filtres Grist appliqués depuis « " + nativeTable + " »." : " La table source « " + nativeTable + " » n’est pas mappée : ses filtres ne s’appliquent pas à cette hiérarchie.") : ""}`)].filter(Boolean).join(" "), Boolean(referenceWarning),
       );
     } catch (e) {
       message("Chargement impossible : " + e.message, true);
@@ -3657,11 +3666,12 @@
     if (busy || !editionEnabled || moving) return;
     busy = true;
     $("save").disabled = true;
+    let targetTable=cfg(editing?.k).table;
     try {
       const { k, r } = editing,
         fields = {};
       await refreshMetadata();
-      mappedTableId(k);
+      targetTable=mappedTableId(k);
       for (const f of fieldsFor(k)) {
         const el = $("editForm").elements.namedItem(f);
         if (!el) continue;
@@ -3674,6 +3684,11 @@
         );
         if (r && el.dataset.initialValue === current) continue;
         const m = col(k, f);
+        if(!m)throw Error(`Le champ « ${fieldLabel(k,f)} » est mappé vers la colonne « ${cfg(k).fields[f]} », absente de « ${cfg(k).table} ». Corrigez ce champ dans Mapping.`);
+        if(/^Ref(List)?:/.test(m.type||"")) {
+          const targetTable=m.type.split(':')[1];
+          if(!tables.some(t=>t.tableId===targetTable))throw Error(`La colonne « ${cfg(k).table}.${m.colId} » est de type ${m.type}, mais la table « ${targetTable} » est introuvable. Corrigez le type de référence dans Grist.`);
+        }
         if (m?.isFormula) continue;
         // Let Grist evaluate its authenticated-user initial formula on new rows.
         // Sending an explicit empty value would suppress that native default.
@@ -3807,14 +3822,14 @@
         }
       }
       await grist.docApi.applyUserActions([
-        [r ? "UpdateRecord" : "AddRecord", cfg(k).table, r?.id ?? null, fields],
+        [r ? "UpdateRecord" : "AddRecord", targetTable, r?.id ?? null, fields],
         ...dependentLinkUpdates(k, r, fields),
       ]);
       busy = false;
       endEdit();
       await load();
     } catch (err) {
-      $("editError").textContent = `Enregistrement impossible dans « ${cfg(editing.k).table || schemas[editing.k].label} » : ` + err.message;
+      $("editError").textContent = `Enregistrement impossible dans « ${targetTable || "destination non définie"} » : ` + err.message;
     } finally {
       busy = false;
       $("save").disabled = false;
@@ -3831,18 +3846,33 @@
       if(current)c.table=current.tableId;
     }
   }
+  function reconcileMappingColumns(config, previous=[]) {
+    for(const c of Object.values(config)) {
+      c.columnRefs ||= {};
+      for(const [field,name] of Object.entries(c.fields||{})) {
+        if(!name){delete c.columnRefs[field];continue;}
+        if(!c.columnRefs[field]) {
+          const known=previous.find(m=>m.table===c.table && m.colId===name)||meta.find(m=>m.table===c.table && m.colId===name);
+          if(known)c.columnRefs[field]=known.id;
+        }
+        const current=meta.find(m=>m.table===c.table && Number(m.id)===Number(c.columnRefs[field]));
+        if(current)c.fields[field]=current.colId;
+      }
+    }
+  }
   async function refreshMetadata() {
     const [ts, cs] = await Promise.all([
       grist.docApi.fetchTable("_grist_Tables"),
       grist.docApi.fetchTable("_grist_Tables_column"),
     ]);
-    const previous=tables;
+    const previous=tables, previousColumns=meta;
     tables = rows(ts).filter((t) => !t.tableId.startsWith("_grist_"));
     if(loaded)reconcileMappingTables(mapping,previous);
     const ids = new Map(tables.map((t) => [t.id, t.tableId]));
     meta = rows(cs)
       .map((c) => ({ ...c, table: ids.get(c.parentId) }))
       .filter((c) => c.table);
+    if(loaded)reconcileMappingColumns(mapping,previousColumns);
   }
   async function init() {
     try {
@@ -3901,6 +3931,7 @@
       mapping = mappingWasSaved ? mapping : detect(mapping);
       const beforeTableRefs=JSON.stringify(mapping);
       reconcileMappingTables(mapping);
+      reconcileMappingColumns(mapping);
       if(mappingWasSaved && beforeTableRefs!==JSON.stringify(mapping)) {
         mappingSaving=true;
         try { await grist.setOption(optionKey,structuredClone(mapping)); }
@@ -4458,9 +4489,13 @@
     if (f === "table") {
       draft[k] = { ...draft[k], table: e.target.value, fields: {} };
       delete draft[k].tableRef;
+      delete draft[k].columnRefs;
       draft = { ...draft, [k]: detect({ [k]: draft[k] })[k] };
       mappingUI();
-    } else draft[k].fields[f] = e.target.value;
+    } else {
+      draft[k].fields[f] = e.target.value;
+      if(draft[k].columnRefs)delete draft[k].columnRefs[f];
+    }
   };
   $("mapping").onclick = async (e) => {
     if (e.target.dataset.createProgress) {
@@ -4545,6 +4580,11 @@
           const table=tables.find(t=>t.tableId===c.table);
           if(c.table && !table)throw Error(`La table « ${c.table} » pour ${schemas[kind].label} est introuvable. Sélectionnez sa table actuelle.`);
           if(table)c.tableRef=table.id;else delete c.tableRef;
+          c.columnRefs={};
+          for(const [field,name] of Object.entries(c.fields||{})) {
+            const column=meta.find(m=>m.table===c.table && m.colId===name);
+            if(column)c.columnRefs[field]=column.id;
+          }
           if (
             c.fields?.Responsable &&
             c.fields.Responsable === c.fields.ResponsableDiPSi
