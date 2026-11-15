@@ -223,3 +223,5 @@ Les boutons **↶ / ↷** annulent ou rétablissent les mises à jour de dates e
 Annuler le geste (ou Échap) rétablit l’affichage sans enregistrer. Les dates calculées, les périodes agrégées sans dates propres et les éléments sans colonnes sources éditables restent protégés. En lecture seule, les barres permettent le défilement tactile et aucune date n’est modifiée. Les confirmations n’interceptent pas les appuis.
 
 Les boutons natifs et dialogues utilisent également des couleurs explicites, indépendantes du thème système. Les commandes colorées conservent un texte contrasté ; les libellés intérieurs de timeline choisissent noir ou blanc selon la couleur de la barre, avec un fond stable sous le texte pendant l’affichage de l’avancement. `tests/control-contrast.cjs` dans le dépôt de suivi vérifie les boutons et textes sur fonds propres, les dialogues et l’éditeur de timeline en mode clair et sombre.
+
+Les évolutions discutées et reportées sont conservées dans la [feuille de route](ROADMAP.md).
