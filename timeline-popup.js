@@ -28,3 +28,18 @@ if (
     "#tableAddLevel1Btn,.table-actions-cell,#toggleMappingPanelBtn,#mappingPanel,.widget-revision,#timelineViewBtn {display:none!important} .popup-table-collapsed #tableView,.popup-table-collapsed #tableToolbarActions,.popup-table-collapsed #paneDivider {display:none!important}";
   document.head.append(style);
 }
+
+if(document.documentElement.dataset.projectPopup==='true' && window.parent.document.body.classList.contains('phone-mode')) {
+  document.documentElement.dataset.phoneProject='true';
+  const compact=document.createElement('style');
+  compact.textContent=`
+    html[data-phone-project] .header {padding:3px 5px;gap:4px}
+    html[data-phone-project] .header > strong, html[data-phone-project] .header > a {display:none}
+    html[data-phone-project] .timeline-toolbar {padding:3px 5px;gap:4px}
+    html[data-phone-project] .btn {font-size:11px;padding:3px 5px}
+    html[data-phone-project] .task-list, html[data-phone-project] .task-list-header {width:140px;min-width:140px}
+    html[data-phone-project] .task-name {font-size:11px}
+    html[data-phone-project] .task-meta {font-size:10px}
+  `;
+  document.head.append(compact);
+}

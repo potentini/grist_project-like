@@ -2805,8 +2805,27 @@ const fixture = require("../demo.json");
   await phone.locator("#list [data-kind=streams]").first().click();
   assert.equal(
     await phone.locator("[data-project-timeline]").isVisible(),
-    false,
+    true,
   );
+  const phoneScroll=await phone.locator('#detail').evaluate(e=>e.scrollTop);
+  // Grist may not delegate fullscreen permission; exercise the embedded fallback.
+  await phone.evaluate(()=>{document.querySelector('#projectTimeline').requestFullscreen=()=>Promise.reject(new Error('Fullscreen denied in embedding'));});
+  await phone.locator('[data-project-timeline]').click();
+  const phoneTimeline=phone.frameLocator('#timelineFrame');
+  await phoneTimeline.locator('.hierarchy-table').waitFor({state:'attached'});
+  assert.equal(await phoneTimeline.locator('#tableView').isVisible(),false);
+  for(const size of [{width:390,height:844},{width:844,height:390}]) {
+    await phone.setViewportSize(size);
+    const bounds=await phone.locator('#projectTimeline').evaluate(e=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height,iw:innerWidth,ih:innerHeight}});
+    assert.equal(bounds.x,0);assert.equal(bounds.y,0);
+    assert.equal(bounds.w,bounds.iw);assert.equal(bounds.h,bounds.ih);
+    assert.equal(await phone.locator('header > a[href="timeline.html"]').isVisible(),false);
+  }
+  assert.equal(await phone.locator('.timeline-landscape-hint').isVisible(),false);
+  await phone.locator('#timelineClose').click();
+  await phone.waitForFunction(()=>document.querySelector('#timelineFrame').getAttribute('src')==='about:blank');
+  assert.equal(await phone.locator('#detail').evaluate(e=>e.scrollTop),phoneScroll);
+  await phone.setViewportSize({width:390,height:844});
   await phone.locator("#phoneBack").click();
   await phone.screenshot({
     path: "/workspace/exports/widget-phone.png",
@@ -2860,7 +2879,7 @@ const fixture = require("../demo.json");
     await context.close();
   }
   console.log(
-    "PASS phone touch-only layout, default Actions, grouped navigation/filters, quick creation, single panes/back, hidden timelines, landscape and unchanged tablet/narrow desktop",
+    "PASS phone touch-only layout, default Actions, grouped navigation/filters, quick creation, single panes/back, fullscreen project timeline with denied native fullscreen, hidden general timeline, landscape and unchanged tablet/narrow desktop",
   );
   await page.goto("http://127.0.0.1:8766/?demo=1");
   await page

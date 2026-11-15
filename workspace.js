@@ -4142,8 +4142,27 @@
       },
     };
   };
+  async function expandPhoneProjectTimeline() {
+    if (!phoneMode) return;
+    const dialog=$("projectTimeline");
+    try {
+      if (!document.fullscreenElement && document.fullscreenEnabled && dialog.requestFullscreen)
+        await dialog.requestFullscreen();
+      if (!dialog.open) {
+        if(document.fullscreenElement===dialog)await document.exitFullscreen();
+        return;
+      }
+      if(document.fullscreenElement===dialog && screen.orientation?.lock)
+        await screen.orientation.lock('landscape');
+    } catch { /* Embedded/mobile browsers may deny fullscreen or orientation locking.
+                 The dialog still fills the widget and supports manual rotation. */ }
+  }
   $("timelineClose").onclick = () => $("projectTimeline").close();
   $("projectTimeline").addEventListener("close", () => {
+    if(document.fullscreenElement===$("projectTimeline")) {
+      screen.orientation?.unlock?.();
+      document.exitFullscreen().catch(()=>{});
+    }
     $("timelineFrame").src = "about:blank";
     popupProjectId = null;
     if (popupScroll)
@@ -4185,8 +4204,9 @@
       $("timelineTitle").textContent =
         "Timeline — " + title("projects", project);
       $("timelineFrame").src =
-        "timeline.html?projectPopup=1&v=20261112-popup-3";
+        "timeline.html?projectPopup=1&v=20261115-mobile";
       $("projectTimeline").showModal();
+      expandPhoneProjectTimeline();
     },
     true,
   );
