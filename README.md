@@ -231,3 +231,5 @@ Sur téléphone, la timeline d’un projet est accessible depuis le détail. Ell
 Sur téléphone, les commandes de la timeline projet sont limitées à Tout plier/déplier, ◀ Aujourd’hui ▶ et aux zooms. Elles restent sur une seule ligne, défilante horizontalement si l’écran est trop étroit. Le bouton Fermer du projet reste accessible ; les contrôles PC et tablette sont inchangés.
 
 Dans la timeline projet sur téléphone, la liste latérale est masquée ; les libellés des éléments sont affichés sur le calendrier. Les préférences de masquage des libellés et de regroupement compact sont ignorées dans cette présentation mobile.
+
+Sur téléphone uniquement, les formulaires de création et de modification utilisent des espacements verticaux réduits et des zones de texte moins hautes à l’ouverture (toujours redimensionnables). La saisie reste en 16 px et les champs simples conservent une hauteur minimale de 36 px. Les formulaires PC et tablette ne sont pas modifiés.
