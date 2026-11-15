@@ -396,12 +396,16 @@
   }
   function nativeMatch(k, r) {
     if (nativePending && nativeIds === null) return false;
-    return scopeMatch(nativeKind(), nativeIds, k, r);
+    return scopeMatch(nativeKind(), nativeIds, k, r, true);
   }
-  function scopeMatch(source, nativeIds, k, r) {
+  function scopeMatch(source, nativeIds, k, r, nativeScope=false) {
     if (!source || !nativeIds) return true;
-    const nativeMatch = (kind, row) => scopeMatch(source, nativeIds, kind, row);
+    const nativeMatch = (kind, row) => scopeMatch(source, nativeIds, kind, row, nativeScope);
     if (k === source) return nativeIds.has(r.id);
+    // Meetings and discussion points are transverse, not descendants of the
+    // source project hierarchy. Their own native/widget filters still apply.
+    if(nativeScope && ['projects','streams','tasks'].includes(source) &&
+       (k==='notes'||k==='points'||view==='notes'&&k==='actions'))return true;
     const sourceRows=data[source]||[];
     let allowed=scopeAllowed.get(nativeIds);
     if(!allowed) {
@@ -410,19 +414,9 @@
     }
     // A full source view does not impose a relationship on independent records.
     // An empty filtered selection remains restrictive when the source has rows.
-    if(nativeIds.size===sourceRows.length && allowed.length===sourceRows.length)return true;
-    if (k === "notes" && ["projects", "streams", "tasks"].includes(source)) {
-      const direct = (data[source] || [])
-        .filter((x) => nativeIds.has(x.id))
-        .some((x) => linkedTo(source, x, "notes", r));
-      return (
-        direct ||
-        (data.points || []).some(
-          (p) =>
-            has("points", p, "NoteOrigine", r) &&
-            scopeMatch(source, nativeIds, "points", p),
-        )
-      );
+    if(nativeScope && nativeIds.size===sourceRows.length && allowed.length===sourceRows.length)return true;
+    if(k==='notes' && ['projects','streams','tasks'].includes(source)) {
+      return allowed.some(row=>linkedTo(source,row,'notes',r)) || (data.points||[]).some(p=>has('points',p,'NoteOrigine',r)&&nativeMatch('points',p));
     }
     if (source === "projects")
       return k === "points"
@@ -1811,7 +1805,7 @@
       [
         "projectFilter",
         outlineRows("projects")
-          .filter((r) => nativeMatch("projects", r))
+          .filter((r) => view==='notes'&&['projects','streams','tasks'].includes(nativeKind()) || nativeMatch("projects", r))
           .map((r) => [r.id, title("projects", r)]),
       ],
       [
@@ -2889,7 +2883,7 @@
                     k !== "points" && (!cfg(k).table || !cfg(k).fields?.Titre),
                 ).length
               ? "Mapping incomplet : choisissez les tables et leurs champs."
-              : `Données actualisées — ${Object.values(data).reduce((n, r) => n + r.length, 0)} lignes chargées.${nativeTable ? (nativeKind() ? " Filtres Grist appliqués depuis « " + nativeTable + " »." : " La table source « " + nativeTable + " » n’est pas mappée : ses filtres ne s’appliquent pas à cette hiérarchie.") : ""}`)].filter(Boolean).join(" "), Boolean(referenceWarning),
+              : `Données actualisées — ${Object.values(data).reduce((n, r) => n + r.length, 0)} lignes chargées.${nativeTable ? (nativeKind() ? (view==='notes'&&['projects','streams','tasks'].includes(nativeKind()) ? " Le périmètre Grist de « " + nativeTable + " » ne limite pas la liste des réunions." : " Filtres Grist appliqués depuis « " + nativeTable + " ».") : " La table source « " + nativeTable + " » n’est pas mappée : ses filtres ne s’appliquent pas à cette hiérarchie.") : ""}`)].filter(Boolean).join(" "), Boolean(referenceWarning),
       );
     } catch (e) {
       message("Chargement impossible : " + e.message, true);
