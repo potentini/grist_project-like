@@ -227,3 +227,5 @@ Les boutons natifs et dialogues utilisent également des couleurs explicites, in
 Les évolutions discutées et reportées sont conservées dans la [feuille de route](ROADMAP.md).
 
 Sur téléphone, la timeline d’un projet est accessible depuis le détail. Elle occupe toute la surface du widget, avec une présentation compacte pour le paysage. L’ouverture demande le plein écran et le verrouillage paysage si les API et les permissions du navigateur le permettent. Sinon, tourner manuellement le téléphone ; un rappel apparaît en portrait. Fermer restitue le suivi et son défilement. La vue Table/Timeline générale reste masquée sur téléphone.
+
+Sur téléphone, les commandes de la timeline projet sont limitées à Tout plier/déplier, ◀ Aujourd’hui ▶ et aux zooms. Elles restent sur une seule ligne, défilante horizontalement si l’écran est trop étroit. Le bouton Fermer du projet reste accessible ; les contrôles PC et tablette sont inchangés.

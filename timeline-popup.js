@@ -33,9 +33,18 @@ if(document.documentElement.dataset.projectPopup==='true' && window.parent.docum
   document.documentElement.dataset.phoneProject='true';
   const compact=document.createElement('style');
   compact.textContent=`
-    html[data-phone-project] .header {padding:3px 5px;gap:4px}
-    html[data-phone-project] .header > strong, html[data-phone-project] .header > a {display:none}
-    html[data-phone-project] .timeline-toolbar {padding:3px 5px;gap:4px}
+    html[data-phone-project] .header,
+    html[data-phone-project] #tableView,
+    html[data-phone-project] #paneDivider,
+    html[data-phone-project] .legend {display:none!important}
+    html[data-phone-project] .timeline-toolbar > :not(#expandAllBtn):not(.timeline-navigation):not(.zoom-controls) {display:none!important}
+    html[data-phone-project] .timeline-toolbar {
+      padding:3px 5px;gap:5px;flex-wrap:nowrap;flex-shrink:0;
+      overflow-x:auto;min-height:34px;scrollbar-width:thin;
+    }
+    html[data-phone-project] .timeline-toolbar > * {flex-shrink:0;white-space:nowrap}
+    html[data-phone-project] .zoom-controls {flex-wrap:nowrap}
+    html[data-phone-project] .timeline-toolbar .btn {height:28px;align-items:center;justify-content:center}
     html[data-phone-project] .btn {font-size:11px;padding:3px 5px}
     html[data-phone-project] .task-list, html[data-phone-project] .task-list-header {width:140px;min-width:140px}
     html[data-phone-project] .task-name {font-size:11px}

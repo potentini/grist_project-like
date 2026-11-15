@@ -2820,7 +2820,18 @@ const fixture = require("../demo.json");
     assert.equal(bounds.x,0);assert.equal(bounds.y,0);
     assert.equal(bounds.w,bounds.iw);assert.equal(bounds.h,bounds.ih);
     assert.equal(await phone.locator('header > a[href="timeline.html"]').isVisible(),false);
+    assert.equal(await phoneTimeline.locator('.header').isVisible(),false);
+    const navButtons=phoneTimeline.locator('.timeline-toolbar button:visible');
+    assert.equal(await navButtons.count(),9);
+    const controlRows=await navButtons.evaluateAll(es=>es.map(e=>e.getBoundingClientRect().top));
+    assert.ok(Math.max(...controlRows)-Math.min(...controlRows)<4,'phone timeline controls stay on a single row');
+    for(const selector of ['#toggleDateEditBtn','#colorFieldSelect','#projectSortSelect','#popupTableToggle','#timelineUndo','#timelineRedo','#currentPeriod'])
+      assert.equal(await phoneTimeline.locator(selector).isVisible(),false);
   }
+  await phoneTimeline.locator('[data-zoom=year]').click();
+  await phoneTimeline.locator('#nextBtn').click();
+  await phoneTimeline.locator('#todayBtn').click();
+  await phoneTimeline.locator('#expandAllBtn').click();
   assert.equal(await phone.locator('.timeline-landscape-hint').isVisible(),false);
   await phone.locator('#timelineClose').click();
   await phone.waitForFunction(()=>document.querySelector('#timelineFrame').getAttribute('src')==='about:blank');

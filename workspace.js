@@ -4204,7 +4204,7 @@
       $("timelineTitle").textContent =
         "Timeline — " + title("projects", project);
       $("timelineFrame").src =
-        "timeline.html?projectPopup=1&v=20261115-mobile";
+        "timeline.html?projectPopup=1&v=20261115-mobile-navigation";
       $("projectTimeline").showModal();
       expandPhoneProjectTimeline();
     },
