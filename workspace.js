@@ -2036,6 +2036,15 @@
       `<div class="actions"><button data-new="${view === "projects" ? "projects" : view}">+ ${view === "projects" ? cfg("projects").label || "Projet" : view === "notes" ? cfg("notes").label || "Note / réunion" : view === "streams" ? cfg("streams").label || "Chantier" : cfg("actions").label || "Action"}</button><button data-fold-all="close">Tout plier</button><button data-fold-all="open">Tout déplier</button></div>` +
       (html ||
         '<p class="empty">Aucun élément. Vérifiez le mapping ou ajustez les filtres.</p>');
+    if(view==='notes' && (data.notes||[]).length) {
+      const shown=$("list").querySelectorAll('[data-tree-kind="notes"]').length;
+      const total=data.notes.length;
+      if(shown<total) {
+        const info=document.createElement('p');info.className='muted';info.dataset.filteredNotes='';
+        info.textContent=`${total} réunion(s) chargée(s) depuis « ${cfg('notes').table} », ${shown} affichée(s). Vérifiez les filtres Grist, les rattachements, les filtres du widget et les archivés.`;
+        $("list").append(info);
+      }
+    }
     renderDetail();
     syncEdition();
   }
@@ -3661,6 +3670,30 @@
     }
     return updates;
   }
+  function revealCreatedRecord(kind,id) {
+    const record=(data[kind]||[]).find(row=>row.id===id);
+    if(!record)return;
+    view=['projects','streams','tasks'].includes(kind)?'projects':kind==='points'?'notes':kind;
+    phoneDetail(false);
+    render();
+    const selector=`[data-kind="${kind}"][data-id="${id}"]`;
+    let item=$("list").querySelector(selector);
+    if(!item) {
+      const reason=!nativeMatch(kind,record)?'le périmètre des filtres Grist et ses rattachements':inactive(kind,record)?'son état archivé ou transformé':'les filtres ou la recherche du widget';
+      message(`« ${title(kind,record)} » a été enregistré dans « ${cfg(kind).table} », mais reste masqué par ${reason}. Les filtres n’ont pas été modifiés.`,true);
+      return;
+    }
+    let ancestor=item.closest('.tree-children');
+    while(ancestor) {
+      const toggle=ancestor.parentElement.querySelector(':scope > .tree-row > [data-fold]');
+      if(toggle){folded.delete(toggle.dataset.fold);searchFolded.delete(toggle.dataset.fold);}
+      ancestor=ancestor.parentElement.parentElement?.closest('.tree-children');
+    }
+    selectRecord(kind,id,null);
+    item=$("list").querySelector(selector);
+    item?.scrollIntoView({block:'nearest'});
+    message(`« ${title(kind,record)} » a été enregistré dans « ${cfg(kind).table} ».`);
+  }
   async function save(e) {
     e.preventDefault();
     if (busy || !editionEnabled || moving) return;
@@ -3821,13 +3854,16 @@
             delete fields[key];
         }
       }
-      await grist.docApi.applyUserActions([
+      const result=await grist.docApi.applyUserActions([
         [r ? "UpdateRecord" : "AddRecord", targetTable, r?.id ?? null, fields],
         ...dependentLinkUpdates(k, r, fields),
       ]);
+      const createdId=!r?(result?.retValues?.[0] ?? (Array.isArray(result)?result[0]:null)):null;
+      await refreshNativeScope();
       busy = false;
       endEdit();
       await load();
+      if(Number.isInteger(createdId)&&createdId>0)revealCreatedRecord(k,createdId);
     } catch (err) {
       $("editError").textContent = `Enregistrement impossible dans « ${targetTable || "destination non définie"} » : ` + err.message;
     } finally {
@@ -4005,7 +4041,7 @@
   phonePointer.addEventListener("change", updatePhoneMode);
   document.querySelectorAll("[data-view]").forEach(
     (b) =>
-      (b.onclick = () => {
+      (b.onclick = async () => {
         if (editing) {
           message(
             "Enregistrez ou annulez les modifications avant de changer de vue.",
@@ -4013,7 +4049,10 @@
           return;
         }
         $("phoneNav").open = false;
-        if (view === b.dataset.view) return;
+        if (view === b.dataset.view) {
+          if(!demo){await refreshNativeScope();await load();}
+          return;
+        }
         rememberLocation();
         view = b.dataset.view;
         $("phoneNav").open = false;
@@ -4025,6 +4064,7 @@
         $("statusFilter").value = "";
         filterOptions();
         render();
+        if(!demo){await refreshNativeScope();await load();}
       }),
   );
   for (const id of [
