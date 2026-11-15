@@ -2090,7 +2090,7 @@
       const fresh = await Promise.all(
         Object.keys(schemas).map(async (k) => [
           k,
-          cfg(k).table ? rows(await grist.docApi.fetchTable(cfg(k).table)) : [],
+          cfg(k).table ? rows(await grist.docApi.fetchTable(mappedTableId(k))) : [],
         ]),
       );
       data = Object.fromEntries(fresh);
@@ -2823,14 +2823,20 @@
     }
     syncEdition();
   }
+  function mappedTableId(k) {
+    const c=cfg(k),table=tables.find(t=>t.tableId===c.table && (!c.tableRef || Number(t.id)===Number(c.tableRef)));
+    if(!table)throw Error(`La table « ${c.table || "non mappée"} » est introuvable pour ${schemas[k].label}. Ouvrez Mapping et sélectionnez sa table réelle. Il n’est pas nécessaire de la renommer.`);
+    return table.tableId;
+  }
   async function load() {
     if (moving) return;
     const token = ++request;
     try {
+      if(!demo)await refreshMetadata();
       const pairs = await Promise.all(
         Object.keys(schemas).map(async (k) => [
           k,
-          cfg(k).table ? rows(await grist.docApi.fetchTable(cfg(k).table)) : [],
+          cfg(k).table ? rows(await grist.docApi.fetchTable(mappedTableId(k))) : [],
         ]),
       );
       if (token !== request) return;
@@ -2898,6 +2904,7 @@
   function mappingUI() {
     const options = (opts, v) =>
       '<option value="">— Non mappé —</option>' +
+      (v && !opts.some(([id])=>id===v) ? `<option selected value="${esc(v)}">${esc(v)} — introuvable</option>` : '') +
       opts
         .map(
           ([id, label]) =>
@@ -3653,6 +3660,8 @@
     try {
       const { k, r } = editing,
         fields = {};
+      await refreshMetadata();
+      mappedTableId(k);
       for (const f of fieldsFor(k)) {
         const el = $("editForm").elements.namedItem(f);
         if (!el) continue;
@@ -3805,10 +3814,21 @@
       endEdit();
       await load();
     } catch (err) {
-      $("editError").textContent = "Enregistrement impossible : " + err.message;
+      $("editError").textContent = `Enregistrement impossible dans « ${cfg(editing.k).table || schemas[editing.k].label} » : ` + err.message;
     } finally {
       busy = false;
       $("save").disabled = false;
+    }
+  }
+  function reconcileMappingTables(config, previous = []) {
+    for(const c of Object.values(config)) {
+      if(!c.table) { delete c.tableRef; continue; }
+      if(!c.tableRef) {
+        const known=previous.find(t=>t.tableId===c.table)||tables.find(t=>t.tableId===c.table);
+        if(known)c.tableRef=known.id;
+      }
+      const current=tables.find(t=>Number(t.id)===Number(c.tableRef));
+      if(current)c.table=current.tableId;
     }
   }
   async function refreshMetadata() {
@@ -3816,7 +3836,9 @@
       grist.docApi.fetchTable("_grist_Tables"),
       grist.docApi.fetchTable("_grist_Tables_column"),
     ]);
+    const previous=tables;
     tables = rows(ts).filter((t) => !t.tableId.startsWith("_grist_"));
+    if(loaded)reconcileMappingTables(mapping,previous);
     const ids = new Map(tables.map((t) => [t.id, t.tableId]));
     meta = rows(cs)
       .map((c) => ({ ...c, table: ids.get(c.parentId) }))
@@ -3877,6 +3899,13 @@
       });
       await refreshMetadata();
       mapping = mappingWasSaved ? mapping : detect(mapping);
+      const beforeTableRefs=JSON.stringify(mapping);
+      reconcileMappingTables(mapping);
+      if(mappingWasSaved && beforeTableRefs!==JSON.stringify(mapping)) {
+        mappingSaving=true;
+        try { await grist.setOption(optionKey,structuredClone(mapping)); }
+        finally {mappingSaving=false;}
+      }
       draft = structuredClone(mapping);
       loaded = true;
       mappingUI();
@@ -4428,6 +4457,7 @@
     draft[k] ||= { fields: {} };
     if (f === "table") {
       draft[k] = { ...draft[k], table: e.target.value, fields: {} };
+      delete draft[k].tableRef;
       draft = { ...draft, [k]: detect({ [k]: draft[k] })[k] };
       mappingUI();
     } else draft[k].fields[f] = e.target.value;
@@ -4512,6 +4542,9 @@
       mappingSaving = true;
       try {
         for (const [kind, c] of Object.entries(saved)) {
+          const table=tables.find(t=>t.tableId===c.table);
+          if(c.table && !table)throw Error(`La table « ${c.table} » pour ${schemas[kind].label} est introuvable. Sélectionnez sa table actuelle.`);
+          if(table)c.tableRef=table.id;else delete c.tableRef;
           if (
             c.fields?.Responsable &&
             c.fields.Responsable === c.fields.ResponsableDiPSi

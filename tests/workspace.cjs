@@ -651,7 +651,7 @@ const fixture = require("../demo.json");
   await page.getByRole("button", { name: "Modifier", exact: true }).click();
   await page.evaluate(() => (window.rejectWrite = true));
   await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
-  await page.getByText("Enregistrement impossible : Accès refusé").waitFor();
+  await page.getByText("Enregistrement impossible dans « Actions » : Accès refusé").waitFor();
   assert.equal(await page.locator("#detail #editForm").isVisible(), true);
   await page.getByRole("button", { name: "Annuler", exact: true }).click();
   console.log("PASS permission failure preserves editor draft");

@@ -233,3 +233,5 @@ Sur téléphone, les commandes de la timeline projet sont limitées à Tout plie
 Dans la timeline projet sur téléphone, la liste latérale est masquée ; les libellés des éléments sont affichés sur le calendrier. Les préférences de masquage des libellés et de regroupement compact sont ignorées dans cette présentation mobile.
 
 Sur téléphone uniquement, les formulaires de création et de modification utilisent des espacements verticaux réduits et des zones de texte moins hautes à l’ouverture (toujours redimensionnables). La saisie reste en 16 px et les champs simples conservent une hauteur minimale de 36 px. Les formulaires PC et tablette ne sont pas modifiés.
+
+Le nom métier « Notes et réunions » peut être mappé vers une table nommée autrement, par exemple Sujets. Les mappings mémorisent l’identifiant interne stable de la table pour suivre ses renommages sans réinitialiser les champs. Un ancien mapping déjà cassé, sans identifiant enregistré, doit être réaffecté explicitement dans Mapping ; une destination introuvable reste affichée au lieu d’être effacée. Les erreurs d’enregistrement indiquent aussi la table réellement ciblée.
