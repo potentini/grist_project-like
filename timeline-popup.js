@@ -46,7 +46,7 @@ if(document.documentElement.dataset.projectPopup==='true' && window.parent.docum
     html[data-phone-project] .zoom-controls {flex-wrap:nowrap}
     html[data-phone-project] .timeline-toolbar .btn {height:28px;align-items:center;justify-content:center}
     html[data-phone-project] .btn {font-size:11px;padding:3px 5px}
-    html[data-phone-project] .task-list, html[data-phone-project] .task-list-header {width:140px;min-width:140px}
+    html[data-phone-project] .task-list, html[data-phone-project] .task-list-header {display:none!important}
     html[data-phone-project] .task-name {font-size:11px}
     html[data-phone-project] .task-meta {font-size:10px}
   `;

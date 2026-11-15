@@ -208,6 +208,10 @@
     if (s.colorField) colorField = s.colorField;
     if (typeof s.labelsVisible === "boolean") labelsVisible = s.labelsVisible;
     if (typeof s.compactChildren === "boolean") compactChildren = s.compactChildren;
+    if(document.documentElement.dataset.phoneProject==='true') {
+      labelsVisible=true;
+      compactChildren=false;
+    }
     if (typeof s.allowEditing === "boolean") allowEditing = s.allowEditing;
     else if (typeof s.allowTimelineDateEdit === "boolean") allowEditing = s.allowTimelineDateEdit;
     const savedViewMode = s.selectedViewMode || s.viewMode;

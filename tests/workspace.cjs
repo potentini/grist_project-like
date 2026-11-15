@@ -2802,6 +2802,11 @@ const fixture = require("../demo.json");
     await phone.locator("body").getAttribute("data-current-view"),
     "streams",
   );
+  await phone.evaluate(()=>{
+    for(const row of window.testDb.data.streams)Object.assign(row,{DateDebut:'2026-11-01',DateFin:'2026-12-01'});
+    document.querySelector('#refresh').click();
+  });
+  await phone.locator('#list').getByText(/01\/12\/2026/).first().waitFor();
   await phone.locator("#list [data-kind=streams]").first().click();
   assert.equal(
     await phone.locator("[data-project-timeline]").isVisible(),
@@ -2810,10 +2815,12 @@ const fixture = require("../demo.json");
   const phoneScroll=await phone.locator('#detail').evaluate(e=>e.scrollTop);
   // Grist may not delegate fullscreen permission; exercise the embedded fallback.
   await phone.evaluate(()=>{document.querySelector('#projectTimeline').requestFullscreen=()=>Promise.reject(new Error('Fullscreen denied in embedding'));});
+  await phone.evaluate(()=>localStorage.setItem('grist_gantt_dual_state_v1_project_popup',JSON.stringify({labelsVisible:false,compactChildren:true})));
   await phone.locator('[data-project-timeline]').click();
   const phoneTimeline=phone.frameLocator('#timelineFrame');
   await phoneTimeline.locator('.hierarchy-table').waitFor({state:'attached'});
   assert.equal(await phoneTimeline.locator('#tableView').isVisible(),false);
+  await phoneTimeline.locator('.bar-label, .milestone-label').first().waitFor();
   for(const size of [{width:390,height:844},{width:844,height:390}]) {
     await phone.setViewportSize(size);
     const bounds=await phone.locator('#projectTimeline').evaluate(e=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height,iw:innerWidth,ih:innerHeight}});
@@ -2821,6 +2828,10 @@ const fixture = require("../demo.json");
     assert.equal(bounds.w,bounds.iw);assert.equal(bounds.h,bounds.ih);
     assert.equal(await phone.locator('header > a[href="timeline.html"]').isVisible(),false);
     assert.equal(await phoneTimeline.locator('.header').isVisible(),false);
+    assert.equal(await phoneTimeline.locator('#taskList').isVisible(),false);
+    assert.equal(await phoneTimeline.locator('.task-list-header').isVisible(),false);
+    const calendar=await phoneTimeline.locator('#timelineBody').evaluate(e=>({width:e.getBoundingClientRect().width,viewport:innerWidth}));
+    assert.ok(Math.abs(calendar.width-calendar.viewport)<2,'calendar uses full phone width');
     const navButtons=phoneTimeline.locator('.timeline-toolbar button:visible');
     assert.equal(await navButtons.count(),9);
     const controlRows=await navButtons.evaluateAll(es=>es.map(e=>e.getBoundingClientRect().top));
