@@ -60,3 +60,52 @@ Pour conserver la filiation des nouvelles conversions, prévoir, si absents :
 Vérifier et mapper ces champs avant utilisation ; aucune colonne n’est créée dans un document Grist par cette feuille de route.
 
 Questions ouvertes : conversions entre projets différents ; choix détaillés des destinations dans une cascade ; présentation de l’historique des réaffectations et traitement des champs non compatibles. Le périmètre de la première version reste à valider.
+
+## Réunions récurrentes et continuité des points de discussion
+
+Statut : proposition discutée puis explicitement reportée, à reprendre ultérieurement. Aucun changement de tables ou de comportement à réaliser à ce stade.
+
+### Modèle proposé
+
+Conserver les tables actuelles, sans ajouter de table de cycles ni de sujets durables pour la première version. Dans le document utilisateur, **Sujets est la table des réunions**.
+
+- Chaque ligne de réunion représente une séance datée distincte.
+- Le champ existant `Instance`, de type Choix, identifie la série : Codir, Réunion d’équipe, Bilat – Amandine, etc.
+- Chaque point reste propre à une séance, via `NoteOrigine`, et conserve ses échanges et décisions historiques.
+- Relier les reprises d’un sujet au moyen d’une référence vers le point précédent. La chaîne représente la continuité du sujet.
+
+### Colonnes à prévoir et mapping
+
+| Table | Colonne | Type / traitement proposé |
+| --- | --- | --- |
+| Sujets (réunions) | Instance | Réutiliser et mapper ; Choix pour commencer |
+| Sujets | Date | Réutiliser et mapper ; Date |
+| Sujets | Nom | Ajouter ; Texte libre pour les réunions ponctuelles |
+| Sujets | Titre | Formule texte : Instance + « du » + date ; sans Instance, utiliser Nom ; sans date, afficher Instance seule |
+| Sujets | Etat | Vérifier et adapter les valeurs existantes pour distinguer séances prévues, tenues et annulées |
+| Points de discussion | PointPrecedent | Ajouter ; Référence vers cette même table |
+| Points de discussion | EtatSuivi | Ajouter ; Choix : À reprendre, En attente, Clos |
+| Points de discussion | ReprendreApres | Facultatif ; Date |
+
+Avant de passer Titre en formule, recopier les titres actuels dans Nom. Utiliser Instance pour le regroupement, jamais le titre calculé. Conserver les codes, références, participants, contenu général, rattachements et archivage existants.
+
+Pour de nouveaux points, proposer À reprendre par défaut. Un état historique vide ne déclenche pas de reprise automatique ; identifier progressivement les anciens points encore ouverts. Aucun ajout nécessaire dans Actions pour cette première version.
+
+### Workflow envisagé
+
+1. Créer une réunion en choisissant Instance et Date ; calculer son titre automatiquement.
+2. Proposer une commande **Reprendre les sujets ouverts**, avec aperçu et sélection avant création.
+3. Chercher dans toutes les séances antérieures de la même Instance, pas uniquement dans la dernière. Retenir le dernier point de chaque fil pour éviter les doublons ; distinguer À reprendre et En attente, et respecter éventuellement ReprendreApres.
+4. Montrer le dernier compte rendu, la dernière décision, les actions en cours et l’historique.
+5. Pour chaque reprise sélectionnée, créer un nouveau point lié à la nouvelle réunion et au PointPrecedent. Reprendre le titre et les rattachements, en les laissant modifiables. Laisser Contenu et Decision vides pour les nouveaux échanges ; consulter les anciennes informations comme contexte.
+6. Mettre à jour EtatSuivi sur le nouveau point. Conserver l’état de l’ancien point comme historique. Un dernier point Clos retire le fil des prochaines propositions automatiques.
+7. Retrouver les actions à travers le fil sans les dupliquer ni réécrire leur réunion ou point d’origine. Les nouvelles actions restent issues du point et de la réunion où elles sont créées.
+
+### Garde-fous et travail restant
+
+- Empêcher les autoréférences et les boucles de PointPrecedent.
+- Éviter une double reprise dans la même réunion ; signaler un sujet déjà repris dans une autre séance prévue.
+- Définir précisément la gestion d’une réunion annulée, de la suppression ou du déplacement d’un point et des changements d’Instance, sans perdre les sujets à reprendre.
+- Limiter les reprises à une même Instance pour une première version ; les reprises entre instances restent à étudier.
+- Développer le mapping des nouvelles colonnes, les formulaires compatibles avec le titre calculé, l’aperçu de reprise, la lecture de l’historique et l’agrégation des actions.
+- Articuler ensuite ce workflow avec la saisie rapide `@` et la création d’action depuis un paragraphe déjà inscrites à la feuille de route.
