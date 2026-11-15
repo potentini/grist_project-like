@@ -222,6 +222,8 @@
   }
   const knownBranches = new Set();
   let mappingSaving = false;
+  let observedMappingSignature=null, mappingOptionsRevision=0, committedMappingRevision=0;
+  let optionWriteQueue=Promise.resolve();
   let mappingWasSaved = false,
     nativeTable = null,
     nativeIds = null;
@@ -809,7 +811,7 @@
   async function rememberSplit() {
     if (!demo && window.grist)
       try {
-        await grist.setOption(layoutKey, { leftFraction: preferredSplit });
+        await setWidgetOption(layoutKey, { leftFraction: preferredSplit });
       } catch (err) {
         message(
           "La largeur des volets n’a pas pu être mémorisée : " + err.message,
@@ -881,6 +883,51 @@
     document.querySelector("main"),
   );
   const optionKey = "projectWorkspaceMappingV1";
+  function setWidgetOption(key,value) {
+    const snapshot=structuredClone(value);
+    const write=optionWriteQueue.then(()=>grist.setOption(key,snapshot));
+    optionWriteQueue=write.catch(()=>{});
+    return write;
+  }
+  function mappingSignature(config) {
+    return JSON.stringify(config,(_key,value)=>value && typeof value==='object' && !Array.isArray(value)
+      ? Object.fromEntries(Object.entries(value).sort(([a],[b])=>a.localeCompare(b))) : value);
+  }
+  function mappingRevision(config) {
+    return Math.max(0,...Object.values(config).map(c=>Number(c?._mappingRevision)||0));
+  }
+  async function persistMapping(config) {
+    const snapshot=structuredClone(config);
+    const revision=Math.max(Date.now(),committedMappingRevision+1,mappingRevision(snapshot)+1);
+    for(const c of Object.values(snapshot))c._mappingRevision=revision;
+    await setWidgetOption(optionKey,snapshot);
+    committedMappingRevision=revision;
+    observedMappingSignature=mappingSignature(snapshot);
+    return snapshot;
+  }
+  function receiveMapping(next) {
+    if(!next || typeof next!=='object' || Array.isArray(next))return false;
+    const revision=mappingRevision(next);
+    if(revision<committedMappingRevision)return false;
+    const signature=mappingSignature(next);
+    if(signature===observedMappingSignature)return false;
+    committedMappingRevision=revision;
+    observedMappingSignature=signature;
+    mappingOptionsRevision++;
+    mappingWasSaved=true;
+    const normalized=structuredClone(next);
+    reconcileMappingTables(normalized);
+    reconcileMappingColumns(normalized);
+    if(mappingSignature(normalized)===mappingSignature(mapping))return false;
+    mapping=normalized;
+    applyLabels();
+    // A configuration echo must not discard the form currently being edited.
+    if(!loaded || $("mapping").hidden) {
+      draft=structuredClone(mapping);
+      if(loaded)mappingUI();
+    }
+    return true;
+  }
   const demo = new URLSearchParams(location.search).has("demo");
   function message(s, error = false) {
     $("message").textContent = s;
@@ -1622,7 +1669,7 @@
     $(id).onchange = async () => {
       hierarchySort = { ...hierarchySort, [scope]: $(id).value };
       render();
-      if (!demo) await grist.setOption(HierarchySort.key, hierarchySort);
+      if (!demo) await setWidgetOption(HierarchySort.key, hierarchySort);
     };
   function compareTrackingRows(k, a, b) {
     if (k === "notes")
@@ -3960,22 +4007,15 @@
           preferredSplit = Math.max(0.05, Math.min(0.95, width));
           paintSplit();
         }
-        const next = opts?.[optionKey];
-        if (
-          !mappingSaving &&
-          next &&
-          JSON.stringify(next) !== JSON.stringify(mapping)
-        ) {
-          mappingWasSaved = true;
-          mapping = next;
-          applyLabels();
-          draft = structuredClone(mapping);
-          if (loaded) {
-            mappingUI();
-            await load();
-          }
-        }
+        if(!mappingSaving && receiveMapping(opts?.[optionKey]) && loaded)await load();
       });
+      // onOptions can arrive after initialization; read the saved mapping before
+      // deciding whether automatic detection is appropriate.
+      const optionsRevision=mappingOptionsRevision;
+      try {
+        const stored=await grist.getOption(optionKey);
+        if(optionsRevision===mappingOptionsRevision)receiveMapping(stored);
+      }catch(error){if(!mappingWasSaved)throw error;}
       await refreshMetadata();
       mapping = mappingWasSaved ? mapping : detect(mapping);
       const beforeTableRefs=JSON.stringify(mapping);
@@ -3983,7 +4023,7 @@
       reconcileMappingColumns(mapping);
       if(mappingWasSaved && beforeTableRefs!==JSON.stringify(mapping)) {
         mappingSaving=true;
-        try { await grist.setOption(optionKey,structuredClone(mapping)); }
+        try { mapping=await persistMapping(mapping); }
         finally {mappingSaving=false;}
       }
       draft = structuredClone(mapping);
@@ -4181,7 +4221,7 @@
       setOption: async (key, value) => {
         if (key === HierarchySort.key) {
           hierarchySort = HierarchySort.normalize(value);
-          await grist.setOption(key, hierarchySort);
+          await setWidgetOption(key, hierarchySort);
           render();
         }
         if (key === "uiState")
@@ -4627,6 +4667,23 @@
         if (field === "table") saved[kind].table = select.value;
         else saved[kind].fields[field] = select.value;
       }
+      for(const input of $("mapping").querySelectorAll('[data-kind-label]')) {
+        const kind=input.dataset.kindLabel;
+        saved[kind] ||= {fields:{}};
+        saved[kind].label=input.value.trim();
+      }
+      for(const input of $("mapping").querySelectorAll('[data-label-kind][data-label-field]')) {
+        const kind=input.dataset.labelKind;
+        saved[kind] ||= {fields:{}};
+        saved[kind].fieldLabels ||= {};
+        saved[kind].fieldLabels[input.dataset.labelField]=input.value.trim();
+      }
+      for(const input of $("mapping").querySelectorAll('[data-progress-base]'))
+        saved[input.dataset.progressBase].progressBaseOne=input.checked;
+      for(const input of $("mapping").querySelectorAll('[data-extra-kind][data-extra-label]')) {
+        const extra=saved[input.dataset.extraKind]?.extraFields?.find(e=>e.id===input.dataset.extraLabel);
+        if(extra)extra.label=input.value.trim();
+      }
       mappingSaving = true;
       try {
         for (const [kind, c] of Object.entries(saved)) {
@@ -4685,10 +4742,10 @@
                 `La colonne ${column} est déjà mappée dans ${schemas[kind].label}. Renommez le champ existant ou choisissez une autre colonne.`,
               );
           }
-        await grist.setOption(optionKey, saved);
+        const committed=await persistMapping(saved);
         mappingWasSaved = true;
-        mapping = structuredClone(saved);
-        draft = structuredClone(saved);
+        mapping = structuredClone(committed);
+        draft = structuredClone(committed);
         applyLabels();
         const old = (await grist.getOption("directMapping")) || { levels: {} };
         for (const [i, k] of ["projects", "streams", "tasks"].entries()) {
@@ -4710,7 +4767,7 @@
             manualArchivedCol: c.fields.Archive || "",
           };
         }
-        await grist.setOption("directMapping", old);
+        await setWidgetOption("directMapping", old);
         $("mapping").hidden = true;
         await load();
       } catch (err) {
