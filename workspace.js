@@ -401,6 +401,9 @@
   function scopeMatch(source, nativeIds, k, r, nativeScope=false) {
     if (!source || !nativeIds) return true;
     const nativeMatch = (kind, row) => scopeMatch(source, nativeIds, kind, row, nativeScope);
+    // In the general action view, project ancestors are display context only.
+    // Their native scope must not prune branches containing transverse actions.
+    if(nativeScope && view==='actions' && ['projects','streams','tasks'].includes(source))return true;
     if (k === source) return nativeIds.has(r.id);
     // Meetings and discussion points are transverse, not descendants of the
     // source project hierarchy. Their own native/widget filters still apply.
@@ -1805,7 +1808,7 @@
       [
         "projectFilter",
         outlineRows("projects")
-          .filter((r) => view==='notes'&&['projects','streams','tasks'].includes(nativeKind()) || nativeMatch("projects", r))
+          .filter((r) => ['notes','actions'].includes(view)&&['projects','streams','tasks'].includes(nativeKind()) || nativeMatch("projects", r))
           .map((r) => [r.id, title("projects", r)]),
       ],
       [
@@ -2883,7 +2886,7 @@
                     k !== "points" && (!cfg(k).table || !cfg(k).fields?.Titre),
                 ).length
               ? "Mapping incomplet : choisissez les tables et leurs champs."
-              : `Données actualisées — ${Object.values(data).reduce((n, r) => n + r.length, 0)} lignes chargées.${nativeTable ? (nativeKind() ? (view==='notes'&&['projects','streams','tasks'].includes(nativeKind()) ? " Le périmètre Grist de « " + nativeTable + " » ne limite pas la liste des réunions." : " Filtres Grist appliqués depuis « " + nativeTable + " ».") : " La table source « " + nativeTable + " » n’est pas mappée : ses filtres ne s’appliquent pas à cette hiérarchie.") : ""}`)].filter(Boolean).join(" "), Boolean(referenceWarning),
+              : `Données actualisées — ${Object.values(data).reduce((n, r) => n + r.length, 0)} lignes chargées.${nativeTable ? (nativeKind() ? (['notes','actions'].includes(view)&&['projects','streams','tasks'].includes(nativeKind()) ? " Le périmètre Grist de « " + nativeTable + " » ne limite pas la liste générale " + (view==='actions'?"des actions.":"des réunions.") : " Filtres Grist appliqués depuis « " + nativeTable + " ».") : " La table source « " + nativeTable + " » n’est pas mappée : ses filtres ne s’appliquent pas à cette hiérarchie.") : ""}`)].filter(Boolean).join(" "), Boolean(referenceWarning),
       );
     } catch (e) {
       message("Chargement impossible : " + e.message, true);
