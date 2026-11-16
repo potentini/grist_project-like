@@ -1,0 +1,51 @@
+#meetingFollowup {
+  width: min(1200px, 96vw);
+  height: 92dvh;
+  max-width: none;
+  max-height: 96dvh;
+  padding: 14px;
+  color: #23334a;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  overflow: hidden;
+  box-sizing: border-box;
+  color-scheme: light;
+}
+#meetingFollowup[open] { display: flex; flex-direction: column; gap: 10px; }
+#meetingFollowup::backdrop { background: #18253880; }
+#meetingFollowup .followup-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex: 0 0 auto; }
+#meetingFollowup h2 { margin: 0; font-size: 19px; }
+#meetingFollowup .followup-hint, #meetingFollowupStatus { margin: 0; font-size: 12px; color: #475569; }
+#meetingFollowup .followup-controls { display: flex; align-items: end; flex-wrap: wrap; gap: 8px 12px; flex: 0 0 auto; }
+#meetingFollowup label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; min-width: 0; margin: 0; }
+#meetingFollowup .followup-target { flex: 1 1 220px; }
+#meetingFollowup .followup-search { flex: 1 1 180px; }
+#meetingFollowup .followup-archived { flex-direction: row; align-items: center; padding-bottom: 8px; }
+#meetingFollowup .followup-archived input { margin: 0; }
+#meetingFollowup select, #meetingFollowup input { min-width: 0; max-width: 100%; }
+#meetingFollowup button { color: #23334a; background: white; -webkit-text-fill-color: #23334a; white-space: nowrap; }
+#meetingFollowup button:hover { background: #edf1ff; }
+#meetingFollowupBody { flex: 1 1 0; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 0 5px 10px 0; }
+#meetingFollowup .followup-group { margin: 0 0 16px; }
+#meetingFollowup h3 { margin: 8px 0; font-size: 17px; color: #173f6b; }
+#meetingFollowup .followup-meeting { background: white; border: 1px solid #dbe1eb; border-radius: 8px; margin: 8px 0; padding: 12px; }
+#meetingFollowup .followup-meeting-heading, #meetingFollowup .followup-entry-heading { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px 12px; }
+#meetingFollowup h4, #meetingFollowup h5 { margin: 0; overflow-wrap: anywhere; }
+#meetingFollowup h4 { font-size: 14px; }
+#meetingFollowup h5 { font-size: 14px; }
+#meetingFollowup .followup-source { font-size: 12px; padding: 4px 7px; }
+#meetingFollowup .followup-meta { font-size: 12px; color: #475569; margin: 5px 0; overflow-wrap: anywhere; }
+#meetingFollowup .followup-entry { border-left: 3px solid #0072b2; padding: 8px 10px; margin: 10px 0 0; background: #f8fafc; border-radius: 3px; }
+#meetingFollowup .followup-entry[data-followup-entry^="points:"] { border-color: #a66d00; }
+#meetingFollowup .followup-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; }
+#meetingFollowup .followup-entry-heading + .followup-text { margin-top: 6px; }
+#meetingFollowup .followup-decision { display: flex; flex-direction: column; gap: 3px; margin: 8px 0 0; }
+body.phone-mode #meetingFollowup { position: fixed; inset: 0; width: 100vw; height: 100dvh; max-height: none; margin: 0; padding: 8px; border: 0; border-radius: 0; }
+body.phone-mode #meetingFollowup[open] { gap: 6px; }
+body.phone-mode #meetingFollowup h2 { font-size: 16px; }
+body.phone-mode #meetingFollowup .followup-controls { gap: 5px 8px; }
+body.phone-mode #meetingFollowup .followup-target { flex-basis: 180px; }
+body.phone-mode #meetingFollowup .followup-search { flex-basis: 170px; }
+body.phone-mode #meetingFollowup input, body.phone-mode #meetingFollowup select { font-size: 16px; padding: 5px; }
+body.phone-mode #meetingFollowup .followup-meeting { padding: 8px; }

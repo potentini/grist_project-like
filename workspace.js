@@ -2081,7 +2081,7 @@
       html += `<section class="unassigned" data-drop-kind="unassigned" data-drop-id="0"><h3>Actions sans rattachement au projet</h3>${standalone || '<p class="muted">Aucune action autonome.</p>'}</section>`;
     }
     $("list").innerHTML =
-      `<div class="actions"><button data-new="${view === "projects" ? "projects" : view}">+ ${view === "projects" ? cfg("projects").label || "Projet" : view === "notes" ? cfg("notes").label || "Note / réunion" : view === "streams" ? cfg("streams").label || "Chantier" : cfg("actions").label || "Action"}</button><button data-fold-all="close">Tout plier</button><button data-fold-all="open">Tout déplier</button></div>` +
+      `<div class="actions"><button data-new="${view === "projects" ? "projects" : view}">+ ${view === "projects" ? cfg("projects").label || "Projet" : view === "notes" ? cfg("notes").label || "Note / réunion" : view === "streams" ? cfg("streams").label || "Chantier" : cfg("actions").label || "Action"}</button>${view === "notes" ? '<button type="button" data-meeting-followup>Suivi</button>' : ''}<button data-fold-all="close">Tout plier</button><button data-fold-all="open">Tout déplier</button></div>` +
       (html ||
         '<p class="empty">Aucun élément. Vérifiez le mapping ou ajustez les filtres.</p>');
     if(view==='notes' && (data.notes||[]).length) {
@@ -4777,5 +4777,12 @@
       }
     }
   };
+  window.createMeetingFollowup?.({
+    data:()=>data, view:()=>view, config:cfg, column:col, value:val, display:displayValue,
+    values, targets, pointProjects, noteProjects, projectOf, title, fieldLabel, dateText,
+    referenceText:refText, normalize:norm, archived, selection:()=>selection,
+    busy:()=>!!editing||moving, showArchived:()=>$("showArchived").checked,
+    message, openRecord:(kind,id)=>selectRecord(kind,id,null),
+  });
   init();
 })();
