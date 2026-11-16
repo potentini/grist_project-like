@@ -2417,10 +2417,12 @@ const fixture = require("../demo.json");
   await page.locator("#advancedKind").selectOption("tasks");
   await page.locator("#advancedField").selectOption("Responsable");
   assert.equal(await page.locator("#advancedChoices input").count(), 2);
+  await page.locator('#advancedValue').click();
   await page.locator('#advancedChoices input[value="Alice Référente"]').check();
   await page.locator('#advancedChoices input[value="Camille Pilote"]').check();
   assert.equal(await page.locator("#list [data-kind=tasks]").count(), 2);
   await page.locator("#advancedField").selectOption("ResponsableDiPSi");
+  await page.locator('#advancedValue').click();
   await page.locator('#advancedChoices input[value="Alice Référente"]').check();
   assert.equal(
     await page.locator('#list [data-kind=tasks][data-id="1"]').count(),

@@ -1321,3 +1321,37 @@ body.phone-mode #editForm .meta { gap: 5px 8px; }
 body.phone-mode #editForm h3 { margin-top: 12px; margin-bottom: 7px; }
 body.phone-mode #detail #editForm details { margin: 10px 0; }
 body.phone-mode #detail #editForm [data-slot="Titre"] input { font-size: 16px; }
+
+/* Searchable advanced values are anchored to Contient, never a separate row. */
+.advanced-value-control { display: grid; gap: 5px; min-width: 190px; }
+.advanced-value-control > label { display: flex; gap: 5px; }
+.advanced-picker { position: relative; }
+#advancedValue { width: 100%; }
+#advancedChoices {
+  display: block;
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  padding: 7px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  background: #fff;
+  color: #23334a;
+  box-shadow: 0 4px 16px #23334a30;
+  max-height: min(260px, 45dvh);
+  overflow: auto;
+  overscroll-behavior: contain;
+  z-index: 1000;
+}
+#advancedChoices label { min-height: 30px; padding: 4px; overflow-wrap: anywhere; cursor: pointer; }
+#advancedChoices label:has(input:focus-visible) { outline: 2px solid #4338ca; outline-offset: -2px; }
+#advancedChoices [data-clear-advanced-choices] { font-size: 12px; padding: 4px 6px; margin-bottom: 4px; }
+#advancedSelectionCount, .advanced-join-label { font-size: 12px; color: #475569; }
+.advanced-join-label { align-self: center; font-weight: 700; }
+body.phone-mode .advanced-value-control { gap: 3px; }
+body.phone-mode #advancedChoices { max-height: 40dvh; }
+body.phone-mode #advancedChoices label { min-height: 32px; padding: 5px; }
+body.phone-mode #advancedValue { font-size: 16px; }
+body.phone-mode .advanced-value-control { flex: 1 1 180px; min-width: 160px; }
+body.phone-mode .advanced-join-control { flex: 0 0 110px; min-width: 0; }
+body.phone-mode .advanced-join-control select { width: 100%; min-width: 0; }

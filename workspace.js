@@ -476,8 +476,9 @@
       );
     return true;
   }
-  let advancedRules = [],
-    advancedSelected = [];
+  let advancedRules = [], advancedSelected = [], advancedJoin='and';
+  const advancedOptionKey='workspaceAdvancedFiltersV1';
+  let advancedDraftRestore=null, advancedRevision=0, advancedSignature=null, advancedPersistTimer=null, advancedClosing=false;
   const quickSelections = {
     projectFilter: [],
     ownerFilter: [],
@@ -504,6 +505,7 @@
     return {
       kind: $("advancedKind").value,
       column: $("advancedField").value,
+      columnRef: meta.find(c=>c.table===cfg($("advancedKind").value).table && c.colId===$("advancedField").value)?.id,
       ...(advancedSelected.length
         ? { values: [...advancedSelected] }
         : { value: $("advancedValue").value }),
@@ -675,7 +677,7 @@
         const allowed = new Set(
           (data[source] || [])
             .filter((row) =>
-              group.every((rule) => {
+              group[advancedJoin==='or'?'some':'every']((rule) => {
                 const c = meta.find(
                   (c) =>
                     c.table === cfg(source).table && c.colId === rule.column,
@@ -695,7 +697,8 @@
         advancedSets.set(source, allowed);
       }
     }
-    return [...advancedSets].every(([source, allowed]) =>
+    if(!advancedSets.size)return true;
+    return [...advancedSets][advancedJoin==='or'?'some':'every'](([source, allowed]) =>
       scopeMatch(source, allowed, k, r),
     );
   }
@@ -708,10 +711,12 @@
     );
   }
   function advancedUI(resetField = false) {
-    advancedRules = advancedRules.filter((rule) =>
-      mappedFilterColumns(rule.kind).has(rule.column),
-    );
-    const old = $("advancedKind").value;
+    advancedRules = advancedRules.map(rule=>{
+      const current=meta.find(c=>c.table===cfg(rule.kind).table && Number(c.id)===Number(rule.columnRef));
+      return current?{...rule,column:current.colId}:rule;
+    }).filter(rule=>mappedFilterColumns(rule.kind).has(rule.column));
+    $("advancedJoin").value=advancedJoin;
+    const old = advancedDraftRestore?.kind || $("advancedKind").value;
     $("advancedKind").innerHTML = Object.keys(schemas)
       .filter((k) => cfg(k).table)
       .map((k) => `<option value="${k}">${esc(schemas[k].label)}</option>`)
@@ -719,7 +724,7 @@
     if (old) $("advancedKind").value = old;
     if (!$("advancedKind").value) $("advancedKind").selectedIndex = 0;
     const k = $("advancedKind").value,
-      oldField = resetField ? "" : $("advancedField").value;
+      oldField = advancedDraftRestore?.column || (resetField ? "" : $("advancedField").value);
     $("advancedField").innerHTML = meta
       .filter(
         (c) =>
@@ -735,11 +740,19 @@
         return `<option value="${esc(c.colId)}">${esc(f ? fieldLabel(k, f) : c.label || c.colId)}</option>`;
       })
       .join("");
-    if (oldField && !mappedFilterColumns(k).has(oldField)) {
+    if(advancedDraftRestore) {
+      const current=meta.find(c=>c.table===cfg(k).table && Number(c.id)===Number(advancedDraftRestore.columnRef));
+      if(current)advancedDraftRestore.column=current.colId;
+      $("advancedValue").value=advancedDraftRestore.value;
+      advancedSelected=[...advancedDraftRestore.values];
+    }
+    const desiredField=advancedDraftRestore?.column || oldField;
+    if (desiredField && !mappedFilterColumns(k).has(desiredField)) {
       advancedSelected = [];
       $("advancedValue").value = "";
     }
-    if (oldField) $("advancedField").value = oldField;
+    if (desiredField) $("advancedField").value = desiredField;
+    advancedDraftRestore=null;
     if (!$("advancedField").value) $("advancedField").selectedIndex = 0;
     const hasField = !!$("advancedField").value;
     for (const id of ["advancedField", "advancedValue", "advancedAdd"])
@@ -763,19 +776,14 @@
           ),
         ].sort((a, b) => a.localeCompare(b))
       : [];
-    $("advancedChoices").innerHTML =
-      choices
-        .filter(
-          (v) =>
-            !$("advancedValue").value ||
-            norm(v).includes(norm($("advancedValue").value)) ||
-            advancedSelected.includes(v),
-        )
-        .map(
-          (value) =>
-            `<label><input type="checkbox" data-advanced-choice value="${esc(value)}" ${advancedSelected.includes(value) ? "checked" : ""}>${esc(value || "(Vide)")}</label>`,
-        )
-        .join("") || '<p class="muted">Aucune valeur disponible.</p>';
+    const query=norm($("advancedValue").value);
+    const options=[...new Set([...choices,...advancedSelected])];
+    $("advancedChoices").innerHTML=
+      (advancedSelected.length?'<button type="button" data-clear-advanced-choices>Effacer les choix</button>':'')+
+      options.map(value=>`<label ${query&&!norm(value||'(Vide)').includes(query)?'hidden':''}><input type="checkbox" data-advanced-choice value="${esc(value)}" ${advancedSelected.includes(value)?'checked':''}>${esc(value||'(Vide)')}</label>`).join('')+
+      (!options.some(value=>!query||norm(value||'(Vide)').includes(query))?'<p class="muted" role="status">Aucune valeur correspondante. Vous pouvez utiliser la recherche libre.</p>':'');
+    $("advancedSelectionCount").textContent=advancedSelected.length?`(${advancedSelected.length} choix)`:'';
+    if(!$("advancedChoices").hidden)positionAdvancedChoices();
     $("advancedCount").textContent = count
       ? `(${count} actif${count > 1 ? "s" : ""})`
       : "";
@@ -784,7 +792,62 @@
         (rule, i) =>
           `<button type="button" data-remove-filter="${i}">${esc(schemas[rule.kind].label)} · ${esc(meta.find((c) => c.table === cfg(rule.kind).table && c.colId === rule.column)?.label || rule.column)} : ${esc(rule.values ? rule.values.map((v) => v || "(Vide)").join(" ou ") : rule.value)} ×</button>`,
       )
-      .join("");
+      .join(`<span class="advanced-join-label">${advancedJoin==='or'?'OU':'ET'}</span>`);
+  }
+  function positionAdvancedChoices() {
+    const popup=$("advancedChoices");
+    if(popup.hidden)return;
+    const input=$("advancedValue").getBoundingClientRect();
+    const viewport=window.visualViewport, top=viewport?.offsetTop||0, bottom=top+(viewport?.height||innerHeight);
+    const availableBelow=bottom-input.bottom-8, availableAbove=input.top-top-8;
+    const width=Math.min(Math.max(input.width,240),innerWidth-16),left=Math.max(8,Math.min(input.left,innerWidth-width-8));
+    let below=availableBelow>=Math.min(220,availableAbove);
+    const menuHeight=Math.min(260,popup.scrollHeight+2);
+    // Keep the apply/clear buttons usable when phone controls wrap below the input.
+    const coversAction=['advancedAdd','advancedClear'].some(id=>{
+      const button=$(id).getBoundingClientRect();
+      return left<button.right&&left+width>button.left&&input.bottom+4<button.bottom&&input.bottom+4+menuHeight>button.top;
+    });
+    if(below&&coversAction&&availableAbove>=Math.min(menuHeight,80))below=false;
+    const height=Math.max(50,Math.min(260,below?availableBelow:availableAbove));
+    Object.assign(popup.style,{position:'fixed',inset:'auto',margin:'0',left:left+'px',width:width+'px',maxHeight:height+'px'});
+    popup.style.top=(below?input.bottom+4:Math.max(top+4,input.top-popup.getBoundingClientRect().height-4))+'px';
+  }
+  function closeAdvancedChoices() {
+    const popup=$("advancedChoices");
+    if(popup.hidePopover && popup.matches(':popover-open'))popup.hidePopover();
+    popup.hidden=true;$("advancedValue").setAttribute('aria-expanded','false');
+  }
+  function openAdvancedChoices() {
+    if(advancedClosing||$("advancedValue").disabled)return;
+    $("advancedChoices").hidden=false;
+    if($("advancedChoices").showPopover && !$("advancedChoices").matches(':popover-open'))$("advancedChoices").showPopover();
+    $("advancedValue").setAttribute('aria-expanded','true');positionAdvancedChoices();
+  }
+  function advancedFilterState() {
+    return {rules:structuredClone(advancedRules),join:advancedJoin,draft:{kind:$("advancedKind").value,column:$("advancedField").value,columnRef:meta.find(c=>c.table===cfg($("advancedKind").value).table && c.colId===$("advancedField").value)?.id,value:$("advancedValue").value,values:[...advancedSelected]}};
+  }
+  function persistAdvancedFilters(immediate=false) {
+    clearTimeout(advancedPersistTimer);
+    if(demo||!loaded||!window.grist)return;
+    const save=()=>{
+      const state=advancedFilterState();state.revision=Math.max(Date.now(),advancedRevision+1);advancedRevision=state.revision;
+      advancedSignature=mappingSignature(state);
+      setWidgetOption(advancedOptionKey,state).catch(error=>message('Filtres appliqués, mais leur mémorisation a échoué : '+error.message,true));
+    };
+    if(immediate)save();else advancedPersistTimer=setTimeout(save,250);
+  }
+  function receiveAdvancedFilters(state) {
+    if(!state||typeof state!=='object'||(Number(state.revision)||0)<advancedRevision)return false;
+    const signature=mappingSignature(state);if(signature===advancedSignature)return false;
+    advancedSignature=signature;advancedRevision=Number(state.revision)||0;
+    advancedRules=(Array.isArray(state.rules)?state.rules:[]).filter(rule=>schemas[rule?.kind]&&typeof rule.column==='string').map(rule=>({kind:rule.kind,column:rule.column,columnRef:rule.columnRef,...(Array.isArray(rule.values)?{values:rule.values.map(String)}:{value:String(rule.value??'')})}));
+    advancedJoin=state.join==='or'?'or':'and';
+    const draft=state.draft||{};
+    advancedDraftRestore={kind:schemas[draft.kind]?draft.kind:'',column:String(draft.column||''),columnRef:draft.columnRef,value:String(draft.value||''),values:Array.isArray(draft.values)?draft.values.map(String):[]};
+    advancedSelected=[...advancedDraftRestore.values];
+    $("advancedValue").value=advancedDraftRestore.value;
+    return true;
   }
   const layoutKey = "workspacePaneLayoutV1";
   let preferredSplit = 1.2 / 2.2,
@@ -2527,6 +2590,7 @@
       selection: selection ? { ...selection } : null,
       view,
       quickSelections: structuredClone(quickSelections),
+      advancedJoin,
       advancedSelected: [...advancedSelected],
       advancedRules: structuredClone(advancedRules),
       filters: Object.fromEntries(
@@ -2578,6 +2642,7 @@
         },
       ),
     );
+    advancedJoin=location.advancedJoin==='or'?'or':'and';
     advancedSelected = [...(location.advancedSelected || [])];
     advancedRules = structuredClone(location.advancedRules || []);
     selection = location.selection;
@@ -2599,6 +2664,7 @@
       else $(id).value = value;
     }
     render();
+    persistAdvancedFilters(true);
     if (location.focus?.index >= 0)
       $(location.focus.pane)
         .querySelectorAll("[data-kind]")
@@ -4008,6 +4074,7 @@
           paintSplit();
         }
         if(!mappingSaving && receiveMapping(opts?.[optionKey]) && loaded)await load();
+        if(receiveAdvancedFilters(opts?.[advancedOptionKey])&&loaded)render();
       });
       // onOptions can arrive after initialization; read the saved mapping before
       // deciding whether automatic detection is appropriate.
@@ -4016,6 +4083,11 @@
         const stored=await grist.getOption(optionKey);
         if(optionsRevision===mappingOptionsRevision)receiveMapping(stored);
       }catch(error){if(!mappingWasSaved)throw error;}
+      const filterRevision=advancedRevision;
+      try {
+        const storedFilters=await grist.getOption(advancedOptionKey);
+        if(filterRevision===advancedRevision)receiveAdvancedFilters(storedFilters);
+      }catch(error){console.warn('Lecture des filtres enregistrés indisponible',error);}
       await refreshMetadata();
       mapping = mappingWasSaved ? mapping : detect(mapping);
       const beforeTableRefs=JSON.stringify(mapping);
@@ -4138,40 +4210,57 @@
     };
   $("search").oninput = render;
   $("advancedKind").onchange = () => {
-    advancedSelected = [];
-    advancedUI(true);
-    render();
+    advancedSelected=[];$("advancedValue").value='';closeAdvancedChoices();
+    advancedUI(true);render();persistAdvancedFilters(true);
   };
   $("advancedField").onchange = () => {
-    advancedSelected = [];
-    render();
+    advancedSelected=[];$("advancedValue").value='';closeAdvancedChoices();render();persistAdvancedFilters(true);
   };
-  $("advancedChoices").onchange = () => {
-    advancedSelected = [
-      ...$("advancedChoices").querySelectorAll("input:checked"),
-    ].map((x) => x.value);
-    render();
+  $("advancedChoices").onchange = event => {
+    if(!event.target.matches('[data-advanced-choice]'))return;
+    const value=event.target.value;
+    advancedSelected=[...$("advancedChoices").querySelectorAll('input:checked')].map(input=>input.value);
+    render();persistAdvancedFilters(true);
+    [...$("advancedChoices").querySelectorAll('input')].find(input=>input.value===value)?.focus({preventScroll:true});
   };
-  $("advancedValue").oninput = render;
-  $("advancedAdd").onclick = () => {
-    if (!$("advancedValue").value.trim() && !advancedSelected.length) return;
-    advancedRules.push(draftAdvancedRule());
-    advancedSelected = [];
-    $("advancedValue").value = "";
-    render();
+  $("advancedChoices").onclick = event=>{
+    if(event.target.closest('[data-clear-advanced-choices]')){advancedSelected=[];render();persistAdvancedFilters(true);}
   };
-  $("advancedChips").onclick = (e) => {
-    const b = e.target.closest("[data-remove-filter]");
-    if (b) {
-      advancedRules.splice(Number(b.dataset.removeFilter), 1);
-      render();
+  $("advancedValue").closest('.advanced-picker').addEventListener('focusout',event=>{
+    if(event.relatedTarget&&!event.currentTarget.contains(event.relatedTarget))closeAdvancedChoices();
+  });
+  $("advancedValue").onfocus=openAdvancedChoices;
+  $("advancedValue").onclick=openAdvancedChoices;
+  $("advancedValue").oninput=()=>{render();openAdvancedChoices();persistAdvancedFilters();};
+  $("advancedJoin").onchange=()=>{advancedJoin=$("advancedJoin").value==='or'?'or':'and';render();persistAdvancedFilters(true);};
+  const advancedKeys=event=>{
+    if(event.key==='Escape') {
+      event.preventDefault();closeAdvancedChoices();advancedClosing=true;$("advancedValue").focus({preventScroll:true});advancedClosing=false;
+    } else if(['ArrowDown','ArrowUp','Enter'].includes(event.key)) {
+      const fromInput=event.target===$("advancedValue");
+      if(fromInput)openAdvancedChoices();
+      const options=[...$("advancedChoices").querySelectorAll('label:not([hidden]) input')];
+      event.preventDefault();
+      if(event.key==='Enter'){if(fromInput){if(options.length)options[0].click();else $("advancedAdd").click();}else if(event.target.matches('[data-advanced-choice]'))event.target.click();}
+      else {const index=options.indexOf(document.activeElement),next=index<0?(event.key==='ArrowDown'?0:options.length-1):(index+(event.key==='ArrowDown'?1:-1)+options.length)%options.length;options[next]?.focus();}
     }
   };
+  $("advancedValue").onkeydown=advancedKeys;$("advancedChoices").onkeydown=advancedKeys;
+  $("advancedFilters").addEventListener('toggle',()=>{if(!$("advancedFilters").open)closeAdvancedChoices();});
+  document.addEventListener('pointerdown',event=>{if(!event.target.closest('.advanced-picker'))closeAdvancedChoices();});
+  window.addEventListener('resize',positionAdvancedChoices);
+  window.visualViewport?.addEventListener('resize',positionAdvancedChoices);
+  document.addEventListener('scroll',positionAdvancedChoices,true);
+  $("advancedAdd").onclick = () => {
+    if(!$("advancedField").value||(!$("advancedValue").value.trim()&&!advancedSelected.length))return;
+    advancedRules.push(draftAdvancedRule());advancedSelected=[];$("advancedValue").value='';closeAdvancedChoices();render();persistAdvancedFilters(true);
+  };
+  $("advancedChips").onclick = event => {
+    const button=event.target.closest('[data-remove-filter]');
+    if(button){advancedRules.splice(Number(button.dataset.removeFilter),1);render();persistAdvancedFilters(true);}
+  };
   $("advancedClear").onclick = () => {
-    $("advancedValue").value = "";
-    advancedRules = [];
-    advancedSelected = [];
-    render();
+    $("advancedValue").value='';advancedRules=[];advancedSelected=[];closeAdvancedChoices();render();persistAdvancedFilters(true);
   };
   let popupProjectId = null,
     popupScroll = null;

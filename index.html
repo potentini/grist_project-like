@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Projets, notes et actions — Grist</title>
-    <link rel="stylesheet" href="workspace.css?v=20261115-compact-forms" />
+    <link rel="stylesheet" href="workspace.css?v=20261116-advanced-filters" />
     <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
     <link rel="stylesheet" href="form-theme.css?v=20261114-control-contrast" />
     <link rel="stylesheet" href="meeting-followup.css?v=20261116-followup" />
@@ -84,14 +84,18 @@
           ><label
             >Champ
             <select id="advancedField"></select></label
-          ><label>Contient <input id="advancedValue" type="search" /></label
-          ><button id="advancedAdd" type="button">Ajouter le filtre</button
-          ><button id="advancedClear" type="button">Tout effacer</button>
+          >
+          <div class="advanced-value-control">
+            <label for="advancedValue">Contient <span id="advancedSelectionCount"></span></label>
+            <div class="advanced-picker">
+              <input id="advancedValue" type="search" autocomplete="off" role="combobox" aria-autocomplete="list" aria-haspopup="dialog" aria-expanded="false" aria-controls="advancedChoices" placeholder="Rechercher ou choisir…" />
+              <div id="advancedChoices" popover="manual" role="dialog" aria-label="Valeurs disponibles du filtre" hidden></div>
+            </div>
+          </div>
+          <label class="advanced-join-control">Combiner les filtres<select id="advancedJoin"><option value="and">ET — tous les critères</option><option value="or">OU — au moins un critère</option></select></label>
+          <button id="advancedAdd" type="button">Ajouter le filtre</button>
+          <button id="advancedClear" type="button">Tout effacer</button>
         </div>
-        <div
-          id="advancedChoices"
-          aria-label="Valeurs disponibles du filtre"
-        ></div>
         <div id="advancedChips" class="actions"></div>
       </details>
       <details id="hierarchySortSettings">
@@ -200,6 +204,6 @@
     </dialog>
     <script src="hierarchy-sort.js?v=20261113-sorting"></script>
     <script src="meeting-followup.js?v=20261116-followup"></script>
-    <script src="workspace.js?v=20261116-meeting-followup"></script>
+    <script src="workspace.js?v=20261116-advanced-filters"></script>
   </body>
 </html>
