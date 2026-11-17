@@ -154,6 +154,10 @@ Les quatre niveaux Projets, Chantiers, Taches et Actions proposent un champ Resp
 
 Dans le panneau droit, **Éléments dépendants**, **Notes et réunions associées** et **Actions associées** disposent d’une flèche de pliage/dépliage. Leur état est propre à l’élément et conservé pendant la navigation et les retours de la session. Le pliage reste possible en lecture seule.
 
+Dans **Éléments dépendants** d’un projet, chantier ou d’une tâche, **Masquer les éléments dépendants terminés** retire les descendants et actions associées dont le statut est Fait, Terminé, Done, Clos ou Clôturé (sans distinction de casse ni d’accents). Un parent terminé reste visible comme contexte s’il a des descendants non terminés. Cette case est désactivée au chargement, conserve son choix pendant la navigation de la session et ne modifie ni les données, ni les filtres de la liste, ni le contenu des timelines.
+
+Vérification du masquage et des couleurs par défaut sur PC, tablette et téléphone : `node tests/completed-dependents.cjs` (serveur local sur le port 8766).
+
 ## Rattachements dépendants pendant la saisie
 
 En création comme en modification, le choix d’un projet limite les chantiers et tâches proposés à ce projet ; le choix d’un chantier limite les tâches à ce chantier. Sans parent sélectionné, la liste reste ouverte. Choisir un chantier renseigne son projet, et choisir une tâche renseigne son chantier et son projet, lorsque ces champs sont mappés et modifiables. Changer de parent retire les sélections inférieures incompatibles. Les liens existants restent visibles à l’ouverture, même s’ils sont incohérents, afin de pouvoir les vérifier sans les effacer silencieusement.
@@ -169,6 +173,8 @@ Si la colonne manque, activez Édition puis utilisez **Créer la colonne Avancem
 La saisie accepte le point et la virgule, de 0 à 1 ou de 0 à 100 selon la base. Les cartes et le détail conservent les pourcentages décimaux. Le choix est transmis à la Vue Table/Timeline ; celle-ci édite les pourcentages affichés et les convertit dans l’unité de la colonne. Une transformation Action → Tâche ou Tâche → Chantier conserve le pourcentage lorsque les bases diffèrent et que le champ est compatible.
 
 ## Timeline du projet dans le suivi
+
+Les timelines générale et projet utilisent le **Statut** comme critère de couleur par défaut. Le sélecteur de couleur permet toujours de choisir un autre critère ; les choix déjà enregistrés sont conservés.
 
 Le bouton **Ouvrir la timeline du projet**, près d’**Éléments dépendants**, ouvre une fenêtre avec la table et la timeline du projet complet. Depuis un chantier ou une tâche, le projet parent, ses chantiers, ses tâches et ses actions sont affichés. Une action rattachée directement à un projet ou à un chantier apparaît sous ce parent. Les autres projets sont exclus. Les dates manquantes restent visibles dans la table.
 

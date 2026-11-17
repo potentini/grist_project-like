@@ -669,6 +669,17 @@ body[data-current-view="notes"] .item[data-kind="actions"] {
 .detail-section {
   margin: 18px 0;
 }
+.dependent-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  font-size: 13px;
+}
+.dependent-filter input {
+  flex: 0 0 auto;
+  width: auto;
+}
 .detail-section > summary {
   cursor: pointer;
   font-weight: 600;

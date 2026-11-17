@@ -70,7 +70,7 @@
   let globalMaxDate = null;
   let visibleStart = null;
   let visibleEnd = null;
-  let colorField = "level";
+  let colorField = "status";
   let labelsVisible = true;
   let compactChildren = false;
   let allowEditing = false;
@@ -1041,7 +1041,7 @@
       opt.textContent = FIELD_LABELS[f] || f;
       colorFieldSelect.appendChild(opt);
     }
-    if (!fields.includes(colorField)) colorField = fields[0];
+    if (!fields.includes(colorField)) colorField = "status";
     colorFieldSelect.value = colorField;
   }
 
@@ -1068,7 +1068,7 @@
     if (colorField === "level") return node.level === 1 ? "#4f46e5" : node.level === 2 ? "#0ea5e9" : "#10b981";
     if (colorField === "status") {
       const s = String(node.status || "").trim().toLowerCase();
-      if (["terminé", "termine", "done", "clos", "clôturé", "cloture"].includes(s)) return "#10b981";
+      if (["fait", "terminé", "termine", "done", "clos", "clôturé", "cloture"].includes(s)) return "#10b981";
       if (["en cours", "ongoing", "started"].includes(s)) return "#3b82f6";
       if (["bloqué", "bloque", "blocked"].includes(s)) return "#ef4444";
       if (["à faire", "a faire", "todo", "non démarré", "non demarre"].includes(s)) return "#64748b";

@@ -217,6 +217,18 @@
   const folded = new Set(),
     searchFolded = new Set();
   let treeSearch = "";
+  let hideCompletedDependents = false;
+  function completed(k, r) {
+    return ["fait", "termine", "done", "clos", "cloture"].includes(
+      norm(val(k, r, "Statut")),
+    );
+  }
+  function visibleDependentTree(node) {
+    if (!node || !hideCompletedDependents) return node;
+    const kids = node.kids.map(visibleDependentTree).filter(Boolean);
+    // Keep completed parents as context for descendants that still need attention.
+    return !completed(node.k, node.r) || kids.length ? { ...node, kids } : null;
+  }
   function foldState(key) {
     return key.startsWith("left-") && treeSearch ? searchFolded : folded;
   }
@@ -2783,15 +2795,19 @@
     const deps = children(k, r).filter(
       ([kind]) => !["actions", "points"].includes(kind),
     );
-    if (deps.length || ["projects", "streams", "tasks"].includes(k))
+    const filterDependents = ["projects", "streams", "tasks"].includes(k);
+    if (deps.length || filterDependents)
       html += detailSection(
         k,
         r,
         "dependents",
         "Éléments dépendants",
-        deps
-          .map(([kind, row]) => branch(tree(kind, row), "right-dependents"))
-          .join(""),
+        (filterDependents
+          ? `<label class="dependent-filter"><input type="checkbox" data-hide-completed-dependents ${hideCompletedDependents ? "checked" : ""}> Masquer les éléments dépendants terminés</label>`
+          : "") +
+          deps
+            .map(([kind, row]) => branch(visibleDependentTree(tree(kind, row)), "right-dependents"))
+            .join(""),
       );
     if (k !== "actions") {
       let actions = (data.actions || []).filter(
@@ -2816,7 +2832,10 @@
         r,
         "actions",
         "Actions associées",
-        actions.map((x) => item("actions", x)).join("") ||
+        actions
+          .filter((x) => !filterDependents || !hideCompletedDependents || !completed("actions", x))
+          .map((x) => item("actions", x))
+          .join("") ||
           '<p class="muted">Aucune action liée.</p>',
       );
     }
@@ -2853,6 +2872,13 @@
     }
     syncEdition();
   }
+  $("detail").addEventListener("change", (event) => {
+    if (!event.target.matches("[data-hide-completed-dependents]")) return;
+    hideCompletedDependents = event.target.checked;
+    const scrollTop = $("detail").scrollTop;
+    renderDetail();
+    $("detail").scrollTop = scrollTop;
+  });
   function mappedTableId(k) {
     const c=cfg(k),table=tables.find(t=>t.tableId===c.table && (!c.tableRef || Number(t.id)===Number(c.tableRef)));
     if(!table)throw Error(`La table « ${c.table || "non mappée"} » est introuvable pour ${schemas[k].label}. Ouvrez Mapping et sélectionnez sa table réelle. Il n’est pas nécessaire de la renommer.`);
