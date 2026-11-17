@@ -109,3 +109,18 @@ Pour de nouveaux points, proposer À reprendre par défaut. Un état historique 
 - Limiter les reprises à une même Instance pour une première version ; les reprises entre instances restent à étudier.
 - Développer le mapping des nouvelles colonnes, les formulaires compatibles avec le titre calculé, l’aperçu de reprise, la lecture de l’historique et l’agrégation des actions.
 - Articuler ensuite ce workflow avec la saisie rapide `@` et la création d’action depuis un paragraphe déjà inscrites à la feuille de route.
+
+## Utilisateur courant et filtres « Mes… »
+
+Statut : explicitement reporté le 17 novembre 2026. Aucune implémentation à ce stade.
+
+Objectif : retrouver le collaborateur correspondant à l’utilisateur connecté à Grist, puis proposer **Mes projets**, **Mes actions** et **Mes prochaines échéances**.
+
+- Vérifier l’API disponible pour obtenir l’identité de l’utilisateur connecté (la piste `grist.getUserProfile()` évoquée dans la discussion reste à confirmer sur la version de Grist utilisée).
+- Rapprocher l’adresse e-mail du compte de la colonne **Adresse email** de **COLLABORATEURS**, puis filtrer les champs Responsable par référence à cette ligne, sans se baser sur le nom affiché.
+- Prévoir les cas sans utilisateur identifié, sans correspondance ou avec plusieurs correspondances ; ne pas sélectionner arbitrairement un collaborateur.
+- Mes actions : actions attribuées au collaborateur courant.
+- Mes prochaines échéances : éléments attribués, non terminés, classés par date ; préciser l’horizon et le traitement des dates absentes lors de la reprise.
+- Question métier ouverte : Mes projets vise-t-il seulement les projets dont le collaborateur est responsable, ou aussi ceux contenant ses tâches et actions ?
+- Préserver les filtres applicables et les comportements PC, tablette et téléphone. Ces raccourcis d’affichage ne remplacent pas les règles d’accès Grist.
+- Ne pas modifier les données existantes ni l’initialisation native du Responsable à la création.
