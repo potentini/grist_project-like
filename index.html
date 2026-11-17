@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Projets, notes et actions — Grist</title>
-    <link rel="stylesheet" href="workspace.css?v=20261117-shared-select" />
+    <link rel="stylesheet" href="workspace.css?v=20261117-dependent-actions" />
     <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
     <link rel="stylesheet" href="form-theme.css?v=20261117-shared-select" />
     <link rel="stylesheet" href="meeting-followup.css?v=20261116-followup" />
@@ -157,6 +157,10 @@
           >Nouveau rattachement
           <select id="moveTarget" required></select
         ></label>
+        <div id="moveDetachWarning" hidden>
+          <p>Retirer tous les rattachements de cet élément ? Il restera accessible parmi les éléments sans parent. Pour une action, les liens à la réunion et au point d’origine seront aussi retirés. Les descendants et leurs liens internes seront conservés.</p>
+          <label><input id="moveDetachConfirm" type="checkbox" /> Je confirme le retrait des rattachements.</label>
+        </div>
         <p id="moveError" role="alert"></p>
         <div class="actions">
           <button id="moveSubmit" type="submit">Déplacer</button
@@ -205,6 +209,6 @@
     </dialog>
     <script src="hierarchy-sort.js?v=20261113-sorting"></script>
     <script src="meeting-followup.js?v=20261116-followup"></script>
-    <script src="workspace.js?v=20261117-shared-select"></script>
+    <script src="workspace.js?v=20261117-dependent-actions"></script>
   </body>
 </html>

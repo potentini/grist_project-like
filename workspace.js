@@ -1343,6 +1343,42 @@
       .sort((a, b) => compareTrackingRows(k, a, b));
   }
   let removal = null;
+  function removalBlockers(deps, parent) {
+    return deps.filter((d) => !parent || d.table !== cfg(parent.k).table || d.id !== parent.id);
+  }
+  function validateRemovalParent(k, row, parent) {
+    if (!parent) return;
+    const source = (data[parent.k] || []).find((r) => r.id === parent.id);
+    if (!source || !children(parent.k, source).some(([kind, child]) => kind === k && child.id === row.id))
+      throw Error("Le rattachement au parent a changé. Fermez puis rouvrez cet aperçu.");
+  }
+  async function parentLinkRemovalActions(k, row, deps, parent) {
+    if (!parent) return [];
+    const dep = deps.find((d) => d.table === cfg(parent.k).table && d.id === parent.id);
+    if (!dep) return [];
+    const source = rows(await grist.docApi.fetchTable(dep.table)).find((r) => r.id === dep.id);
+    if (!source) throw Error("Le parent n’existe plus.");
+    const fields = {};
+    for (const column of dep.cols) {
+      const m = meta.find((c) => c.table === dep.table && c.colId === column);
+      if (!m) throw Error("La colonne de rattachement n’existe plus.");
+      // Reverse-reference formulas recalculate after deletion; never write to a formula.
+      if (m.isFormula) continue;
+      if (/^RefList:/.test(m.type || ""))
+        fields[column] = ["L", ...values(source[column]).filter((id) => Number(id) !== row.id)];
+      else if (/^Ref:/.test(m.type || "")) fields[column] = 0;
+      else {
+        const f = Object.keys(links[parent.k] || {}).find((f) =>
+          links[parent.k][f] === k && cfg(parent.k).fields?.[f] === column);
+        if (!f) throw Error("Le lien du parent ne peut pas être retiré automatiquement.");
+        const remaining = values(source[column]).flatMap((value) =>
+          multi.has(f) && typeof value === "string" ? value.split(",").map((s) => s.trim()) : [value],
+        ).filter((value) => String(value) !== String(val(k, row, "Code")));
+        fields[column] = Array.isArray(source[column]) ? ["L", ...remaining] : remaining.join(", ");
+      }
+    }
+    return Object.keys(fields).length ? [["UpdateRecord", dep.table, dep.id, fields]] : [];
+  }
   async function incomingLinks(k, row) {
     const result = new Map(),
       add = (table, r, col) => {
@@ -1388,9 +1424,9 @@
               add(cfg(kind).table, r, cfg(kind).fields[f]);
     return [...result.values()];
   }
-  async function openRemoval(k, id, mode) {
+  async function openRemoval(k, id, mode, parent = null) {
     if (!editionEnabled || editing || moving || demo) return;
-    const operation = { k, id, mode };
+    const operation = { k, id, mode, parent };
     removal = operation;
     $("removalTitle").textContent =
       mode === "delete"
@@ -1418,9 +1454,11 @@
       const row = (data[k] || []).find((r) => r.id === id);
       if (!row) throw Error("Cet élément n’existe plus.");
       const deps = await incomingLinks(k, row);
+      validateRemovalParent(k, row, parent);
       if (removal !== operation || !$("removalDialog").open) return;
-      removal.row = row;
+      removal.row = structuredClone(row);
       removal.deps = deps;
+      removal.blockers = removalBlockers(deps, parent);
       const verb =
         mode === "delete"
           ? "Supprimer"
@@ -1428,9 +1466,9 @@
             ? "Restaurer"
             : "Archiver";
       $("removalPreview").innerHTML =
-        `<p><strong>${esc(title(k, row))}</strong></p><p>${deps.length} élément(s) référencent cette ligne.</p>${deps.length ? "<ul>" + deps.map((d) => `<li>${esc(d.title)} — ${esc(d.table)} (${esc(d.cols.join(", "))})</li>`).join("") + "</ul>" : ""}<p>${mode === "delete" ? (deps.length ? "Suppression bloquée : réaffectez ou retirez ces liens auparavant. Vous pouvez archiver cet élément pour conserver ses références." : "Seule cette ligne sera supprimée définitivement. Aucun autre élément ne sera supprimé.") : mode === "restore" ? "Cet élément réapparaîtra dans le suivi actif." : "Les données et les liens seront conservés. Les dépendants ne seront pas archivés ; ils resteront accessibles sous le parent affiché comme contexte archivé."}</p>`;
+        `<p><strong>${esc(title(k, row))}</strong></p><p>${deps.length} élément(s) référencent cette ligne.</p>${deps.length ? "<ul>" + deps.map((d) => `<li>${esc(d.title)} — ${esc(d.table)} (${esc(d.cols.join(", "))})</li>`).join("") + "</ul>" : ""}<p>${mode === "delete" ? (removal.blockers.length ? "Suppression bloquée : réaffectez ou retirez ces liens auparavant. Vous pouvez archiver cet élément pour conserver ses références." : "Seule cette ligne sera supprimée définitivement. Aucun autre élément ne sera supprimé." + (parent && deps.length ? " Seul le parent depuis lequel vous supprimez cet élément le référence : son lien sera retiré, ses formules seront recalculées." : "")) : mode === "restore" ? "Cet élément réapparaîtra dans le suivi actif." : "Les données et les liens seront conservés. Les dépendants ne seront pas archivés ; ils resteront accessibles sous le parent affiché comme contexte archivé."}</p>`;
       $("removalSubmit").textContent = verb;
-      if (mode === "delete" && deps.length) return;
+      if (mode === "delete" && removal.blockers.length) return;
       if (mode !== "delete") {
         const m = col(k, "Archive");
         if (!m || m.type !== "Bool" || m.isFormula)
@@ -1472,7 +1510,7 @@
     $("removalSubmit").disabled = true;
     ++request;
     try {
-      const { k, id, mode } = removal;
+      const { k, id, mode, parent } = removal;
       if (mode === "delete") {
         const fresh = rows(await grist.docApi.fetchTable(cfg(k).table)).find(
           (r) => r.id === id,
@@ -1483,6 +1521,7 @@
             "La ligne a changé. Fermez puis rouvrez cet aperçu avant de confirmer.",
           );
         // Refresh mapped text links as well as native Grist references before deleting.
+        await refreshMetadata();
         data = Object.fromEntries(
           await Promise.all(
             Object.keys(schemas).map(async (kind) => [
@@ -1493,11 +1532,15 @@
             ]),
           ),
         );
-        if ((await incomingLinks(k, fresh)).length)
+        validateRemovalParent(k, fresh, parent);
+        const deps = await incomingLinks(k, fresh);
+        removal.blockers = removalBlockers(deps, parent);
+        if (removal.blockers.length)
           throw Error(
             "Des liens référencent encore cet élément. Fermez puis rouvrez cet aperçu pour les consulter.",
           );
         await grist.docApi.applyUserActions([
+          ...await parentLinkRemovalActions(k, fresh, deps, parent),
           ["RemoveRecord", cfg(k).table, id],
         ]);
         if (selection?.k === k && selection.id === id) selection = null;
@@ -1526,7 +1569,7 @@
       moving = false;
       syncEdition();
       $("removalSubmit").disabled =
-        removal.mode === "delete" && removal.deps?.length > 0;
+        removal.mode === "delete" && removal.blockers?.length > 0;
     }
   };
 
@@ -1941,7 +1984,7 @@
       ? { k, r, kids }
       : null;
   }
-  function branch(node, context) {
+  function branch(node, context, parent = null) {
     if (!node) return "";
     const { k, r, kids } = node,
       key = `${context}:${k}:${r.id}`;
@@ -1953,7 +1996,10 @@
     const open = !foldState(key).has(key);
     const movable =
       ["streams", "tasks", "actions"].includes(k) && !inactive(k, r);
-    return `<div class="tree-node" data-tree-kind="${k}" data-tree-id="${r.id}"><div class="tree-row" data-drop-kind="${k}" data-drop-id="${r.id}" ${movable ? `draggable="${editionEnabled && !editing && !moving && !demo}" data-drag-kind="${k}" data-drag-id="${r.id}"` : ""}>${kids.length ? `<button class="fold" type="button" data-fold="${key}" aria-expanded="${open}" aria-label="${open ? "Plier" : "Déplier"} ${esc(title(k, r))}">${open ? "▾" : "▸"}</button>` : '<span class="fold-spacer"></span>'}${item(k, r, 0, context.startsWith("left-"))}${editionEnabled && movable ? `<button class="move-button" type="button" data-move-kind="${k}" data-move-id="${r.id}" aria-label="Déplacer ${esc(title(k, r))}" title="Déplacer"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20 20 4M7 4h13v13"/></svg></button>` : ""}</div>${kids.length ? `<div class="tree-children" ${open ? "" : "hidden"}>${kids.map((n) => branch(n, context)).join("")}</div>` : ""}</div>`;
+    const remove = editionEnabled && movable && ["right-dependents", "right-actions"].includes(context) && parent
+      ? `<button type="button" class="dependent-delete" data-removal="delete" data-removal-kind="${k}" data-removal-id="${r.id}" data-parent-kind="${parent.k}" data-parent-id="${parent.r.id}" aria-label="Supprimer ${esc(title(k, r))}" title="Supprimer cet élément">Sup.</button>`
+      : "";
+    return `<div class="tree-node" data-tree-kind="${k}" data-tree-id="${r.id}"><div class="tree-row" data-drop-kind="${k}" data-drop-id="${r.id}" ${movable ? `draggable="${editionEnabled && !editing && !moving && !demo}" data-drag-kind="${k}" data-drag-id="${r.id}"` : ""}>${kids.length ? `<button class="fold" type="button" data-fold="${key}" aria-expanded="${open}" aria-label="${open ? "Plier" : "Déplier"} ${esc(title(k, r))}">${open ? "▾" : "▸"}</button>` : '<span class="fold-spacer"></span>'}${item(k, r, 0, context.startsWith("left-"))}${editionEnabled && movable ? `<button class="move-button" type="button" data-move-kind="${k}" data-move-id="${r.id}" aria-label="Déplacer ${esc(title(k, r))}" title="Déplacer"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20 20 4M7 4h13v13"/></svg></button>` : ""}${remove}</div>${kids.length ? `<div class="tree-children" ${open ? "" : "hidden"}>${kids.map((n) => branch(n, context, { k, r })).join("")}</div>` : ""}</div>`;
   }
   function syncEdition() {
     updateHistoryControls();
@@ -2071,6 +2117,7 @@
   }
   function canDrop(sourceKind, targetKind) {
     return (
+      (targetKind === "detached" && ["streams", "tasks", "actions"].includes(sourceKind)) ||
       (sourceKind === "streams" && targetKind === "projects") ||
       (sourceKind === "tasks" && targetKind === "streams") ||
       (sourceKind === "actions" &&
@@ -2140,7 +2187,7 @@
       if (
         !row ||
         inactive(source.k, row) ||
-        (destination.k !== "unassigned" &&
+        (!["unassigned", "detached"].includes(destination.k) &&
           (!target || inactive(destination.k, target)))
       )
         throw Error(
@@ -2194,7 +2241,12 @@
             stream && targets("streams", stream, "Projet")[0],
           );
       };
-      if (source.k === "streams") {
+      if (destination.k === "detached" && source.k === "actions") {
+        if (!["Projet", "Chantier", "Tache", "NoteOrigine", "PointOrigine"].some((f) => cfg("actions").fields?.[f]))
+          throw Error("Mappez les rattachements des actions avant ce déplacement.");
+        for (const [f, targetKind] of Object.entries(links.actions))
+          set("actions", row, f, targetKind, null, values(val("actions", row, f)).some((v) => v !== 0 && v !== ""));
+      } else if (source.k === "streams") {
         set("streams", row, "Projet", "projects", target, true);
         for (const a of data.actions || [])
           if (linkedTo("streams", row, "actions", a)) normalizeAction(a);
@@ -2331,14 +2383,25 @@
         .join("") +
       (k === "actions"
         ? '<option value="unassigned:0">Sans rattachement au projet (réunion conservée)</option>'
-        : "");
+        : "") +
+      '<option value="detached:0">Aucun rattachement</option>';
+    updateDetachConfirmation();
     dialog.showModal();
   }
+  function updateDetachConfirmation() {
+    const detached = $("moveTarget").value === "detached:0";
+    $("moveDetachWarning").hidden = !detached;
+    $("moveDetachConfirm").checked = false;
+    $("moveDetachConfirm").required = detached;
+    $("moveSubmit").textContent = detached ? "Retirer les rattachements" : "Déplacer";
+  }
+  $("moveTarget").onchange = updateDetachConfirmation;
   $("moveCancel").onclick = () => $("moveDialog").close();
   $("moveForm").onsubmit = async (e) => {
     e.preventDefault();
     const [k, id] = $("moveTarget").value.split(":");
     if (!k) return;
+    if (k === "detached" && !$("moveDetachConfirm").checked) return;
     $("moveSubmit").disabled = true;
     try {
       if (
@@ -2806,7 +2869,7 @@
           ? `<label class="dependent-filter"><input type="checkbox" data-hide-completed-dependents ${hideCompletedDependents ? "checked" : ""}> Masquer les éléments dépendants terminés</label>`
           : "") +
           deps
-            .map(([kind, row]) => branch(visibleDependentTree(tree(kind, row)), "right-dependents"))
+            .map(([kind, row]) => branch(visibleDependentTree(tree(kind, row)), "right-dependents", { k, r }))
             .join(""),
       );
     if (k !== "actions") {
@@ -2834,7 +2897,12 @@
         "Actions associées",
         actions
           .filter((x) => !filterDependents || !hideCompletedDependents || !completed("actions", x))
-          .map((x) => item("actions", x))
+          .map((x) => {
+            const parent = actionParent(x);
+            return parent && parent[0] === k && parent[1].id === r.id
+              ? branch(tree("actions", x), "right-actions", { k, r })
+              : item("actions", x);
+          })
           .join("") ||
           '<p class="muted">Aucune action liée.</p>',
       );
@@ -4457,7 +4525,9 @@
     }
     const removalButton = e.target.closest("[data-removal]");
     if (removalButton) {
-      openRemoval(selection.k, selection.id, removalButton.dataset.removal);
+      const d = removalButton.dataset;
+      openRemoval(d.removalKind || selection.k, d.removalId ? Number(d.removalId) : selection.id,
+        d.removal, d.parentKind ? { k: d.parentKind, id: Number(d.parentId) } : null);
       return;
     }
     const convert = e.target.closest("[data-convert]");

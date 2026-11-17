@@ -1339,14 +1339,14 @@ const fixture = require("../demo.json");
       });
       db.external = [{ id: 1, Action: 3 }];
     });
-    await page.locator("[data-removal=delete]").click();
+    await page.locator("[data-removal=delete]:not([data-removal-kind])").click();
     await page.getByText(/Suppression bloquée/).waitFor();
     assert.equal(await page.locator("#removalSubmit").isDisabled(), true);
     assert.match(await page.locator("#removalPreview").innerText(), /Externes/);
     await page.locator("#removalCancel").click();
     await page.evaluate(() => (window.testDb.external = []));
     await page.locator('#list [data-kind=projects][data-id="1"]').click();
-    await page.locator("[data-removal=delete]").click();
+    await page.locator("[data-removal=delete]:not([data-removal-kind])").click();
     await page.getByText(/Suppression bloquée/).waitFor();
     assert.equal(await page.locator("#removalSubmit").isDisabled(), true);
     await page.locator("#removalCancel").click();
@@ -1360,7 +1360,7 @@ const fixture = require("../demo.json");
       true,
     );
     await page.locator('#list [data-kind=actions][data-id="3"]').click();
-    await page.locator("[data-removal=delete]").click();
+    await page.locator("[data-removal=delete]:not([data-removal-kind])").click();
     await page.locator("#removalSubmit:enabled").waitFor();
     await page.locator("#removalConfirm").check();
     await page.evaluate(() => (window.rejectWrite = true));
@@ -1625,7 +1625,7 @@ const fixture = require("../demo.json");
   await page.locator("#editionButton").click();
   const bar = page.locator("#detail [data-removal=archive]").locator("..");
   assert.equal(await bar.locator("[data-edit]").count(), 1);
-  assert.equal(await bar.locator("[data-removal=delete]").count(), 1);
+  assert.equal(await bar.locator("[data-removal=delete]:not([data-removal-kind])").count(), 1);
   assert.equal(
     await page
       .getByRole("link", { name: "Vue Table/Timeline", exact: true })

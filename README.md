@@ -60,6 +60,8 @@ En mode Édition, glisser un chantier sur un projet, une tâche sur un chantier,
 
 Changer le parent d’un chantier ou d’une tâche conserve ses descendants et met à jour les rattachements redondants des actions liées dans une seule opération Grist. Déplacer une action sur une réunion change seulement sa réunion d’origine : son lien au projet est conservé. La destination **Sans rattachement au projet** conserve aussi la réunion d’origine. Aucun réordonnancement manuel entre frères n’est ajouté.
 
+Le dernier choix du bouton de déplacement, **Aucun rattachement**, détache le chantier de son projet ou la tâche de son chantier. Pour une action, il retire les liens Projet, Chantier, Tâche, NoteOrigine et PointOrigine. Une confirmation permet d’annuler avant toute écriture. Les descendants restent liés à l’élément détaché ; les rattachements redondants des actions sont actualisés. Les éléments détachés restent accessibles parmi les éléments sans parent reconnu ou les actions sans rattachement au projet.
+
 Les parents calculés ou les champs de liaison non mappés peuvent empêcher un déplacement ; le widget affiche alors l’explication. Les droits Grist restent applicables. Un refus d’écriture conserve le parent d’origine. Le pliage est indépendant dans chaque volet et reste conservé pendant la navigation de la session (réinitialisé au rechargement).
 
 ## Défilement et repères visuels
@@ -101,6 +103,10 @@ Avant utilisation, ajouter et mapper les quatre colonnes décrites dans [imports
 Les commandes **Archiver…**, **Restaurer…** et **Supprimer…** sont accessibles dans le détail en mode Édition. L’archivage nécessite une colonne de données booléenne Archive dans chaque table concernée ; la suppression peut être utilisée sans cette colonne. Les données archivées sont conservées et retrouvables avec **Afficher les archivés**. Les parents archivés restent visibles comme contexte de leurs dépendants actifs.
 
 La suppression ne se fait pas en cascade et est bloquée en présence de références à l’élément. L’aperçu liste les liens à réaffecter et exige une confirmation explicite. Voir [les consignes détaillées](imports/ARCHIVAGE_SUPPRESSION.md).
+
+Depuis le parent, le bouton rouge **Sup.**, à côté de la flèche de déplacement d’un dépendant en mode Édition, ouvre le même aperçu de suppression définitive. Si seul ce parent référence l’élément, la suppression est autorisée après confirmation : ses références de données sont retirées dans la même opération que la suppression, et ses formules inverses sont laissées au recalcul de Grist. Toute référence provenant d’un autre élément (y compris un descendant) bloque toujours la suppression. Les liens et le rattachement au parent sont vérifiés de nouveau à la confirmation ; le parent reste sélectionné après la suppression. La commande **Supprimer…** du détail conserve son contrôle strict de toutes les références entrantes.
+
+Vérification dédiée : `node tests/dependent-removal.cjs` (serveur local sur le port 8766), couvrant les codes CSV et références natives, les liens inverses de données et calculés, les blocages, les annulations et les détachements sur PC, tablette et téléphone.
 
 ## Réunions associées à un élément
 

@@ -360,6 +360,20 @@ select[multiple] {
 .move-button {
   padding: 6px;
 }
+.tree-row .dependent-delete {
+  flex: 0 0 auto;
+  padding: 6px;
+  color: #b42318;
+  -webkit-text-fill-color: #b42318;
+  background: #fff;
+  border-color: #b42318;
+}
+.tree-row .dependent-delete:hover,
+.tree-row .dependent-delete:focus-visible {
+  color: #fff;
+  -webkit-text-fill-color: #fff;
+  background: #b42318;
+}
 .tree-row[draggable="true"] {
   cursor: grab;
 }
