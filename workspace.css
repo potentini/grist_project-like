@@ -1245,47 +1245,10 @@ body.phone-mode .quick-multiple > summary > input.quick-search {
   background: #3730a3 !important;
 }
 
-/* Only the project timeline is available on phones. */
-body.phone-mode #projectTimeline {
-  position: fixed;
-  inset: 0;
-  margin: 0;
-  width: 100vw;
-  height: 100dvh;
-  max-width: none;
-  max-height: none;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: #fff;
-  color: #23334a;
-}
-body.phone-mode #projectTimeline header {
-  flex-wrap: nowrap;
-  gap: 6px;
-  padding: 3px max(6px, env(safe-area-inset-right)) 3px max(6px, env(safe-area-inset-left));
-}
-body.phone-mode #projectTimeline h2 {
-  min-width: 0;
-  font-size: 13px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-body.phone-mode #timelineClose { flex-shrink: 0; padding: 5px 8px; }
-body.phone-mode [data-project-timeline] { max-width: 52%; font-size: 11px; padding: 3px; margin-left: 0; }
-body.phone-mode .timeline-section > .detail-section > summary { max-width: 46%; }
+/* Timelines stay unavailable on phones; meeting follow-up has its own dialog. */
+body.phone-mode #projectTimeline,
+body.phone-mode [data-project-timeline] { display: none !important; }
 .timeline-landscape-hint { display: none; }
-@media (orientation: portrait) {
-  body.phone-mode #projectTimeline .timeline-landscape-hint {
-    display: block;
-    margin: 0;
-    padding: 5px 8px;
-    background: #eaf2fb;
-    color: #173f6b;
-    font-size: 12px;
-  }
-}
 
 /* Compact creation and inline editing on phones only; retain 16px inputs. */
 body.phone-mode #fields label,

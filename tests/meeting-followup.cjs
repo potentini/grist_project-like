@@ -61,23 +61,22 @@ async function setup({fixture,refs}) {
   const browser=await chromium.launch({executablePath:'/usr/bin/chromium',args:['--no-sandbox']});
   try {
     for(const phone of [false,true])for(const refs of [false,true])for(const colorScheme of ['light','dark']) {
-      const page=await browser.newPage({viewport:{width:1400,height:1000},screen:{width:phone?390:1400,height:phone?844:1000},hasTouch:phone,isMobile:phone,colorScheme}),errors=[];
+      const page=await browser.newPage({viewport:{width:phone?390:1400,height:phone?844:1000},screen:{width:phone?390:1400,height:phone?844:1000},hasTouch:phone,isMobile:phone,colorScheme}),errors=[];
       page.setDefaultTimeout(10000);page.on('pageerror',e=>errors.push(e.message));
       await page.route('https://docs.getgrist.com/**',r=>r.fulfill({body:''}));
       await page.addInitScript(setup,{fixture,refs});
       await page.goto((process.env.TEST_ORIGIN||'http://127.0.0.1:8769')+'/');
       await page.locator('#list > *').first().waitFor();
       assert.equal(await page.locator('[data-meeting-followup]').count(),0);
-      await page.locator('nav [data-view=notes]').click();await page.locator('[data-meeting-followup]').waitFor();
+      if(phone){
+        assert.equal(await page.locator('body').evaluate(e=>e.dataset.currentView),'actions');
+        await page.locator('#phoneNav summary').tap();
+        await page.locator('#phoneNav [data-view=notes]').tap();
+      }else await page.locator('nav [data-view=notes]').click();
+      await page.locator('[data-meeting-followup]').waitFor();
       // Deliberately hide every item in the main list: the popup has independent criteria.
       await page.locator('#search').fill('aucune correspondance');
       const filtersBefore=await page.locator('#search').inputValue();
-      if(phone){
-        await page.setViewportSize({width:390,height:844});
-        // The existing phone menu omits Notes. Enter the existing view handler,
-        // as a note-context flow does, without changing the phone navigation.
-        await page.locator('nav [data-view=notes]').evaluate(e=>e.click());
-      }
       await page.locator('[data-meeting-followup]').click();
       const popup=page.locator('#meetingFollowup');await popup.waitFor();
       const bounds=await popup.evaluate(e=>{const r=e.getBoundingClientRect();return {width:r.width,height:r.height,iw:innerWidth,ih:innerHeight,scroll:e.scrollWidth}});
@@ -123,6 +122,21 @@ async function setup({fixture,refs}) {
       await page.locator('[data-meeting-followup]').click();await page.locator('#meetingFollowupMode').selectOption('project');await page.locator('#meetingFollowupTarget').selectOption('1');
       await popup.locator('[data-followup-entry="points:4"]').getByRole('button',{name:'Ouvrir le point'}).click();
       await popup.waitFor({state:'hidden'});await page.locator('#detail h2').filter({hasText:'Sujet Codir'}).waitFor();
+      if(phone){
+        await page.locator('#phoneBack').tap();
+        await page.locator('#search').fill('');
+        for(const size of [{width:390,height:844},{width:844,height:390}]){
+          await page.setViewportSize(size);
+          await page.locator('#phoneNav summary').tap();
+          await page.locator('#phoneNav [data-view=projects]').tap();
+          await page.locator('#list [data-kind=projects]').first().tap();
+          assert.equal(await page.locator('[data-project-timeline]').isVisible(),false);
+          await page.locator('[data-project-timeline]').evaluate(e=>e.click());
+          assert.equal(await page.locator('#projectTimeline').evaluate(e=>e.open),false);
+          assert.ok([null,'about:blank'].includes(await page.locator('#timelineFrame').getAttribute('src')));
+          await page.locator('#phoneBack').tap();
+        }
+      }
       if(phone){await page.locator('#phoneNav').evaluate(e=>e.open=true);await page.locator('#phoneNav [data-view=actions]').click()}else await page.locator('nav [data-view=actions]').click();assert.equal(await page.locator('[data-meeting-followup]').count(),0);
       assert.equal(await page.evaluate(()=>writes.length),0);
       assert.deepEqual(errors,[]);await page.close();

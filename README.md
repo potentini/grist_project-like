@@ -184,7 +184,7 @@ Les listes multiples affichent les choix cochés ; un clic coche ou décoche une
 
 Sur un écran tactile dont le petit côté mesure moins de 600 pixels CSS, et lorsque le widget dispose au plus de 1000 pixels de largeur, une présentation compacte s’active. La taille de l’écran physique en pixels CSS est utilisée en plus de la largeur du widget : un volet PC étroit ou une tablette de 600 pixels et plus conserve l’interface habituelle. Le mode téléphone reste actif en paysage.
 
-Le téléphone démarre sur **Actions**, avec ajout d’action en haut de liste. Le menu unique permet de choisir **Projets**, **Chantiers** ou **Actions**. La recherche reste visible sous la navigation, à la place du message d’actualisation. **Filtres** rassemble les filtres rapides Projet, Responsable et Statut sur une ligne, puis les filtres avancés. Le contrôle Afficher les archivés est masqué sur téléphone ; les erreurs restent visibles. Le titre général, Mapping, Actualiser et le lien vers la vue Table/Timeline générale sont masqués. La timeline projet reste accessible depuis le détail. Le petit bouton **Édition** conserve le contrôle des modifications.
+Le téléphone démarre sur **Actions**, avec ajout d’action en haut de liste. Le menu unique permet de choisir **Projets**, **Chantiers**, **Notes et réunions** ou **Actions**. La recherche reste visible sous la navigation, à la place du message d’actualisation. **Filtres** rassemble les filtres rapides Projet, Responsable et Statut sur une ligne, puis les filtres avancés. Le contrôle Afficher les archivés est masqué sur téléphone ; les erreurs restent visibles. Le titre général, Mapping, Actualiser et le lien vers la vue Table/Timeline générale sont masqués. La timeline projet est également masquée sur téléphone. Le bouton **Suivi** reste accessible dans **Notes et réunions**, avec une popup adaptée au téléphone. Le petit bouton **Édition** conserve le contrôle des modifications.
 
 La liste occupe seule l’écran. Ouvrir un élément affiche uniquement le détail, avec une bande cliquable à gauche pour revenir à la liste et retrouver son défilement. Une modification en cours doit être enregistrée ou annulée avant ce retour. Les formulaires de création occupent la largeur disponible, avec saisie adaptée au tactile et commandes Enregistrer/Annuler regroupées. Ces règles sont limitées au mode téléphone ; les vues PC et tablette conservent leur présentation et leur fonctionnement.
 
@@ -230,11 +230,7 @@ Les boutons natifs et dialogues utilisent également des couleurs explicites, in
 
 Les évolutions discutées et reportées sont conservées dans la [feuille de route](ROADMAP.md).
 
-Sur téléphone, la timeline d’un projet est accessible depuis le détail. Elle occupe toute la surface du widget, avec une présentation compacte pour le paysage. L’ouverture demande le plein écran et le verrouillage paysage si les API et les permissions du navigateur le permettent. Sinon, tourner manuellement le téléphone ; un rappel apparaît en portrait. Fermer restitue le suivi et son défilement. La vue Table/Timeline générale reste masquée sur téléphone.
-
-Sur téléphone, les commandes de la timeline projet sont limitées à Tout plier/déplier, ◀ Aujourd’hui ▶ et aux zooms. Elles restent sur une seule ligne, défilante horizontalement si l’écran est trop étroit. Le bouton Fermer du projet reste accessible ; les contrôles PC et tablette sont inchangés.
-
-Dans la timeline projet sur téléphone, la liste latérale est masquée ; les libellés des éléments sont affichés sur le calendrier. Les préférences de masquage des libellés et de regroupement compact sont ignorées dans cette présentation mobile.
+Sur téléphone, les timelines générale et projet sont masquées, en portrait comme en paysage. La vue **Notes et réunions** et sa popup **Suivi** sont accessibles depuis le menu mobile. Les timelines PC et tablette restent disponibles.
 
 Sur téléphone uniquement, les formulaires de création et de modification utilisent des espacements verticaux réduits et des zones de texte moins hautes à l’ouverture (toujours redimensionnables). La saisie reste en 16 px et les champs simples conservent une hauteur minimale de 36 px. Les formulaires PC et tablette ne sont pas modifiés.
 

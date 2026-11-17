@@ -4151,6 +4151,7 @@
     const next = isPhone();
     if (next === phoneMode) return;
     phoneMode = next;
+    if (phoneMode && $("projectTimeline").open) $("projectTimeline").close();
     document.body.classList.toggle("phone-mode", phoneMode);
     placePhoneSearch();
     document.body.classList.remove("phone-detail", "phone-filters-open");
@@ -4384,21 +4385,6 @@
       },
     };
   };
-  async function expandPhoneProjectTimeline() {
-    if (!phoneMode) return;
-    const dialog=$("projectTimeline");
-    try {
-      if (!document.fullscreenElement && document.fullscreenEnabled && dialog.requestFullscreen)
-        await dialog.requestFullscreen();
-      if (!dialog.open) {
-        if(document.fullscreenElement===dialog)await document.exitFullscreen();
-        return;
-      }
-      if(document.fullscreenElement===dialog && screen.orientation?.lock)
-        await screen.orientation.lock('landscape');
-    } catch { /* Embedded/mobile browsers may deny fullscreen or orientation locking.
-                 The dialog still fills the widget and supports manual rotation. */ }
-  }
   $("timelineClose").onclick = () => $("projectTimeline").close();
   $("projectTimeline").addEventListener("close", () => {
     if(document.fullscreenElement===$("projectTimeline")) {
@@ -4419,6 +4405,7 @@
       if (!e.target.closest("[data-project-timeline]")) return;
       e.preventDefault();
       e.stopPropagation();
+      if (phoneMode) return;
       if (editing || moving) {
         message(
           "Terminez la modification en cours avant d’ouvrir la timeline.",
@@ -4448,7 +4435,6 @@
       $("timelineFrame").src =
         "timeline.html?projectPopup=1&v=20261115-mobile-labels";
       $("projectTimeline").showModal();
-      expandPhoneProjectTimeline();
     },
     true,
   );
