@@ -525,146 +525,33 @@
     select.hidden = true;
     select.setAttribute("aria-hidden", "true");
     select.tabIndex = -1;
-    let popup = wrapper.querySelector(".quick-multiple");
-    if (!popup) {
-      popup = document.createElement("details");
-      popup.className = "quick-multiple";
-      popup.innerHTML =
-        '<summary><input class="quick-search" type="text" autocomplete="off" role="combobox" aria-autocomplete="list" aria-haspopup="dialog"></summary><div role="dialog"></div>';
-      wrapper.append(popup);
+    let choices = wrapper.querySelector("select.quick-source");
+    if (!choices) {
+      choices = document.createElement("select");
+      choices.className = "quick-source";
+      choices.multiple = true;
+      wrapper.append(choices);
+      searchableSelect(choices, {
+        label: caption,
+        listId: id + "-choices",
+        emptyLabel: "Tous",
+        floating: true,
+      });
+      choices.parentElement.classList.add("quick-picker");
+      choices.previousElementSibling.classList.add("quick-search");
+      choices.onchange = () => {
+        quickSelections[id] = [...choices.selectedOptions].map(o => o.value).filter(Boolean);
+        filterOptions();
+        render();
+      };
     }
-    const selected = quickChoice(id),
-      text =
-        selected.length > 1
-          ? `${selected.length} choix`
-          : selected.length
-            ? opts.find(([v]) => String(v) === selected[0])?.[1] || selected[0]
-            : "Tous";
-    const input = popup.querySelector(".quick-search");
-    input.value = popup.dataset.query || text;
+    const selected = quickChoice(id);
+    choices.innerHTML = '<option value=""' + (!selected.length ? ' selected' : '') + '>Tous</option>' +
+      opts.map(([value, label]) => `<option value="${esc(value)}" ${selected.includes(String(value)) ? 'selected' : ''}>${esc(label)}</option>`).join('');
+    const input = choices.previousElementSibling;
     input.setAttribute("aria-label", caption);
-    input.setAttribute("aria-expanded", String(popup.open));
-    input.setAttribute("aria-controls", id + "-choices");
-    input.title = caption + " : " + text;
-    popup.querySelector("div").id = id + "-choices";
-    popup.querySelector("div").setAttribute("aria-label", caption);
-    popup.querySelector("div").innerHTML =
-      `<label><input type="checkbox" data-quick-all="${id}" ${!selected.length ? "checked" : ""}>Tous</label>` +
-      opts
-        .map(
-          ([value, label]) =>
-            `<label><input type="checkbox" data-quick="${id}" value="${esc(value)}" ${selected.includes(String(value)) ? "checked" : ""}>${esc(label)}</label>`,
-        )
-        .join("") +
-      (!opts.length
-        ? '<span class="muted">Aucune valeur dans le périmètre courant.</span>'
-        : "");
-    const filterChoices = () => {
-      const query = norm(popup.dataset.query || "");
-      let count = 0;
-      for (const label of popup.querySelectorAll("div > label")) {
-        const option = label.querySelector("[data-quick]");
-        label.hidden =
-          !!option && !!query && !norm(label.textContent).includes(query);
-        if (option && !label.hidden) count++;
-      }
-      let empty = popup.querySelector("div > .muted");
-      if (!empty) {
-        empty = document.createElement("span");
-        empty.className = "muted";
-        empty.setAttribute("role", "status");
-        popup.querySelector("div").append(empty);
-      }
-      empty.hidden = count > 0;
-      empty.textContent = query
-        ? "Aucun résultat"
-        : "Aucune valeur dans le périmètre courant.";
-    };
-    input.onfocus = () => {
-      if (popup.dataset.closing) return;
-      popup.open = true;
-      popup.dataset.query = "";
-      filterChoices();
-      input.select();
-    };
-    input.onclick = () => {
-      popup.open = true;
-    };
-    input.oninput = () => {
-      popup.dataset.query = input.value;
-      popup.open = true;
-      filterChoices();
-    };
-    input.onkeydown = (e) => {
-      if (e.key === "Enter" || e.key === "ArrowDown") {
-        e.preventDefault();
-        const option = [
-          ...popup.querySelectorAll("div > label:not([hidden]) input"),
-        ].find((o) =>
-          popup.dataset.query ? o.hasAttribute("data-quick") : true,
-        );
-        if (e.key === "Enter") option?.click();
-        else option?.focus();
-      }
-    };
-    popup.ontoggle = () => {
-      input.setAttribute("aria-expanded", String(popup.open));
-      if (popup.open)
-        document.querySelectorAll(".quick-multiple").forEach((other) => {
-          if (other !== popup) other.open = false;
-        });
-      else {
-        popup.dataset.query = "";
-        input.value = text;
-        filterChoices();
-      }
-    };
-    filterChoices();
-    popup.onchange = (e) => {
-      if (!e.target.matches("[data-quick],[data-quick-all]")) return;
-      const searching = document.activeElement === input;
-      const all = e.target.hasAttribute("data-quick-all"),
-        value = e.target.value;
-      quickSelections[id] = all
-        ? []
-        : [...popup.querySelectorAll("input[data-quick]:checked")].map(
-            (x) => x.value,
-          );
-      filterOptions();
-      render();
-      if (searching) {
-        input.select();
-        return;
-      }
-      [...popup.querySelectorAll("input")]
-        .find((x) =>
-          all
-            ? x.hasAttribute("data-quick-all")
-            : x.hasAttribute("data-quick") && x.value === value,
-        )
-        ?.focus({ preventScroll: true });
-    };
-    popup.onkeydown = (e) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        popup.open = false;
-        popup.dataset.query = "";
-        input.value = text;
-        input.setAttribute("aria-expanded", "false");
-        filterChoices();
-        popup.dataset.closing = "true";
-        input.focus({ preventScroll: true });
-        delete popup.dataset.closing;
-      }
-    };
+    choices.nextElementSibling.setAttribute("aria-label", caption);
   }
-
-  document.addEventListener("pointerdown", (e) => {
-    if (!e.target.closest(".quick-multiple"))
-      document
-        .querySelectorAll(".quick-multiple[open]")
-        .forEach((d) => (d.open = false));
-  });
 
   function advancedMatch(k, r) {
     if (!advancedSets) {
@@ -3368,27 +3255,33 @@
       .forEach((observer) => observer.disconnect());
     let number = 0;
     for (const select of $("editForm").querySelectorAll("select[name]")) {
+      editorSearchObservers.push(searchableSelect(select, {
+        label: fieldLabel(kind, select.name),
+        listId: "editor-options-" + ++number,
+        placeholder: !editing?.r && select.name === "Responsable" && col(kind, "Responsable")?.formula
+          ? "Choisir ou rechercher… (vous si laissé vide)"
+          : "Choisir ou rechercher…",
+      }));
+    }
+  }
+  // Forms and main filters deliberately share rendering, keyboard and touch handling.
+  function searchableSelect(select, {label: caption, listId, placeholder = "Choisir ou rechercher…", emptyLabel = "", floating = false}) {
       const wrapper = document.createElement("div");
       wrapper.className = "reference-picker";
-      const input = document.createElement("input"),
-        list = document.createElement("div");
+      const input = document.createElement("input"), list = document.createElement("div");
       input.type = "text";
       input.autocomplete = "off";
-      input.placeholder =
-        !editing?.r &&
-        select.name === "Responsable" &&
-        col(kind, "Responsable")?.formula
-          ? "Choisir ou rechercher… (vous si laissé vide)"
-          : "Choisir ou rechercher…";
-      input.dataset.searchFor = select.name;
-      input.setAttribute("aria-label", fieldLabel(kind, select.name));
+      input.placeholder = placeholder;
+      input.dataset.searchFor = select.name || select.id || listId;
+      input.setAttribute("aria-label", caption);
       input.setAttribute("role", "combobox");
       input.setAttribute("aria-autocomplete", "list");
       input.setAttribute("aria-expanded", "false");
-      list.id = "editor-options-" + ++number;
+      list.id = listId;
       list.className = "reference-options";
+      if (floating) list.setAttribute("popover", "manual");
       list.setAttribute("role", "listbox");
-      list.setAttribute("aria-label", fieldLabel(kind, select.name));
+      list.setAttribute("aria-label", caption);
       if (select.multiple) list.setAttribute("aria-multiselectable", "true");
       input.setAttribute("aria-controls", list.id);
       select.before(wrapper);
@@ -3420,8 +3313,28 @@
         [...select.selectedOptions]
           .filter((o) => o.value)
           .map((o) => o.textContent)
-          .join(" ; ");
+          .join(" ; ") || emptyLabel;
+      const position = () => {
+        if (!floating || !open) return;
+        const rect = input.getBoundingClientRect(), viewport = window.visualViewport;
+        const top = viewport?.offsetTop || 0, bottom = top + (viewport?.height || innerHeight);
+        const width = Math.min(Math.max(rect.width, 220), innerWidth - 16);
+        const below = bottom - rect.bottom >= Math.min(230, rect.top - top);
+        Object.assign(list.style, {
+          position: "fixed", inset: "auto", margin: "0",
+          width: width + "px", maxWidth: width + "px",
+          left: Math.max(8, Math.min(rect.left, innerWidth - width - 8)) + "px",
+          maxHeight: Math.max(50, Math.min(230, below ? bottom - rect.bottom - 8 : rect.top - top - 8)) + "px",
+        });
+        list.style.top = (below ? rect.bottom : Math.max(top + 4, rect.top - list.getBoundingClientRect().height)) + "px";
+      };
+      if (floating) {
+        document.addEventListener("scroll", position, true);
+        window.addEventListener("resize", position);
+        window.visualViewport?.addEventListener("resize", position);
+      }
       const close = () => {
+        if (floating && list.hidePopover && list.matches(":popover-open")) list.hidePopover();
         open = false;
         query = "";
         active = -1;
@@ -3518,6 +3431,10 @@
           list.append(empty);
         }
         list.hidden = !open;
+        if (floating && open) {
+          if (list.showPopover && !list.matches(":popover-open")) list.showPopover();
+          position();
+        }
         input.setAttribute("aria-expanded", String(open));
         if (active < 0) input.removeAttribute("aria-activedescendant");
       };
@@ -3582,9 +3499,8 @@
         else input.value = label();
       });
       observer.observe(select, { childList: true });
-      editorSearchObservers.push(observer);
       close();
-    }
+      return observer;
   }
 
   // Form-only hierarchy: selections remain drafts until Save.

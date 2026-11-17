@@ -650,39 +650,12 @@ body[data-current-view="notes"] .item[data-kind="actions"] {
   gap: 6px;
   align-items: center;
 }
-.quick-multiple {
-  position: relative;
-  font-size: 12px;
-}
-.quick-multiple > summary {
-  cursor: pointer;
-  padding: 7px;
-  border: 1px solid #ccd5e2;
-  border-radius: 6px;
-  background: white;
-}
-.quick-multiple > div {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  z-index: 8;
-  width: 240px;
-  max-height: 240px;
-  overflow: auto;
-  padding: 8px;
-  background: white;
-  border: 1px solid #ccd5e2;
-  border-radius: 6px;
-  box-shadow: 0 3px 12px #23334a25;
-}
-.quick-multiple label,
 #advancedChoices label {
   display: flex;
   align-items: center;
   gap: 7px;
   padding: 4px 0;
 }
-.quick-multiple input,
 #advancedChoices input {
   width: auto;
 }
@@ -719,32 +692,10 @@ body[data-current-view="notes"] .item[data-kind="actions"] {
 .quick-filter > select {
   max-width: 220px;
 }
-.quick-multiple > div {
-  left: 0;
-  right: auto;
-  max-width: calc(100vw - 32px);
-}
 #fields input[type="checkbox"],
 #detail #editForm input[type="checkbox"] {
   width: auto;
   justify-self: start;
-}
-.quick-multiple {
-  font-size: 14px;
-  max-width: 240px;
-}
-.quick-multiple > summary {
-  min-width: 100px;
-  max-width: 240px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  padding: 8px 10px;
-}
-.quick-multiple > div label:first-child {
-  border-bottom: 1px solid #e2e8f0;
-  padding-bottom: 7px;
-  margin-bottom: 3px;
 }
 
 #mapping label:has([data-progress-base]) {
@@ -1126,31 +1077,6 @@ body.phone-mode .quick-filter > span {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-body.phone-mode .quick-multiple {
-  width: 100%;
-  max-width: 100%;
-  font-size: 12px;
-}
-body.phone-mode .quick-multiple > summary {
-  min-width: 0;
-  max-width: 100%;
-  width: 100%;
-  padding: 5px 6px;
-}
-body.phone-mode .quick-multiple > div {
-  position: static;
-  width: 100%;
-  max-width: 100%;
-  max-height: 170px;
-  padding: 5px;
-  font-size: 12px;
-  box-shadow: none;
-}
-body.phone-mode .quick-multiple > div label {
-  gap: 4px;
-  padding: 3px 0;
-  overflow-wrap: anywhere;
-}
 body.phone-mode #advancedFilters {
   margin: 0 9px 5px;
   padding: 5px 7px;
@@ -1194,23 +1120,6 @@ body.phone-mode #hierarchySortSettings {
   font-size: 12px;
 }
 
-.quick-multiple > summary > input.quick-search {
-  width: calc(100% - 16px);
-  min-width: 0;
-  border: 0;
-  border-radius: 0;
-  padding: 0;
-  background: transparent;
-  font: inherit;
-  color: inherit;
-}
-.quick-multiple > summary:focus-within {
-  outline: 2px solid #7ca5ce;
-  outline-offset: 1px;
-}
-body.phone-mode .quick-multiple > summary > input.quick-search {
-  font-size: 16px;
-}
 
 /* Explicit contrast for native dialog buttons, including dark system themes. */
 #timelineClose {
@@ -1318,3 +1227,9 @@ body.phone-mode #advancedValue { font-size: 16px; }
 body.phone-mode .advanced-value-control { flex: 1 1 180px; min-width: 160px; }
 body.phone-mode .advanced-join-control { flex: 0 0 110px; min-width: 0; }
 body.phone-mode .advanced-join-control select { width: 100%; min-width: 0; }
+
+/* Main filters use the same searchable select as item forms. */
+.quick-picker { flex: 1 1 150px; width: 200px; max-width: 240px; }
+body.phone-mode .quick-picker { flex: none; width: 100%; max-width: 100%; }
+body.phone-mode .quick-picker > input { font-size: 16px; padding: 5px 24px 5px 6px; }
+body.phone-mode .quick-picker::after { top: 6px; }

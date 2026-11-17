@@ -29,8 +29,7 @@ input:autofill {
   -webkit-text-fill-color: #23334a !important;
   box-shadow: 0 0 0 1000px #fff inset !important;
 }
-.reference-options,
-.quick-multiple > div {
+.reference-options {
   background: #fff !important;
   color: #23334a !important;
   color-scheme: light;
@@ -48,7 +47,6 @@ input:autofill {
 .reference-options > .active {
   text-decoration: underline;
 }
-.reference-options .muted,
-.quick-multiple > div .muted {
+.reference-options .muted {
   color: #64748b;
 }

@@ -46,16 +46,14 @@ const fixture = require("../demo.json");
   };
 
   async function setQuick(id, values) {
-    const menu = page
-      .locator("#" + id)
-      .locator("..")
-      .locator(".quick-multiple");
-    if (!(await menu.evaluate((el) => el.open)))
-      await menu.locator("summary").click({ position: { x: 5, y: 10 } });
-    await menu.locator("[data-quick-all]").check();
-    for (const value of values)
-      await menu.locator(`input[data-quick][value="${value}"]`).check();
-    await menu.locator("summary").click({ position: { x: 5, y: 10 } });
+    const menu = page.locator("#" + id).locator("..").locator(".quick-picker");
+    await menu.locator('.quick-search').click();
+    await menu.getByRole('option', {name: /Tous$/}).click();
+    for (const value of values) {
+      const label = await menu.locator(`select option[value="${value}"]`).textContent();
+      await menu.getByRole('option', {name: '☐ ' + label, exact:true}).click();
+    }
+    await menu.locator('.quick-search').press('Escape');
   }
 
   await page.route("https://docs.getgrist.com/**", (r) =>
@@ -2326,16 +2324,16 @@ const fixture = require("../demo.json");
     page
       .locator("#" + id)
       .locator("..")
-      .locator(".quick-multiple");
+      .locator(".quick-picker");
   for (const id of ["projectFilter", "ownerFilter", "statusFilter"]) {
     assert.equal(await page.locator("#" + id).isVisible(), false);
     assert.equal(await menu(id).count(), 1);
-    assert.equal(await menu(id).locator("summary input").inputValue(), "Tous");
+    assert.equal(await menu(id).locator(".quick-search").inputValue(), "Tous");
   }
   for (const id of ["projectFilter", "ownerFilter", "statusFilter"]) {
     await menu(id).locator(".quick-search").fill("introuvable-xyz");
     assert.equal(
-      await menu(id).locator("label:not([hidden]) [data-quick]").count(),
+      await menu(id).locator('[role="option"]').count(),
       0,
     );
     assert.match(
@@ -2354,62 +2352,62 @@ const fixture = require("../demo.json");
     await page.locator("#projectFilter").inputValue(),
     "__multiple__",
   );
-  await menu("projectFilter").locator("[data-quick-all]").check();
+  await menu("projectFilter").getByRole("option",{name:/Tous$/}).click();
   await menu("projectFilter").locator(".quick-search").press("Escape");
   await menu("projectFilter")
-    .locator("summary")
-    .click({ position: { x: 5, y: 10 } });
-  await menu("projectFilter").locator('input[value="1"]').check();
+    .locator(".quick-search")
+    .click();
+  await menu("projectFilter").getByRole("option",{name:/☐ Projet exemple/}).click();
   assert.notEqual(
-    await menu("projectFilter").locator("summary input").inputValue(),
+    await menu("projectFilter").locator(".quick-search").inputValue(),
     "Tous",
   );
-  await menu("projectFilter").locator('input[value="2"]').check();
+  await menu("projectFilter").getByRole("option",{name:/☐ Autre projet/}).click();
   assert.equal(
     await page.locator("#projectFilter").inputValue(),
     "__multiple__",
   );
   assert.equal(await page.locator("#list [data-kind=projects]").count(), 2);
   assert.equal(
-    await menu("projectFilter").locator("summary input").inputValue(),
-    "2 choix",
+    await menu("projectFilter").locator(".quick-search").inputValue(),
+    "",
   );
   await page.keyboard.press("Escape");
-  assert.equal(await menu("projectFilter").evaluate((el) => el.open), false);
+  assert.equal(await menu("projectFilter").locator(".quick-search").evaluate(el=>el.getAttribute("aria-expanded")==="true"), false);
   assert.equal(
     await menu("projectFilter")
-      .locator("summary input")
+      .locator(".quick-search")
       .evaluate((el) => el === document.activeElement),
     true,
   );
   await menu("projectFilter")
-    .locator("summary")
-    .click({ position: { x: 5, y: 10 } });
+    .locator(".quick-search")
+    .click();
   await page.locator("#search").click();
-  assert.equal(await menu("projectFilter").evaluate((el) => el.open), false);
+  assert.equal(await menu("projectFilter").locator(".quick-search").evaluate(el=>el.getAttribute("aria-expanded")==="true"), false);
   await menu("projectFilter")
-    .locator("summary")
-    .click({ position: { x: 5, y: 10 } });
+    .locator(".quick-search")
+    .click();
   await menu("ownerFilter")
-    .locator("summary")
-    .click({ position: { x: 5, y: 10 } });
-  await menu("ownerFilter").locator('input[value="Alice Référente"]').check();
+    .locator(".quick-search")
+    .click();
+  await menu("ownerFilter").getByRole('option',{name:'☐ Alice Référente',exact:true}).click();
   assert.equal(
     await page.locator('#list [data-kind=tasks][data-id="2"]').isVisible(),
     true,
   );
-  await menu("ownerFilter").locator('input[value="Camille Pilote"]').check();
+  await menu("ownerFilter").getByRole('option',{name:'☐ Camille Pilote',exact:true}).click();
   await menu("ownerFilter")
-    .locator("summary")
-    .click({ position: { x: 5, y: 10 } });
+    .locator(".quick-search")
+    .click();
   await menu("statusFilter")
-    .locator("summary")
-    .click({ position: { x: 5, y: 10 } });
-  await menu("statusFilter").locator('input[value="En cours"]').check();
-  await menu("statusFilter").locator('input[value="À faire"]').check();
+    .locator(".quick-search")
+    .click();
+  await menu("statusFilter").getByRole('option',{name:'☐ En cours',exact:true}).click();
+  await menu("statusFilter").getByRole('option',{name:'☐ À faire',exact:true}).click();
   await menu("statusFilter")
-    .locator("summary")
-    .click({ position: { x: 5, y: 10 } });
+    .locator(".quick-search")
+    .click();
   await setQuick("projectFilter", []);
   await setQuick("ownerFilter", []);
   await setQuick("statusFilter", []);
@@ -2705,28 +2703,28 @@ const fixture = require("../demo.json");
       items.map((item) => item.getBoundingClientRect().y),
     );
   assert.ok(Math.max(...filterRows) - Math.min(...filterRows) < 2);
-  await phone.locator(".quick-multiple summary").first().tap();
+  await phone.locator(".quick-picker .quick-search").first().tap();
   const projectChoices = phone
-    .locator(".quick-multiple")
+    .locator(".quick-picker")
     .first()
-    .locator("div");
+    .locator(".reference-options");
   assert.equal(await projectChoices.isVisible(), true);
-  const phoneProjectMenu = phone.locator(".quick-multiple").first();
+  const phoneProjectMenu = phone.locator(".quick-picker").first();
   await phoneProjectMenu.locator(".quick-search").fill("exemple");
-  await phoneProjectMenu.locator('[data-quick][value="1"]').tap();
+  await phoneProjectMenu.getByRole('option',{name:/☐ Projet exemple/}).tap();
   assert.equal(await phone.locator("#projectFilter").inputValue(), "1");
   await phoneProjectMenu.locator(".quick-search").fill("autre");
   assert.equal(
-    await phoneProjectMenu.locator('[data-quick][value="1"]').isChecked(),
+    await phoneProjectMenu.locator('select option[value="1"]').evaluate(o=>o.selected),
     true,
   );
   await phoneProjectMenu.locator(".quick-search").press("Escape");
-  await phoneProjectMenu.locator("summary").tap({ position: { x: 5, y: 10 } });
-  await phoneProjectMenu.locator("[data-quick-all]").tap();
+  await phoneProjectMenu.locator(".quick-search").tap();
+  await phoneProjectMenu.getByRole("option",{name:/Tous$/}).tap();
 
   const choiceBounds = await projectChoices.boundingBox();
   assert.ok(choiceBounds.x >= 0 && choiceBounds.x + choiceBounds.width <= 390);
-  await phone.locator(".quick-multiple summary").first().tap();
+  await phone.locator(".quick-picker .quick-search").first().tap();
   await phone.screenshot({
     path: "/workspace/exports/widget-phone-filters.png",
     fullPage: true,
