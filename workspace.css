@@ -357,12 +357,18 @@ select[multiple] {
   border-left: 1px solid #e5eaf2;
   margin-left: 14px;
 }
-.move-button {
+.move-button,
+.tree-row .dependent-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
   padding: 6px;
 }
 .tree-row .dependent-delete {
-  flex: 0 0 auto;
-  padding: 6px;
   color: #b42318;
   -webkit-text-fill-color: #b42318;
   background: #fff;
