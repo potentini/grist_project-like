@@ -396,6 +396,11 @@ const fixture = require("../demo.json");
         for (const row of db.data[kind]) row.Avancement = 0.1;
       }
     }
+    if (location.search.includes("noStreamCode=1")) {
+      if (location.search.includes("refs=1"))
+        db.meta = db.meta.filter(c => !(c.table === "Chantiers" && c.colId === "Code"));
+      else db.meta.find(c => c.table === "Chantiers" && c.colId === "Code").isFormula = true;
+    }
     window.testOptions = location.search.includes("broader=1")
       ? JSON.parse(sessionStorage.getItem("broaderOptions") || "{}")
       : {};
@@ -1287,6 +1292,30 @@ const fixture = require("../demo.json");
   console.log(
     "PASS timeline excludes transformed task while retaining active tasks",
   );
+
+  for (const refs of [false, true]) {
+    await page.goto("http://127.0.0.1:8766/?convert=1&points=1&noStreamCode=1" + (refs ? "&refs=1" : ""));
+    await page.locator('#list [data-kind=tasks][data-id="1"]').click();
+    await page.locator('#editionButton').click();
+    await page.locator('[data-convert]').click();
+    assert.equal(await page.locator('#conversionParent').inputValue(), '1');
+    await page.locator('#conversionParent').selectOption('2');
+    assert.equal(await page.locator('#conversionParent').inputValue(), '2');
+    await page.locator('#conversionParent').selectOption('1');
+    if (refs) {
+      assert.equal(await page.locator('#conversionSubmit').isEnabled(), true);
+      await page.locator('#conversionSubmit').click();
+      await page.locator('#conversionDialog').waitFor({state:'hidden'});
+      const db = await page.evaluate(() => window.testDb);
+      assert.equal(db.data.streams[1].Projet, 1);
+      assert.equal(db.data.streams[1].Code, undefined);
+      assert.equal(db.data.actions[3].Chantier, 2);
+    } else {
+      assert.match(await page.locator('#conversionError').innerText(), /Code/);
+      assert.equal(await page.locator('#conversionSubmit').isDisabled(), true);
+    }
+  }
+  console.log('PASS conversion defaults to current project, allows another project, supports native links without destination Code, and protects text links');
 
   for (const refs of [false, true]) {
     await page.goto(

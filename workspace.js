@@ -1074,9 +1074,8 @@
         );
     };
     requireField(sourceKind, "Transforme", "Bool");
-    requireField(destKind, "Code", "Text");
     requireField(destKind, "Titre", "Text");
-    for (const f of ["Code", "Titre", parentField, originField])
+    for (const f of ["Titre", parentField, originField])
       requireField(destKind, f);
     const nextId = Math.max(0, ...(data[destKind] || []).map((r) => r.id)) + 1;
     let n = 1,
@@ -1092,8 +1091,12 @@
       if (!/^(Text|Ref:|RefList:)/.test(col(destKind, f)?.type || ""))
         throw Error("Utilisez une référence Grist ou Texte pour " + f);
     const fields = {
-      [cfg(destKind).fields.Code]: code,
       [cfg(destKind).fields.Titre]: title(sourceKind, source),
+    };
+    if (col(destKind, "Code")?.type === "Text" && !col(destKind, "Code").isFormula)
+      fields[cfg(destKind).fields.Code] = code;
+    const requireDestinationCode = () => {
+      requireField(destKind, "Code", "Text");
     };
     fields[cfg(destKind).fields[parentField]] = encodeLink(
       destKind,
@@ -1148,6 +1151,7 @@
       contextCount = 0;
     const setLink = (k, r, delta, f, targetKind, targetRow) => {
       requireField(k, f);
+      if (targetRow === newRow && col(k, f)?.type === "Text") requireDestinationCode();
       delta[cfg(k).fields[f]] =
         targetRow === newRow && col(k, f)?.type === "Text"
           ? code
@@ -1188,6 +1192,7 @@
                 throw Error(
                   "Utilisez une liste de références ou Texte pour " + f,
                 );
+              if (rows.includes(newRow)) requireDestinationCode();
               return rows.map((r) => linkValue(target, r, k, f)).join(", ");
             };
             delta[cfg(k).fields.Taches] = encodeList("Taches", "tasks", others);
@@ -1258,10 +1263,18 @@
     $("conversionParentLabel").textContent =
       k === "actions" ? "Chantier parent" : "Projet parent";
     $("conversionParent").innerHTML = ordered(parentKind)
+      .filter((r) => !inactive(parentKind, r))
       .map(
         (r) => `<option value="${r.id}">${esc(title(parentKind, r))}</option>`,
       )
       .join("");
+    const source = (data[k] || []).find((r) => r.id === id);
+    const currentParent = k === "tasks"
+      ? projectOf(k, source)
+      : targets("actions", source, "Chantier")[0] ||
+        targets("tasks", targets("actions", source, "Tache")[0], "Chantier")[0];
+    $("conversionParent").value = currentParent && !inactive(parentKind, currentParent)
+      ? String(currentParent.id) : "";
     $("conversionDialog").showModal();
     previewConversion();
   }
