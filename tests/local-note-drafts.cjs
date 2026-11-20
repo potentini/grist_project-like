@@ -1,6 +1,7 @@
 const {chromium}=require('playwright');
 const assert=require('node:assert/strict');
 const fixture=structuredClone(require('../demo.json'));
+fixture.meta.push({id:799,parentId:4,table:'Notes',colId:'Nom',label:'Nom',type:'Text',isFormula:false});
 fixture.tables.push({id:6,tableId:'Points',label:'Points'});
 for(const [field,type] of [['Titre','Text'],['Contenu','Text'],['Decision','Text'],['NoteOrigine','Ref:Notes']])
  fixture.meta.push({id:800+fixture.meta.length,parentId:6,table:'Points',colId:field,label:field,type,isFormula:false});
@@ -46,11 +47,13 @@ function setup(fixture){
   const keys=()=>page.evaluate(()=>Object.keys(localStorage).filter(k=>k.startsWith('grist_note_draft_v1:')));
   await page.goto('http://127.0.0.1:8766/');await open();
   const initial=await content.inputValue();
+  await page.locator('#editForm [name=Nom]').fill('Nom libre en brouillon');
   await content.fill('Long compte rendu\nÉchanges <script>aucun code exécuté</script>');
   assert.equal((await keys()).length,1);assert.deepEqual(await page.evaluate(()=>writes),[]);
   await page.reload();await open();
   assert.equal(await content.inputValue(),initial);assert.equal(await recover.count(),1);
   await recover.click();assert.match(await content.inputValue(),/Long compte rendu/);
+  assert.equal(await page.locator('#editForm [name=Nom]').inputValue(),'Nom libre en brouillon');
   await page.locator('#cancel').click();assert.equal((await keys()).length,2);
   await page.locator('#detail [data-edit]').click();assert.equal(await recover.count(),2);
   await recover.first().click();

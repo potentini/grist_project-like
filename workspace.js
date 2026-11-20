@@ -105,6 +105,7 @@
       fields: [
         "Code",
         "Titre",
+        "Nom",
         "Type",
         "Date",
         "DateSource",
@@ -160,6 +161,7 @@
   for (const schema of Object.values(schemas)) schema.fields.push("Archive");
   const aliases = {
     Titre: ["Titre", "Nom", "Name", "Title", "Tache"],
+    Nom: ["Nom", "NomReunion", "TitreReunionLibre"],
     Responsable: ["Responsable", "Owner", "AssignedTo"],
     ResponsableDiPSi: [
       "ResponsableExterne",
@@ -312,6 +314,7 @@
   );
   function fieldLabel(k, f) {
     const custom = cfg(k).fieldLabels?.[f];
+    if (k === "notes" && f === "Nom") return custom || "Titre de la réunion (si pas une instance)";
     return (
       cfg(k).extraFields?.find((x) => x.id === f)?.label ||
       (f === "ResponsableDiPSi" && norm(custom) === "responsabledipsi"
@@ -2872,6 +2875,7 @@
         "Participants",
         "Instance",
         "Date",
+        ...(k === "notes" ? ["Nom"] : []),
         "DateSource",
         "DateDebut",
         "DateFin",
@@ -3249,11 +3253,11 @@
       selection && (data[selection.k] || []).find((x) => x.id === selection.id);
     const editorFields = fieldsFor(k);
     if (k === "notes") {
-      for (const field of ["Instance", "Date", "Titre"]) {
+      for (const field of ["Instance", "Date", "Nom"]) {
         const index = editorFields.indexOf(field);
         if (index >= 0) editorFields.splice(index, 1);
       }
-      editorFields.splice(editorFields.indexOf("Type") + 1, 0, "Instance", "Date", "Titre");
+      editorFields.splice(editorFields.indexOf("Type") + 1, 0, "Instance", "Date", "Nom");
     }
     $("fields").innerHTML = editorFields
       .filter(
@@ -3357,21 +3361,11 @@
           input = `<input name="${f}" type="number" step="any"  value="${esc(v)}">`;
         else
           input = `<input name="${f}" ${f === "Titre" ? "required" : ""} value="${esc(v)}">`;
-        return `<label>${esc(k === "notes" && f === "Titre" ? "Titre de la réunion (si pas une instance)" : fieldLabel(k, f))}${f === "Avancement" ? `<small id="progressHelp">${progressBaseOne(k) ? "Sur base 1 : 0 à 1 ; 0,1 = 10 %" : "Sur base 100 : 0 à 100 ; 0,1 = 0,1 %"}. Virgule ou point acceptés.</small>` : ""}${input}</label>`;
+        return `<label>${esc(fieldLabel(k, f))}${f === "Avancement" ? `<small id="progressHelp">${progressBaseOne(k) ? "Sur base 1 : 0 à 1 ; 0,1 = 10 %" : "Sur base 100 : 0 à 100 ; 0,1 = 0,1 %"}. Virgule ou point acceptés.</small>` : ""}${input}</label>`;
       })
       .join("");
     if (r) {
       renderDetail(true);
-      if (k === "notes") {
-        $("detail").querySelector('h2[data-slot="Titre"]')?.removeAttribute("data-slot");
-        const label = document.createElement("dt"), slot = document.createElement("dd");
-        label.textContent = "Titre de la réunion (si pas une instance)";
-        slot.dataset.slot = "Titre";
-        slot.textContent = displayValue(k, r, "Titre");
-        const date = $("detail").querySelector('[data-slot="Date"]');
-        if (date) date.after(label, slot);
-        else $("detail").querySelector("dl.meta").append(label, slot);
-      }
       const controls = [...$("fields").children];
       const editableFields = new Set(
         controls.map((label) => label.querySelector("[name]")?.name),
@@ -3398,7 +3392,7 @@
             const help = label.querySelector("small");
             if (help) slot.append(help);
           }
-          control.setAttribute("aria-label", k === "notes" && control.name === "Titre" ? "Titre de la réunion (si pas une instance)" : fieldLabel(k, control.name));
+          control.setAttribute("aria-label", fieldLabel(k, control.name));
         } else extras.append(label);
       }
       for (const field of fieldsFor(k)) {
@@ -3438,7 +3432,7 @@
     if (k === "actions" && origin?.value)
       origin.dispatchEvent(new Event("change", { bubbles: true }));
     const draftFields = ["notes", "points"].includes(k)
-      ? ["Titre", "Contenu", ...(k === "points" ? ["Decision"] : [])].flatMap(field => {
+      ? ["Titre", "Contenu", ...(k === "points" ? ["Decision"] : ["Nom"])].flatMap(field => {
           const m = col(k, field), control = $("editForm").elements.namedItem(field);
           return m?.type === "Text" && !m.isFormula && control
             ? [{ field, ref: m.id, control, base: control.value }] : [];
@@ -4106,7 +4100,7 @@
       if (r && ["notes", "points"].includes(k)) {
         const fresh = rows(await grist.docApi.fetchTable(targetTable)).find(row => row.id === r.id);
         if (!fresh) throw Error("Cet élément n’existe plus. Le brouillon local est conservé.");
-        for (const field of ["Titre", "Contenu", "Decision"]) {
+        for (const field of ["Titre", "Nom", "Contenu", "Decision"]) {
           const column = cfg(k).fields?.[field];
           if (column && Object.hasOwn(fields, column) && JSON.stringify(fresh[column] ?? "") !== JSON.stringify(r[column] ?? ""))
             throw Error("Le texte « " + fieldLabel(k, field) + " » a changé dans Grist. Le brouillon est conservé ; copiez-le puis rouvrez l’élément pour comparer les versions.");
