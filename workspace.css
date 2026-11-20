@@ -407,6 +407,24 @@ select[multiple] {
   font-weight: 700;
 }
 #quickUpdateError { color: #a32424; }
+#noteDraftPanel {
+  margin: 10px 0;
+  padding: 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #23334a;
+  background: #f1f5f9;
+  font-size: 13px;
+}
+.note-draft-recovery { border-top: 1px solid #cbd5e1; padding: 8px 0; }
+.note-draft-recovery pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 220px;
+  overflow: auto;
+  font: inherit;
+}
+.note-draft-recovery button { margin: 5px 5px 0 0; }
 .tree-row[draggable="true"] {
   cursor: grab;
 }

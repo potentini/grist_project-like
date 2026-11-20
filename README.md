@@ -264,6 +264,18 @@ Les notifications de configuration Grist ne réinitialisent plus un mapping en c
 
 ## Suivi des notes et réunions
 
+### Brouillons locaux des textes
+
+En création et en modification d’une réunion ou d’un point, les champs Texte modifiables **Titre**, **Contenu** et, pour un point, **Decision**, sont conservés localement pendant la saisie. L’indicateur précise que le brouillon est stocké sur ce navigateur et n’est pas enregistré dans Grist. Aucun enregistrement automatique dans Grist n’est déclenché : **Enregistrer** reste nécessaire.
+
+Après un rechargement ou une fermeture, rouvrir le même élément en édition pour voir les brouillons retrouvés, leur date et un aperçu des textes. Choisir **Reprendre le brouillon** ou **Supprimer ce brouillon** ; aucune reprise n’est automatique. Pour une nouvelle réunion, rouvrir sa création ; pour un nouveau point, repartir de la même réunion de rattachement. Seuls les textes sont repris : vérifier les dates, participants et rattachements avant d’enregistrer. Si le mapping a changé, l’aperçu reste copiable mais une reprise incompatible est désactivée.
+
+**Annuler** ou Échap ferme la saisie et conserve son brouillon. Un enregistrement réussi efface le brouillon de cette saisie et celui qui a été repris ; les autres brouillons indépendants restent disponibles. Un refus d’écriture ou un texte modifié entre-temps dans Grist conserve le brouillon et affiche une erreur, sans écraser la modification distante. Les brouillons sont séparés par document, table, élément et session de saisie ; ils ne sont pas synchronisés entre appareils ou profils de navigateur. Effacer les données du navigateur supprime également les brouillons. Un stockage plein ou inaccessible est signalé explicitement : la saisie reste possible, mais il faut alors copier les textes avant de quitter. Les formules ne sont jamais reprises dans un champ modifiable.
+
+Vérification : `node tests/local-note-drafts.cjs` (serveur local sur 8766). Le module `local-note-drafts.js` ne réalise aucune écriture Grist.
+
+### Consultation par instance ou projet
+
 Le bouton **Suivi**, uniquement dans la barre de la liste **Notes et réunions**, ouvre une popup de consultation. Aucun champ supplémentaire ni changement de table n’est nécessaire.
 
 - **Par instance** : choisir une instance (texte, choix ou référence Grist), puis lire les réunions et leurs points regroupés par projet. Les notes générales sans projet ont leur propre groupe. « Sans instance » permet de retrouver les réunions ponctuelles.

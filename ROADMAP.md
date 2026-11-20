@@ -2,6 +2,14 @@
 
 Cette feuille conserve les évolutions discutées et reportées. Les sujets ci-dessous ne sont pas implémentés et leur présence ne vaut pas autorisation de développement. Ajouter ici les nouveaux sujets explicitement laissés pour plus tard, avec les décisions déjà prises et les questions ouvertes.
 
+## Enregistrement automatique des notes dans Grist
+
+Statut : reporté explicitement le 20 novembre 2026. Seul le brouillon local avec récupération des textes de réunions et points est développé à ce stade ; Enregistrer reste nécessaire pour écrire dans Grist.
+
+Piste à reprendre : compléter le brouillon local par une sauvegarde dans Grist après une pause de saisie (environ trois secondes), avec un intervalle maximal pendant une frappe continue. Afficher clairement les états Enregistrement, Enregistré et Échec réseau, et conserver le brouillon jusqu’à confirmation effective de Grist. Le rythme exact reste à décider.
+
+Limiter initialement cette sauvegarde aux textes de réunions et points, après création effective de la ligne. Préserver les confirmations des rattachements et opérations structurelles. Ne pas écraser une modification concurrente ; étudier une comparaison explicite des versions. Clarifier le sens de Fermer, Annuler et d’un éventuel rétablissement de la version d’ouverture après les premières sauvegardes automatiques. Aucune sauvegarde automatique dans Grist n’est autorisée par cette inscription.
+
 ## Prise de notes de réunion et rattachements rapides
 
 Statut : à étudier et à réaliser ultérieurement. Discussion du 15 novembre 2026.

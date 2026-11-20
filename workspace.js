@@ -891,6 +891,8 @@
     return true;
   }
   const demo = new URLSearchParams(location.search).has("demo");
+  let noteDraftScope = null;
+  const noteDrafts = LocalNoteDrafts($("editForm"), $("noteDraftPanel"));
   function message(s, error = false) {
     $("message").textContent = s;
     $("message").classList.toggle("error", error);
@@ -3415,6 +3417,15 @@
     const origin = $("editForm").elements.namedItem("PointOrigine");
     if (k === "actions" && origin?.value)
       origin.dispatchEvent(new Event("change", { bubbles: true }));
+    const draftFields = ["notes", "points"].includes(k)
+      ? ["Titre", "Contenu", ...(k === "points" ? ["Decision"] : [])].flatMap(field => {
+          const m = col(k, field), control = $("editForm").elements.namedItem(field);
+          return m?.type === "Text" && !m.isFormula && control
+            ? [{ field, ref: m.id, control, base: control.value }] : [];
+        }) : [];
+    noteDrafts.start({ scope: noteDraftScope, table: cfg(k).tableRef || cfg(k).table,
+      row: r?.id, context: k === "points" ? $("editForm").elements.namedItem("NoteOrigine")?.value || "" : "",
+      fields: draftFields });
   }
   const editorSearchObservers = [];
   document.addEventListener("pointerdown", (event) => {
@@ -3801,6 +3812,7 @@
   }
   function endEdit() {
     if (busy) return;
+    noteDrafts.finish();
     editorSearchObservers
       .splice(0)
       .forEach((observer) => observer.disconnect());
@@ -3914,6 +3926,7 @@
     e.preventDefault();
     if (busy || !editionEnabled || moving) return;
     busy = true;
+    noteDrafts.lock(true);
     $("save").disabled = true;
     let targetTable=cfg(editing?.k).table;
     try {
@@ -4070,10 +4083,20 @@
             delete fields[key];
         }
       }
+      if (r && ["notes", "points"].includes(k)) {
+        const fresh = rows(await grist.docApi.fetchTable(targetTable)).find(row => row.id === r.id);
+        if (!fresh) throw Error("Cet élément n’existe plus. Le brouillon local est conservé.");
+        for (const field of ["Titre", "Contenu", "Decision"]) {
+          const column = cfg(k).fields?.[field];
+          if (column && Object.hasOwn(fields, column) && JSON.stringify(fresh[column] ?? "") !== JSON.stringify(r[column] ?? ""))
+            throw Error("Le texte « " + fieldLabel(k, field) + " » a changé dans Grist. Le brouillon est conservé ; copiez-le puis rouvrez l’élément pour comparer les versions.");
+        }
+      }
       const result=await grist.docApi.applyUserActions([
         [r ? "UpdateRecord" : "AddRecord", targetTable, r?.id ?? null, fields],
         ...dependentLinkUpdates(k, r, fields),
       ]);
+      noteDrafts.saved();
       const createdId=!r?(result?.retValues?.[0] ?? (Array.isArray(result)?result[0]:null)):null;
       await refreshNativeScope();
       busy = false;
@@ -4083,6 +4106,7 @@
     } catch (err) {
       $("editError").textContent = `Enregistrement impossible dans « ${targetTable || "destination non définie"} » : ` + err.message;
     } finally {
+      noteDrafts.lock(false);
       busy = false;
       $("save").disabled = false;
     }
@@ -4178,6 +4202,11 @@
         const storedFilters=await grist.getOption(advancedOptionKey);
         if(filterRevision===advancedRevision)receiveAdvancedFilters(storedFilters);
       }catch(error){console.warn('Lecture des filtres enregistrés indisponible',error);}
+      try {
+        const docId = await grist.docApi.getDocName();
+        const host = document.referrer ? new URL(document.referrer).origin : "";
+        noteDraftScope = typeof docId === "string" && docId ? JSON.stringify([host, docId]) : null;
+      } catch { noteDraftScope = null; }
       await refreshMetadata();
       mapping = mappingWasSaved ? mapping : detect(mapping);
       const beforeTableRefs=JSON.stringify(mapping);
@@ -4686,8 +4715,9 @@
     await load();
   };
   $("cancel").onclick = endEdit;
-  $("editor").addEventListener("cancel", () => {
-    editing = null;
+  $("editor").addEventListener("cancel", (event) => {
+    event.preventDefault();
+    endEdit();
   });
   $("editForm").onchange = (e) => {
     if (editing?.k === "actions" && e.target.name === "PointOrigine") {
