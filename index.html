@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Projets, notes et actions — Grist</title>
-    <link rel="stylesheet" href="workspace.css?v=20261119-conversion-parent" />
+    <link rel="stylesheet" href="workspace.css?v=20261120-quick-actions" />
     <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
     <link rel="stylesheet" href="form-theme.css?v=20261117-shared-select" />
     <link rel="stylesheet" href="meeting-followup.css?v=20261116-followup" />
@@ -207,8 +207,15 @@
       <p class="timeline-landscape-hint">Pour une vue plus large, tournez votre téléphone en paysage.</p>
       <iframe id="timelineFrame" title="Table et timeline du projet"></iframe>
     </dialog>
+    <dialog id="quickUpdateDialog" aria-labelledby="quickUpdateTitle">
+      <h2 id="quickUpdateTitle"></h2>
+      <p id="quickUpdateItem"></p>
+      <div id="quickUpdateChoices" class="actions"></div>
+      <p id="quickUpdateError" role="alert"></p>
+      <button id="quickUpdateClose" type="button">Annuler</button>
+    </dialog>
     <script src="hierarchy-sort.js?v=20261113-sorting"></script>
     <script src="meeting-followup.js?v=20261116-followup"></script>
-    <script src="workspace.js?v=20261119-conversion-parent"></script>
+    <script src="workspace.js?v=20261120-quick-actions"></script>
   </body>
 </html>

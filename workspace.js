@@ -2012,8 +2012,75 @@
     const remove = editionEnabled && movable && ["right-dependents", "right-actions"].includes(context) && parent
       ? `<button type="button" class="dependent-delete" data-removal="delete" data-removal-kind="${k}" data-removal-id="${r.id}" data-parent-kind="${parent.k}" data-parent-id="${parent.r.id}" aria-label="Supprimer ${esc(title(k, r))}" title="Supprimer cet élément"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6"/></svg></button>`
       : "";
-    return `<div class="tree-node" data-tree-kind="${k}" data-tree-id="${r.id}"><div class="tree-row" data-drop-kind="${k}" data-drop-id="${r.id}" ${movable ? `draggable="${editionEnabled && !editing && !moving && !demo}" data-drag-kind="${k}" data-drag-id="${r.id}"` : ""}>${kids.length ? `<button class="fold" type="button" data-fold="${key}" aria-expanded="${open}" aria-label="${open ? "Plier" : "Déplier"} ${esc(title(k, r))}">${open ? "▾" : "▸"}</button>` : '<span class="fold-spacer"></span>'}${item(k, r, 0, context.startsWith("left-"))}${editionEnabled && movable ? `<button class="move-button" type="button" data-move-kind="${k}" data-move-id="${r.id}" aria-label="Déplacer ${esc(title(k, r))}" title="Déplacer"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20 20 4M7 4h13v13"/></svg></button>` : ""}${remove}</div>${kids.length ? `<div class="tree-children" ${open ? "" : "hidden"}>${kids.map((n) => branch(n, context, { k, r })).join("")}</div>` : ""}</div>`;
+    const move = editionEnabled && movable ? `<button class="move-button" type="button" data-move-kind="${k}" data-move-id="${r.id}" aria-label="Déplacer ${esc(title(k, r))}" title="Déplacer"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20 20 4M7 4h13v13"/></svg></button>` : "";
+    const quickButtons = remove ? `<div class="card-quick-actions">${move}${remove}${["Avancement", "Statut"].map((field) => {
+      const m = col(k, field), supported = field === "Avancement" ? /^(Numeric|Int)$/.test(m?.type || "") : /^(Text|Choice)$/.test(m?.type || "");
+      const enabled = supported && !m.isFormula;
+      return `<button type="button" class="card-quick-button" data-quick-field="${field}" data-quick-kind="${k}" data-quick-id="${r.id}" ${enabled ? "" : "disabled"} aria-label="Modifier ${field === "Statut" ? "le statut" : "l’avancement"} de ${esc(title(k, r))}" title="${field}${enabled ? "" : " : champ non mappé, calculé ou non modifiable"}">${field === "Avancement" ? '<span aria-hidden="true">%</span>' : '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 6h12M9 12h12M9 18h12M3 6h2M3 12h2M3 18h2"/></svg>'}</button>`;
+    }).join("")}</div>` : move;
+    return `<div class="tree-node" data-tree-kind="${k}" data-tree-id="${r.id}"><div class="tree-row" data-drop-kind="${k}" data-drop-id="${r.id}" ${movable ? `draggable="${editionEnabled && !editing && !moving && !demo}" data-drag-kind="${k}" data-drag-id="${r.id}"` : ""}>${kids.length ? `<button class="fold" type="button" data-fold="${key}" aria-expanded="${open}" aria-label="${open ? "Plier" : "Déplier"} ${esc(title(k, r))}">${open ? "▾" : "▸"}</button>` : '<span class="fold-spacer"></span>'}${item(k, r, 0, context.startsWith("left-"))}${quickButtons}</div>${kids.length ? `<div class="tree-children" ${open ? "" : "hidden"}>${kids.map((n) => branch(n, context, { k, r })).join("")}</div>` : ""}</div>`;
   }
+  let quickUpdate = null;
+  function openQuickUpdate(k, id, field) {
+    if (!editionEnabled || editing || moving || demo) return;
+    const row = (data[k] || []).find(r => r.id === id), m = col(k, field);
+    if (!row || inactive(k, row) || !m || m.isFormula) return;
+    let choices;
+    if (field === "Avancement" && /^(Numeric|Int)$/.test(m.type)) choices = [0, 25, 50, 75, 100];
+    else if (field === "Statut" && /^(Text|Choice)$/.test(m.type)) {
+      if (m.type === "Choice") {
+        try { choices = JSON.parse(m.widgetOptions || "{}").choices || []; } catch { choices = []; }
+      } else choices = [...new Set((data[k] || []).map(r => val(k, r, field)).filter(Boolean))];
+      choices = [...new Set(["", ...choices, val(k, row, field)])];
+    } else return;
+    quickUpdate = { k, id, field, column: m.colId, before: structuredClone(val(k, row, field)), choices };
+    $("quickUpdateTitle").textContent = field === "Avancement" ? "Modifier l’avancement" : "Modifier le statut";
+    $("quickUpdateItem").textContent = title(k, row);
+    $("quickUpdateError").textContent = "";
+    $("quickUpdateChoices").innerHTML = choices.map((v, i) => {
+      const current = field === "Avancement" ? progressPercent(k, row) === v : val(k, row, field) === v;
+      return `<button type="button" data-quick-choice="${i}" aria-pressed="${current}">${esc(field === "Avancement" ? v + " %" : v || "Non renseigné")}</button>`;
+    }).join("");
+    $("quickUpdateDialog").showModal();
+  }
+  $("quickUpdateClose").onclick = () => { if (!moving) $("quickUpdateDialog").close(); };
+  $("quickUpdateDialog").addEventListener("cancel", e => { if (moving) e.preventDefault(); });
+  $("quickUpdateChoices").onclick = async event => {
+    const button = event.target.closest("[data-quick-choice]");
+    if (!button || !quickUpdate || !editionEnabled || editing || moving) return;
+    const q = quickUpdate;
+    moving = true;
+    syncEdition();
+    $("quickUpdateChoices").querySelectorAll("button").forEach(b => b.disabled = true);
+    try {
+      await refreshMetadata();
+      const m = col(q.k, q.field);
+      if (!m || m.colId !== q.column || m.isFormula ||
+          !(q.field === "Avancement" ? /^(Numeric|Int)$/.test(m.type) : /^(Text|Choice)$/.test(m.type)))
+        throw Error("Le mapping ou la nature du champ a changé. Fermez puis rouvrez ce choix.");
+      const fresh = rows(await grist.docApi.fetchTable(mappedTableId(q.k))).find(r => r.id === q.id);
+      if (!fresh || inactive(q.k, fresh)) throw Error("Cet élément n’est plus actif.");
+      if (JSON.stringify(val(q.k, fresh, q.field)) !== JSON.stringify(q.before))
+        throw Error("La valeur a changé entre-temps. Fermez puis rouvrez ce choix.");
+      const selected = q.choices[Number(button.dataset.quickChoice)];
+      if (q.field === "Statut" && m.type === "Choice" && selected && selected !== q.before &&
+          !(JSON.parse(m.widgetOptions || "{}").choices || []).includes(selected))
+        throw Error("Ce statut n’est plus proposé par Grist.");
+      const value = q.field === "Avancement" ? selected / (progressBaseOne(q.k) ? 100 : 1) : selected;
+      if (JSON.stringify(value) !== JSON.stringify(q.before))
+        await grist.docApi.applyUserActions([["UpdateRecord", mappedTableId(q.k), q.id, { [m.colId]: value }]]);
+      $("quickUpdateDialog").close();
+      moving = false;
+      await load();
+      message("Modification enregistrée.");
+    } catch (error) {
+      $("quickUpdateError").textContent = "Modification impossible : " + error.message;
+    } finally {
+      moving = false;
+      syncEdition();
+      $("quickUpdateChoices").querySelectorAll("button").forEach(b => b.disabled = false);
+    }
+  };
   function syncEdition() {
     updateHistoryControls();
     $("editionButton").setAttribute("aria-pressed", String(editionEnabled));
@@ -4487,7 +4554,7 @@
     if (
       (editing || moving) &&
       e.target.closest(
-        "[data-kind], [data-new], [data-edit], [data-fold], [data-fold-all], [data-move-kind], [data-convert], [data-removal], [data-history]",
+        "[data-kind], [data-new], [data-edit], [data-fold], [data-fold-all], [data-move-kind], [data-quick-field], [data-convert], [data-removal], [data-history]",
       )
     ) {
       message(
@@ -4534,6 +4601,11 @@
             : foldState(b.dataset.fold).delete(b.dataset.fold),
         );
       render();
+      return;
+    }
+    const quick = e.target.closest("[data-quick-field]");
+    if (quick) {
+      openQuickUpdate(quick.dataset.quickKind, Number(quick.dataset.quickId), quick.dataset.quickField);
       return;
     }
     const removalButton = e.target.closest("[data-removal]");

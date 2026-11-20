@@ -100,6 +100,8 @@ Avant utilisation, ajouter et mapper les quatre colonnes décrites dans [imports
 
 ## Archivage et suppression
 
+En mode Édition, les cartes de dépendants disposant de la réaffectation et de la poubelle présentent une grille de quatre boutons : déplacement et suppression en première ligne, **Avancement (%)** et **Statut** en seconde ligne. La grille conserve la largeur des deux boutons et occupe la hauteur de la carte, avec quatre boutons de mêmes dimensions. Avancement propose 0 %, 25 %, 50 %, 75 % et 100 %, avec conversion selon la base de stockage mappée. Statut propose les choix Grist du champ, ou les valeurs déjà présentes à ce niveau pour un champ Texte, avec possibilité de vider le statut. Le choix enregistre directement la valeur sans ouvrir l’item ; Annuler ou Échap ne modifie rien. Les champs non mappés, calculés ou de type incompatible sont désactivés. Les droits Grist et les changements concurrents restent contrôlés. Vérification : `node tests/quick-card-actions.cjs`.
+
 Les commandes **Archiver…**, **Restaurer…** et **Supprimer…** sont accessibles dans le détail en mode Édition. L’archivage nécessite une colonne de données booléenne Archive dans chaque table concernée ; la suppression peut être utilisée sans cette colonne. Les données archivées sont conservées et retrouvables avec **Afficher les archivés**. Les parents archivés restent visibles comme contexte de leurs dépendants actifs.
 
 La suppression ne se fait pas en cascade et est bloquée en présence de références à l’élément. L’aperçu liste les liens à réaffecter et exige une confirmation explicite. Voir [les consignes détaillées](imports/ARCHIVAGE_SUPPRESSION.md).

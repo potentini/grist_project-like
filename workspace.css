@@ -380,6 +380,33 @@ select[multiple] {
   -webkit-text-fill-color: #fff;
   background: #b42318;
 }
+.card-quick-actions {
+  display: grid;
+  grid-template-columns: repeat(2, 30px);
+  grid-template-rows: repeat(2, minmax(30px, 1fr));
+  gap: 5px;
+  flex: 0 0 65px;
+  align-self: stretch;
+  margin: 3px 0;
+}
+.tree-row:has(> .card-quick-actions) > .item {
+  min-height: 65px;
+  box-sizing: border-box;
+}
+.card-quick-actions .card-quick-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 6px;
+}
+.tree-row .card-quick-actions > button { height: 100%; }
+#quickUpdateChoices button[aria-pressed="true"] {
+  border: 2px solid #4338ca;
+  font-weight: 700;
+}
+#quickUpdateError { color: #a32424; }
 .tree-row[draggable="true"] {
   cursor: grab;
 }
