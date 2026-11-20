@@ -1657,7 +1657,7 @@ const fixture = require("../demo.json");
   assert.equal(await bar.locator("[data-removal=delete]:not([data-removal-kind])").count(), 1);
   assert.equal(
     await page
-      .getByRole("link", { name: "Vue Table/Timeline", exact: true })
+      .getByRole("link", { name: "Table/Timeline", exact: true })
       .count(),
     1,
   );

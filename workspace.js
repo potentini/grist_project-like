@@ -904,10 +904,11 @@
     );
   }
   function fieldsFor(k) {
-    return [
+    return [...new Set([
       ...schemas[k].fields,
       ...(cfg(k).extraFields || []).map((x) => x.id),
-    ];
+      ...Object.keys(cfg(k).fields || {}),
+    ])];
   }
   function cfg(k) {
     return mapping[k] || { fields: {} };
@@ -2869,6 +2870,7 @@
         "Responsable",
         "ResponsableDiPSi",
         "Participants",
+        "Instance",
         "Date",
         "DateSource",
         "DateDebut",
@@ -3245,7 +3247,15 @@
     $("editError").textContent = "";
     const context =
       selection && (data[selection.k] || []).find((x) => x.id === selection.id);
-    $("fields").innerHTML = fieldsFor(k)
+    const editorFields = fieldsFor(k);
+    if (k === "notes") {
+      for (const field of ["Instance", "Date", "Titre"]) {
+        const index = editorFields.indexOf(field);
+        if (index >= 0) editorFields.splice(index, 1);
+      }
+      editorFields.splice(editorFields.indexOf("Type") + 1, 0, "Instance", "Date", "Titre");
+    }
+    $("fields").innerHTML = editorFields
       .filter(
         (f) =>
           cfg(k).fields?.[f] &&
@@ -3347,11 +3357,21 @@
           input = `<input name="${f}" type="number" step="any"  value="${esc(v)}">`;
         else
           input = `<input name="${f}" ${f === "Titre" ? "required" : ""} value="${esc(v)}">`;
-        return `<label>${esc(fieldLabel(k, f))}${f === "Avancement" ? `<small id="progressHelp">${progressBaseOne(k) ? "Sur base 1 : 0 à 1 ; 0,1 = 10 %" : "Sur base 100 : 0 à 100 ; 0,1 = 0,1 %"}. Virgule ou point acceptés.</small>` : ""}${input}</label>`;
+        return `<label>${esc(k === "notes" && f === "Titre" ? "Titre de la réunion (si pas une instance)" : fieldLabel(k, f))}${f === "Avancement" ? `<small id="progressHelp">${progressBaseOne(k) ? "Sur base 1 : 0 à 1 ; 0,1 = 10 %" : "Sur base 100 : 0 à 100 ; 0,1 = 0,1 %"}. Virgule ou point acceptés.</small>` : ""}${input}</label>`;
       })
       .join("");
     if (r) {
       renderDetail(true);
+      if (k === "notes") {
+        $("detail").querySelector('h2[data-slot="Titre"]')?.removeAttribute("data-slot");
+        const label = document.createElement("dt"), slot = document.createElement("dd");
+        label.textContent = "Titre de la réunion (si pas une instance)";
+        slot.dataset.slot = "Titre";
+        slot.textContent = displayValue(k, r, "Titre");
+        const date = $("detail").querySelector('[data-slot="Date"]');
+        if (date) date.after(label, slot);
+        else $("detail").querySelector("dl.meta").append(label, slot);
+      }
       const controls = [...$("fields").children];
       const editableFields = new Set(
         controls.map((label) => label.querySelector("[name]")?.name),
@@ -3378,7 +3398,7 @@
             const help = label.querySelector("small");
             if (help) slot.append(help);
           }
-          control.setAttribute("aria-label", fieldLabel(k, control.name));
+          control.setAttribute("aria-label", k === "notes" && control.name === "Titre" ? "Titre de la réunion (si pas une instance)" : fieldLabel(k, control.name));
         } else extras.append(label);
       }
       for (const field of fieldsFor(k)) {

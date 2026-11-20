@@ -264,6 +264,8 @@ Les notifications de configuration Grist ne réinitialisent plus un mapping en c
 
 ## Suivi des notes et réunions
 
+Les formulaires de réunion placent **Instance** avant **Date**, puis **Titre de la réunion (si pas une instance)**, en création comme en modification. Ces champs doivent être mappés ; les colonnes calculées restent en lecture seule. Les champs supplémentaires mappés sont également éditables selon leur type et les droits Grist. Dans la barre supérieure PC/tablette, **Table/Timeline** rejoint les boutons de navigation ; un séparateur distingue les vues des commandes Édition, Mapping et Actualiser. L’accès aux timelines reste masqué sur téléphone.
+
 ### Brouillons locaux des textes
 
 En création et en modification d’une réunion ou d’un point, les champs Texte modifiables **Titre**, **Contenu** et, pour un point, **Decision**, sont conservés localement pendant la saisie. L’indicateur précise que le brouillon est stocké sur ce navigateur et n’est pas enregistré dans Grist. Aucun enregistrement automatique dans Grist n’est déclenché : **Enregistrer** reste nécessaire.

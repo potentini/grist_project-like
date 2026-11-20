@@ -78,6 +78,25 @@ nav {
   display: flex;
   gap: 4px;
 }
+header > nav {
+  flex-wrap: wrap;
+  padding-right: 12px;
+  margin-right: 8px;
+  border-right: 1px solid #94a3b8;
+}
+header > nav .view-button {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: #23334a;
+  background: #fff;
+  text-decoration: none;
+  font-size: 13px;
+}
+header > nav .view-button:hover,
+header > nav .view-button:focus-visible { background: #eef2ff; }
 a {
   color: #4338ca;
   padding: 8px;

@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Projets, notes et actions — Grist</title>
-    <link rel="stylesheet" href="workspace.css?v=20261120-local-drafts" />
+    <link rel="stylesheet" href="workspace.css?v=20261120-meeting-form" />
     <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
     <link rel="stylesheet" href="form-theme.css?v=20261117-shared-select" />
     <link rel="stylesheet" href="meeting-followup.css?v=20261116-followup" />
@@ -19,6 +19,7 @@
         <button data-view="projects">Projets</button
         ><button data-view="notes">Notes et réunions</button
         ><button data-view="actions">À faire</button>
+        <a class="view-button" href="timeline.html">Table/Timeline</a>
       </nav>
       <details id="phoneNav" class="phone-only">
         <summary id="phoneViewLabel">Actions</summary>
@@ -40,8 +41,7 @@
       </button>
       <button id="editionButton" aria-pressed="false">Édition désactivée</button
       ><button id="mappingButton">Mapping</button
-      ><button id="refresh">Actualiser</button
-      ><a href="timeline.html">Vue Table/Timeline</a>
+      ><button id="refresh">Actualiser</button>
     </header>
     <div id="message" role="status"></div>
     <div id="phoneSearch" class="phone-only" role="search"></div>
@@ -217,7 +217,7 @@
     </dialog>
     <script src="hierarchy-sort.js?v=20261113-sorting"></script>
     <script src="meeting-followup.js?v=20261116-followup"></script>
-    <script src="local-note-drafts.js?v=20261120-local-drafts"></script>
-    <script src="workspace.js?v=20261120-local-drafts"></script>
+    <script src="local-note-drafts.js?v=20261120-meeting-form"></script>
+    <script src="workspace.js?v=20261120-meeting-form"></script>
   </body>
 </html>
