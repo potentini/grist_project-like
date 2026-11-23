@@ -1,0 +1,51 @@
+/* Preview-only text editor: explicit save, native controls, no rich-text HTML. */
+.meeting-mentions { margin: 10px 0 18px; font-size: 14px; white-space: normal; }
+.mention-hint { color: #52647b; font-size: 12px; margin: 7px 0; }
+.mention-message { color: #23334a; font-size: 13px; }
+.mention-proposal, .mention-block {
+  background: #f4faf7;
+  border: 1px solid #bfd2cb;
+  border-left: 4px solid #007c68;
+  border-radius: 6px;
+  padding: 12px;
+  margin: 10px 0;
+  min-width: 0;
+}
+.mention-proposal h4 { margin: 0 0 8px; font-size: 14px; }
+.mention-block label, .mention-proposal label { display: block; margin: 10px 0; }
+.mention-block input, .mention-block textarea, .mention-proposal input { display: block; width: 100%; box-sizing: border-box; }
+.mention-block textarea { min-height: 90px; resize: vertical; }
+.mention-block button, .mention-proposal button { margin: 5px 5px 0 0; }
+.mention-paragraph { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 200px; overflow: auto; }
+.mention-chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0; }
+.mention-chips button { white-space: normal; text-align: left; overflow-wrap: anywhere; max-width: 100%; }
+.mention-menu {
+  color: #23334a;
+  background: #fff;
+  border: 1px solid #94a3b8;
+  border-radius: 6px;
+  padding: 5px;
+  box-shadow: 0 5px 16px #23334a26;
+  box-sizing: border-box;
+  overflow: auto;
+  z-index: 100;
+}
+.mention-menu[hidden], .mention-proposal[hidden] { display: none; }
+.mention-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  border-color: transparent;
+  padding: 9px;
+  box-sizing: border-box;
+}
+.mention-menu button[aria-selected="true"] { background: #eef2ff; border-color: #4338ca; }
+.mention-menu small { color: #52647b; }
+body.phone-mode .mention-menu button, body.phone-mode .meeting-mentions button { min-height: 44px; }
+body.phone-mode .meeting-mentions input, body.phone-mode .meeting-mentions textarea { font-size: 16px; }
+.preview-banner { padding: 6px 16px; color: #664300; background: #fff4d6; font-size: 12px; }
+.meeting-point-reading { margin: 0 0 18px 32px; padding-left: 10px; border-left: 2px solid #bfd2cb; }
+.meeting-point-reading h4 { margin: 8px 0 5px; font-size: 13px; }
+.meeting-point-reading p { font-size: 12px; overflow-wrap: anywhere; }

@@ -14,27 +14,31 @@ window.LocalNoteDrafts = function (form, panel) {
     try {
       const fields = s.fields.filter(f => f.control.value !== f.base)
         .map(f => ({ field: f.field, ref: f.ref, base: f.base, value: f.control.value }));
-      if (!fields.length) {
+      const extension = s.extension?.capture() || null;
+      if (!fields.length && !extension) {
         if (s.saved) remove(s.key, s.saved);
         s.saved = null;
         status('Aucune modification de texte à conserver.');
-        return;
+        return true;
       }
-      const value = JSON.stringify({ version: 1, date: new Date().toISOString(), fields });
+      const value = JSON.stringify({ version: extension ? 2 : 1, date: new Date().toISOString(), fields, ...(extension ? { extension } : {}) });
       storage().setItem(s.key, value);
       s.saved = value;
       status('Brouillon local conservé à ' + new Date().toLocaleTimeString('fr-FR') + ' sur ce navigateur. Non enregistré dans Grist.');
+      return true;
     } catch {
       status('Brouillon local indisponible (stockage refusé ou plein). Gardez cette saisie ouverte et copiez vos textes avant de quitter.');
+      return false;
     }
   }
   form.addEventListener('input', e => {
     if (session?.fields.some(f => f.control === e.target)) flush();
   });
+  form.addEventListener('notecomposerchange', flush);
   window.addEventListener('pagehide', flush);
   document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
   return {
-    start({ scope, table, row, context, fields }) {
+    start({ scope, table, row, context, fields, extension = null }) {
       session = null;
       panel.replaceChildren();
       panel.hidden = !fields.length;
@@ -43,7 +47,7 @@ window.LocalNoteDrafts = function (form, panel) {
       p.setAttribute('role', 'status');
       panel.append(p);
       const prefix = scope ? 'grist_note_draft_v1:' + JSON.stringify([scope, table, row ?? ['new', context]]) + ':' : null;
-      session = { prefix, key: prefix + crypto.randomUUID(), fields, status: p, used: [], saved: null };
+      session = { prefix, key: prefix + crypto.randomUUID(), fields, status: p, used: [], saved: null, extension };
       if (!prefix) {
         status('Brouillon local indisponible : document Grist non identifié.');
         return;
@@ -56,7 +60,7 @@ window.LocalNoteDrafts = function (form, panel) {
           if (!key?.startsWith(prefix)) continue;
           try {
             const raw = storage().getItem(key), draft = JSON.parse(raw);
-            if (draft?.version === 1 && Array.isArray(draft.fields) && draft.fields.length &&
+            if ([1, 2].includes(draft?.version) && Array.isArray(draft.fields) && (draft.fields.length || draft.extension) &&
                 draft.fields.every(f => f && typeof f.field === 'string' && typeof f.value === 'string' && typeof f.base === 'string'))
               prior.push({ key, raw, draft });
           } catch { /* An invalid record must not prevent editing. */ }
@@ -78,7 +82,13 @@ window.LocalNoteDrafts = function (form, panel) {
           const recover = document.createElement('button'), discard = document.createElement('button');
           recover.type = discard.type = 'button';
           recover.textContent = 'Reprendre le brouillon';
-          recover.disabled = compatible.length !== entry.draft.fields.length;
+          recover.disabled = compatible.length !== entry.draft.fields.length ||
+            (entry.draft.version === 2 && !extension?.compatible(entry.draft.extension));
+          if (entry.draft.version === 2) {
+            note.textContent = (changed ? 'Le texte Grist a changé. Comparez avant de reprendre. ' : '') +
+              'Ce brouillon contient les points et leurs associations. Les autres dates et rattachements du formulaire restent à vérifier.';
+            text.textContent += '\n\n' + (extension?.preview(entry.draft.extension) || JSON.stringify(entry.draft.extension, null, 2));
+          }
           if (recover.disabled) note.textContent = 'Le mapping a changé : reprise automatique indisponible. Copiez les textes utiles depuis l’aperçu.';
           discard.textContent = 'Supprimer ce brouillon';
           recover.onclick = () => {
@@ -89,6 +99,7 @@ window.LocalNoteDrafts = function (form, panel) {
               session.saved = null;
             }
             for (const stored of compatible) fields.find(f => f.field === stored.field).control.value = stored.value;
+            if (entry.draft.version === 2) extension.restore(entry.draft.extension);
             session.used.push(entry);
             box.remove();
             flush();
@@ -103,6 +114,7 @@ window.LocalNoteDrafts = function (form, panel) {
         }
       } catch { status('Brouillon local indisponible : le stockage de ce navigateur est inaccessible.'); }
     },
+    flush,
     finish() { flush(); session = null; panel.hidden = true; },
     lock(value) {
       locked = value;

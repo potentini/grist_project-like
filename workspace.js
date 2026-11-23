@@ -896,6 +896,7 @@
   const demo = new URLSearchParams(location.search).has("demo");
   let noteDraftScope = null;
   const noteDrafts = LocalNoteDrafts($("editForm"), $("noteDraftPanel"));
+  let meetingComposer = null;
   function message(s, error = false) {
     $("message").textContent = s;
     $("message").classList.toggle("error", error);
@@ -2936,10 +2937,14 @@
       );
       if (related.length)
         html +=
-          "<h3>Points de discussion</h3>" +
+          `<section ${k === "notes" ? 'data-meeting-points' : ''}><h3>Points de discussion</h3>` +
           related
-            .map((x) => branch(tree("points", x), "right-points"))
-            .join("");
+            .map((x) => branch(tree("points", x), "right-points") + (k === "notes"
+              ? `<div class="meeting-point-reading">${["Contenu", "Decision"].filter(f => val("points", x, f)).map(f =>
+                `<h4>${esc(f === "Contenu" ? "Échanges" : "Décision")}</h4><div class="text">${esc(displayValue("points", x, f))}</div>`).join("")}${["Projets", "Chantiers", "Taches"].filter(f => val("points", x, f) && targets("points", x, f).length).map(f =>
+                `<p>${esc(fieldLabel("points", f))} : ${esc(displayValue("points", x, f))}</p>`).join("")}</div>`
+              : ""))
+            .join("") + "</section>";
     }
     if (k === "notes")
       html +=
@@ -3198,6 +3203,79 @@
       );
     return code;
   }
+  const pointRefFields = { projects: "Projets", streams: "Chantiers", tasks: "Taches" };
+  function meetingMentionSchema(kind) {
+    return JSON.stringify([kind, ...["notes", "points", "projects", "streams", "tasks"].map(k => [
+      k, cfg(k).tableRef || cfg(k).table, cfg(k).table,
+      ...["Titre", "Nom", "Contenu", "Decision", "Code", "NoteOrigine", "Projets", "Chantiers", "Taches", "Ordre"].map(f => {
+        const m = col(k, f); return [f, m?.id, m?.colId, m?.type, !!m?.isFormula];
+      }),
+    ])]);
+  }
+  function createMeetingComposer(k, r) {
+    if (!["notes", "points"].includes(k)) return null;
+    const form = $("editForm"), content = form.elements.namedItem("Contenu");
+    if (!content || col(k, "Contenu")?.type !== "Text" || col(k, "Contenu")?.isFormula) return null;
+    const writable = field => col("points", field)?.type === "Text" && !col("points", field).isFormula;
+    const origin = col("points", "NoteOrigine");
+    const canCreate = !!cfg("points").table && writable("Titre") && writable("Contenu") && origin && !origin.isFormula &&
+      (origin.type === "Text" || /^(Ref|RefList):/.test(origin.type) && origin.type.split(":")[1] === cfg("notes").table);
+    if (k === "notes" && !canCreate) {
+      const help = document.createElement("p"); help.className = "mention-hint";
+      help.textContent = "Pour utiliser @, mappez Points.Titre et Points.Contenu en Texte modifiable, ainsi que Points.NoteOrigine vers les réunions. Les notes générales restent utilisables.";
+      content.after(help); return null;
+    }
+    const candidates = [], byRef = new Map();
+    for (const kind of Object.keys(pointRefFields)) for (const row of data[kind] || []) {
+      const parents = kind === "projects" ? [] : kind === "streams" ? targets(kind, row, "Projet").map(p => ["projects", p]) :
+        targets(kind, row, "Chantier").flatMap(s => [...targets("streams", s, "Projet").map(p => ["projects", p]), ["streams", s]]);
+      const path = [...parents.map(([kind, row]) => title(kind, row)), title(kind, row)].join(" › ");
+      const entry = { kind, id: row.id, path, label: (cfg(kind).label || schemas[kind].label) + " — " + title(kind, row),
+        search: path + " " + val(kind, row, "Code") + " " + parents.map(([kind, row]) => val(kind, row, "Code")).join(" ") };
+      byRef.set(kind + ":" + row.id, entry);
+      if (!inactive(kind, row)) candidates.push(entry);
+    }
+    const refsFor = row => Object.entries(pointRefFields).flatMap(([kind, field]) => targets("points", row, field).map(r => ({ kind, id: r.id })));
+    const unresolved = (row, kind) => {
+      const field = pointRefFields[kind], m = col("points", field);
+      const raw = values(val("points", row, field)).flatMap(v => m?.type === "Text" && typeof v === "string" ? v.split(",").map(v => v.trim()) : [v]).filter(v => v !== 0 && v !== "");
+      return raw.length !== targets("points", row, field).length;
+    };
+    const blocks = k === "notes" && r ? ordered("points").filter(p => !inactive("points", p) && has("points", p, "NoteOrigine", r)).map(p => ({
+      uid: "point:" + p.id, id: p.id, title: String(val("points", p, "Titre")), content: String(val("points", p, "Contenu")),
+      decision: String(val("points", p, "Decision")), refs: refsFor(p), baseRefs: refsFor(p), base: structuredClone(p),
+      lockedRefs: Object.keys(pointRefFields).filter(kind => unresolved(p, kind)),
+    })) : [];
+    const readRefs = () => Object.entries(pointRefFields).flatMap(([kind, field]) => {
+      const select = form.elements.namedItem(field);
+      return select ? [...select.selectedOptions].filter(o => Number(o.value) > 0).map(o => ({kind, id: Number(o.value)})) : r ? targets("points", r, field).map(row => ({kind, id: row.id})) : [];
+    });
+    const composer = MeetingMentions.create({ kind: k, form, content, enabled: true, schema: meetingMentionSchema(k), candidates, blocks,
+      writable, hasField: field => !!col("points", field), label: ref => byRef.get(ref.kind + ":" + ref.id)?.path,
+      canLink(kind, block) {
+        const m = col("points", pointRefFields[kind]);
+        return !!m && !m.isFormula && (m.type === "Text" || m.type === "RefList:" + cfg(kind).table) &&
+          !(block ? block.lockedRefs?.includes(kind) : k === "points" && r && unresolved(r, kind));
+      },
+      initialRefs: k === "points" ? readRefs() : [], readRefs,
+      writeRefs(refs) {
+        for (const [kind, field] of Object.entries(pointRefFields)) {
+          const select = form.elements.namedItem(field); if (!select) continue;
+          const ids = new Set(refs.filter(ref => ref.kind === kind).map(ref => String(ref.id)));
+          if (select.dataset.hierarchyOptions) select.innerHTML = select.dataset.hierarchyOptions;
+          for (const id of ids) if (![...select.options].some(o => o.value === id)) {
+            const row = (data[kind] || []).find(r => r.id === Number(id));
+            select.add(new Option(row ? title(kind, row) : "Élément non retrouvé #" + id, id));
+          }
+          for (const option of select.options) option.selected = ids.has(option.value);
+          select.dataset.hierarchyOptions = select.innerHTML;
+          select.dispatchEvent(new Event("change"));
+        }
+      },
+    });
+    if (composer && k === "notes") form.querySelector('[data-meeting-points]')?.setAttribute("hidden", "");
+    return composer;
+  }
   function openEditor(k, r = null) {
     if (r && archived(k, r)) {
       message("Restaurez cet élément avant de le modifier.");
@@ -3432,6 +3510,7 @@
     const origin = $("editForm").elements.namedItem("PointOrigine");
     if (k === "actions" && origin?.value)
       origin.dispatchEvent(new Event("change", { bubbles: true }));
+    meetingComposer = createMeetingComposer(k, r);
     const draftFields = ["notes", "points"].includes(k)
       ? ["Titre", "Contenu", ...(k === "points" ? ["Decision"] : ["Nom"])].flatMap(field => {
           const m = col(k, field), control = $("editForm").elements.namedItem(field);
@@ -3440,7 +3519,7 @@
         }) : [];
     noteDrafts.start({ scope: noteDraftScope, table: cfg(k).tableRef || cfg(k).table,
       row: r?.id, context: k === "points" ? $("editForm").elements.namedItem("NoteOrigine")?.value || "" : "",
-      fields: draftFields });
+      fields: draftFields, extension: meetingComposer?.draft });
   }
   const editorSearchObservers = [];
   document.addEventListener("pointerdown", (event) => {
@@ -3828,6 +3907,7 @@
   function endEdit() {
     if (busy) return;
     noteDrafts.finish();
+    meetingComposer?.destroy(); meetingComposer = null;
     editorSearchObservers
       .splice(0)
       .forEach((observer) => observer.disconnect());
@@ -3937,16 +4017,58 @@
     item?.scrollIntoView({block:'nearest'});
     message(`« ${title(kind,record)} » a été enregistré dans « ${cfg(kind).table} ».`);
   }
+  async function saveMeetingComposer(kind, record, fields) {
+    const state = meetingComposer.snapshot();
+    if (state.schema !== meetingMentionSchema(kind))
+      throw Error("Le mapping des points ou des rattachements a changé. Le brouillon est conservé : copiez les textes avant de rouvrir.");
+    const fresh = Object.fromEntries(await Promise.all(["notes", "points", "projects", "streams", "tasks", "actions"].map(async k => [
+      k, cfg(k).table ? rows(await grist.docApi.fetchTable(mappedTableId(k))) : [],
+    ])));
+    const signature = JSON.stringify({ kind, recordId: record?.id ?? null, fields, state: { ...state, pending: null } });
+    let plan = meetingComposer.pending;
+    const valid = p => p && p.version === 1 && p.kind === kind && p.recordId === (record?.id ?? null) &&
+      p.schema === state.schema && p.scope === noteDraftScope && typeof p.signature === "string" &&
+      Array.isArray(p.actions) && p.actions.length > 0 && Array.isArray(p.expected) &&
+      p.actions.every(a => Array.isArray(a) && ["AddRecord", "UpdateRecord"].includes(a[0]) &&
+        [cfg(kind).table, cfg("points").table, cfg("actions").table].includes(a[1]) && Number.isInteger(a[2]) && a[2] > 0 &&
+        a[3] && typeof a[3] === "object" && !Array.isArray(a[3]) && Object.keys(a[3]).every(name =>
+          meta.some(m => m.table === a[1] && m.colId === name && !m.isFormula))) &&
+      p.expected.every(e => [kind, "points", "actions"].includes(e.kind) && Number.isInteger(e.id) && e.before && typeof e.before === "object");
+    if (plan) {
+      if (!valid(plan)) throw Error("Le plan d’enregistrement récupéré n’est plus compatible. Aucune écriture n’a été effectuée.");
+      const outcome = MeetingPointPlan.inspect(plan, fresh, table => ["notes", "points", "actions"].find(k => cfg(k).table === table));
+      if (outcome === "committed") {
+        if (plan.signature !== signature)
+          throw Error("L’enregistrement précédent est déjà présent dans Grist, mais le formulaire a changé. Copiez vos nouveaux textes puis rouvrez la réunion ; aucune ligne supplémentaire n’a été créée.");
+        return { retValues: [plan.primaryId] };
+      }
+      if (outcome === "conflict")
+        throw Error("L’enregistrement précédent ne peut pas être confirmé : des données ont changé. Le brouillon est conservé ; vérifiez les points dans Grist avant de reprendre. Aucune ligne n’a été écrasée.");
+      // No part of this atomic attempt is present. Rebuild with fresh targets,
+      // codes and IDs rather than replaying links that may now be stale.
+      plan = null;
+    }
+    if (!plan) {
+      plan = { ...MeetingPointPlan.make({ kind, record, fields, state, fresh, cfg, col, inactive }),
+        kind, recordId: record?.id ?? null, schema: state.schema, scope: noteDraftScope, signature };
+      meetingComposer.setPending(plan);
+    }
+    if (noteDrafts.flush() !== true)
+      throw Error("L’enregistrement des points nécessite un brouillon local disponible pour sécuriser une reprise après coupure. Le stockage de ce navigateur est indisponible : copiez vos textes avant de quitter.");
+    return grist.docApi.applyUserActions(plan.actions);
+  }
   async function save(e) {
     e.preventDefault();
     if (busy || !editionEnabled || moving) return;
     busy = true;
     noteDrafts.lock(true);
+    meetingComposer?.lock(true);
     $("save").disabled = true;
     let targetTable=cfg(editing?.k).table;
     try {
       const { k, r } = editing,
         fields = {};
+      meetingComposer?.assertReady();
       await refreshMetadata();
       targetTable=mappedTableId(k);
       for (const f of fieldsFor(k)) {
@@ -4098,7 +4220,8 @@
             delete fields[key];
         }
       }
-      if (r && ["notes", "points"].includes(k)) {
+      const composed = !!meetingComposer && (meetingComposer.needsTransaction() || meetingComposer.pending);
+      if (!composed && r && ["notes", "points"].includes(k)) {
         const fresh = rows(await grist.docApi.fetchTable(targetTable)).find(row => row.id === r.id);
         if (!fresh) throw Error("Cet élément n’existe plus. Le brouillon local est conservé.");
         for (const field of ["Titre", "Nom", "Contenu", "Decision"]) {
@@ -4107,7 +4230,7 @@
             throw Error("Le texte « " + fieldLabel(k, field) + " » a changé dans Grist. Le brouillon est conservé ; copiez-le puis rouvrez l’élément pour comparer les versions.");
         }
       }
-      const result=await grist.docApi.applyUserActions([
+      const result = composed ? await saveMeetingComposer(k, r, fields) : await grist.docApi.applyUserActions([
         [r ? "UpdateRecord" : "AddRecord", targetTable, r?.id ?? null, fields],
         ...dependentLinkUpdates(k, r, fields),
       ]);
@@ -4121,6 +4244,7 @@
     } catch (err) {
       $("editError").textContent = `Enregistrement impossible dans « ${targetTable || "destination non définie"} » : ` + err.message;
     } finally {
+      meetingComposer?.lock(false);
       noteDrafts.lock(false);
       busy = false;
       $("save").disabled = false;

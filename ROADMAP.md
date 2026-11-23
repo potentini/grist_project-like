@@ -1,6 +1,6 @@
 # Feuille de route du widget de suivi
 
-Cette feuille conserve les évolutions discutées et reportées. Les sujets ci-dessous ne sont pas implémentés et leur présence ne vaut pas autorisation de développement. Ajouter ici les nouveaux sujets explicitement laissés pour plus tard, avec les décisions déjà prises et les questions ouvertes.
+Cette feuille conserve les évolutions discutées et reportées. La première version `@` est développée uniquement dans ce dépôt de prévisualisation ; les autres sujets restent reportés et leur présence ne vaut pas autorisation de développement. Ajouter ici les nouveaux sujets explicitement laissés pour plus tard, avec les décisions déjà prises et les questions ouvertes.
 
 ## Enregistrement automatique des notes dans Grist
 
@@ -12,7 +12,7 @@ Limiter initialement cette sauvegarde aux textes de réunions et points, après 
 
 ## Prise de notes de réunion et rattachements rapides
 
-Statut : à étudier et à réaliser ultérieurement. Discussion du 15 novembre 2026.
+Statut : première version expérimentale développée le 23 novembre 2026 dans `grist_project-like-preview` uniquement. Le dépôt stable `grist_project-like` n’est pas modifié. Voir README pour les prérequis et essais. La création d’action depuis un paragraphe, la continuité des séances et le renvoi vers une réunion future restent reportés.
 
 Objectif : écrire les notes de réunion avec un minimum d’interruptions, tout en produisant des points de discussion structurés, lisibles dans le widget et dans les tables Grist.
 
@@ -32,7 +32,7 @@ Objectif : écrire les notes de réunion avec un minimum d’interruptions, tout
 - Proposition : conserver le point de discussion et créer une action issue de celui-ci, avec sa provenance réunion/point, plutôt que supprimer le point.
 - Afficher un accès à l’action créée et prévenir une double création involontaire.
 
-Points à décider : règles de séparation des paragraphes, traitement du collage, des déplacements, fusions et suppressions ; synchronisation sans doublons avec la table Points ; rythme d’enregistrement ; comportement lorsque plusieurs rattachements sont présents. Une saisie par blocs/points stables est une première piste ; l’analyse automatique d’un texte entièrement libre peut venir ensuite.
+Première version : paragraphes séparés par une ligne vide, confirmation explicite avant transformation, blocs et associations multiples conservés dans le brouillon local, enregistrement groupé uniquement au bouton Enregistrer. Un point existant reste la même ligne ; aucun rapprochement par titre ni suppression implicite. L’analyse automatique d’un texte libre, les fusions, le réordonnancement des points et les conversions d’anciennes notes en masse restent à étudier.
 
 ## Conversions inverses et réaffectation des liens
 

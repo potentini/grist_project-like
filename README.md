@@ -1,5 +1,30 @@
 # Projets, notes et actions — widget Grist V1
 
+Ce dépôt **grist_project-like-preview** est une copie de travail indépendante du [widget d’origine](https://github.com/potentini/grist_project-like). La saisie `@` décrite ci-dessous est une première version expérimentale propre à cette prévisualisation. La tester sur une **copie du document Grist**, avec un widget pointant vers l’URL Pages de ce dépôt. Aucun changement de schéma Grist n’est effectué automatiquement.
+
+## Prévisualisation : notes de réunion avec `@`
+
+Prérequis : table Points distincte de la table des réunions ; mapping de Points.Titre et Points.Contenu vers des colonnes Texte modifiables, et de Points.NoteOrigine vers la réunion source. Pour les associations, mapper Projets, Chantiers et Taches vers des listes de références de leurs tables respectives. Les liens par codes Texte sont aussi acceptés lorsque les codes cibles sont uniques et mappés. Decision et Ordre sont facultatifs. Aucun nouveau champ de continuité des réunions n’est requis.
+
+En mode Édition d’une réunion :
+
+1. Saisir un paragraphe dans Contenu. Une ligne vide sépare deux paragraphes ; les retours simples restent à l’intérieur d’un paragraphe.
+2. Taper `@` puis quelques lettres. Le menu recherche dans les titres, codes et chemins des projets, chantiers et tâches chargés et non archivés/transformés, sans distinction de casse ni d’accents. Les filtres de la liste ne limitent pas cette recherche, comme pour les sélecteurs des formulaires. Les données accessibles restent celles autorisées par Grist. Le menu limite les propositions à 12 objets et invite à préciser une recherche plus large. Aucune lecture ni écriture réseau n’est déclenchée par la recherche.
+3. Choisir un résultat au clic, au toucher, ou au clavier (flèches puis Entrée). Échap ferme le menu sans créer de point. L’option **Créer un point sans rattachement** conserve uniquement le lien à la réunion. Une adresse e-mail n’ouvre pas le menu.
+4. Vérifier le paragraphe, le titre et le rattachement dans la proposition, puis confirmer **Créer le point (brouillon)**. Le texte quitte les notes générales et apparaît dans un bloc de discussion ; il n’est pas recopié dans deux champs Grist. **Garder en notes générales** annule la proposition sans modifier le texte. La commande **Transformer le paragraphe en point** donne le même choix sans mention.
+5. Dans le bloc, modifier titre, échanges et décision, ou utiliser `@` pour ajouter d’autres associations, y compris dans un autre projet. Retirer une étiquette retire seulement son lien. Un nouveau bloc peut être remis dans les notes générales, avec ses textes et les libellés de ses associations. Aucun point déjà enregistré n’est supprimé par cet éditeur.
+6. **Enregistrer** écrit la réunion et les points modifiés dans une même transaction Grist. Un nouveau bloc crée une ligne Points ; modifier un point existant ou lui ajouter une mention conserve sa ligne. Pour une réunion nouvelle, la création de la réunion et de ses points est groupée. Les colonnes calculées et les champs non mappés ne sont pas écrits. Les autres champs d’un point restent accessibles depuis son formulaire individuel.
+
+Les points déjà liés à une réunion apparaissent dans son éditeur en blocs. Dans le formulaire individuel d’un point, `@` ajoute des références à ce même point ; il ne crée pas de deuxième ligne. Seuls les rattachements explicitement choisis sont ajoutés : les ancêtres ne sont pas imposés, afin de conserver les associations entre plusieurs projets. Un point sans lien explicite peut toujours apparaître dans un contexte hérité de sa réunion dans la popup Suivi, selon le comportement existant ; les liens de la réunion ne sont pas recopiés dans le point.
+
+Les brouillons locaux versionnés conservent aussi l’identité des blocs, les textes et les associations. Les anciens brouillons de texte restent proposés. Rien n’est enregistré dans Grist avant Enregistrer. Une reprise incompatible avec un mapping modifié reste consultable et copiable, mais ne s’applique pas automatiquement. Pour sécuriser les créations groupées après une coupure, le stockage local doit être disponible ; sinon la saisie reste ouverte et l’enregistrement structuré est bloqué avec une explication. Annuler conserve le brouillon. Les autres dates et sélections du formulaire restent à vérifier lors d’une récupération.
+
+Une tentative d’enregistrement est conservée avant son envoi. Après une réponse réseau perdue, une nouvelle tentative vérifie les lignes déjà présentes au lieu de créer des doublons. Si une collision ou un changement concurrent empêche de confirmer l’état, aucune ligne n’est écrasée : conserver les textes et vérifier les points dans Grist avant de reprendre. Les changements concurrents des champs modifiés et le déplacement d’un point vers une autre réunion sont contrôlés ; ses actions conservent leur provenance cohérente. Ce contrôle avant écriture ne constitue pas un verrou collaboratif entre utilisateurs.
+
+Ne sont **pas** inclus : autosave dans Grist, reprise des réunions récurrentes, renvoi d’un point vers une réunion future, création d’action depuis un paragraphe ou transformation automatique des anciennes notes. Les identifiants locaux et les identifiants Grist préparent cette continuité sans l’activer.
+
+Vérifications dédiées avec API Grist simulée : `python -m http.server 8771 --bind 127.0.0.1`, puis `node tests/meeting-mentions.cjs` et `node tests/meeting-mentions-ux.cjs`. Les parcours couvrent PC, tablette, téléphone, références natives et codes Texte, récupération, permissions, conflits et erreurs réseau.
+
 Une page d’accueil rassemble trois vues : **Projets**, **Notes et réunions**, **À faire**. La hiérarchie est Projet → Chantier → Tâche. Les notes restent du texte multiligne dans les tables Grist. Les actions peuvent être autonomes, issues d’une note et/ou rattachées à un élément du projet.
 
 ## Essayer
@@ -9,7 +34,7 @@ Publier les fichiers à la racine de `main` sur GitHub Pages (Settings → Pages
 1. Importer les cinq CSV en tables distinctes : Projets, Chantiers, Taches, Notes, Actions.
 2. Ouvrir **Mapping**. Les noms de tables, identifiants et libellés des colonnes servent à détecter les correspondances. Les accents, espaces et majuscules sont ignorés. Un identifiant exact est prioritaire ; les synonymes ambigus ne sont pas choisis.
 3. Corriger les tables et champs proposés. Les tables renommées se sélectionnent manuellement ; les champs reconnus de cette table sont alors proposés. La détection complète les champs manquants sans remplacer les choix existants.
-4. Cliquer **Enregistrer le mapping**. La configuration est enregistrée dans les options de cette instance Grist, sans modifier le schéma des tables. Aucun contenu métier n’est stocké dans le navigateur.
+4. Cliquer **Enregistrer le mapping**. La configuration est enregistrée dans les options de cette instance Grist, sans modifier le schéma des tables. Les brouillons de notes sont conservés localement sur le navigateur utilisé, comme décrit ci-dessus.
 5. Sélectionner une ligne pour lire ses détails, créer une note/action ou modifier les champs mappés. **Actualiser** recharge toutes les tables, notamment après une modification faite dans une autre vue Grist.
 
 Pour un aperçu indépendant de Grist : servir le dossier avec `python -m http.server 8765`, puis ouvrir `index.html?demo=1` sur ce serveur. Cette démonstration contient des données fictives et reste en lecture seule. Ne pas ouvrir directement le fichier depuis le disque.
