@@ -30,6 +30,13 @@ for (const refs of [true, false]) {
     db.meta = db.meta.filter(m => !(m.table === 'Notes' && m.colId === 'Code'));
     ctx.fields = { Nom: 'Sans code', Contenu: '' };
     assert.equal(planner.make(ctx).actions[1][3].NoteOrigine, 3);
+    col('points', 'Projets').isFormula = false;
+    col('points', 'Projets').type = 'Ref:Projets';
+    assert.equal(planner.make(ctx).actions[1][3].Projets, 0);
+    ctx.state.blocks[0].refs = [{kind:'projects', id:1}];
+    assert.equal(planner.make(ctx).actions[1][3].Projets, 1);
+    ctx.state.blocks[0].refs.push({kind:'projects', id:2});
+    assert.throws(() => planner.make(ctx), /un seul rattachement/);
   }
 }
 console.log('PASS calculated meeting title and optional point fields, explicit empty associations, native origin without a code');

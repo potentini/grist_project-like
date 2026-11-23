@@ -25,9 +25,10 @@ window.MeetingPointPlan = (() => {
       return value;
     };
     const encode = (source, field, target, rows, list) => {
-      const m = requireColumn(source, field, list ? ['Text', /^RefList:/] : ['Text', /^Ref:/, /^RefList:/]);
+      const m = requireColumn(source, field, ['Text', /^Ref:/, /^RefList:/]);
       if (/^Ref(List)?:/.test(m.type)) {
         if (m.type.split(':')[1] !== table(target)) throw Error('La référence ' + source + '.' + field + ' pointe vers une autre table.');
+        if (m.type.startsWith('Ref:') && rows.length > 1) throw Error('Référence simple : un seul rattachement est autorisé dans ' + source + '.' + field + '.');
         return m.type.startsWith('RefList:') ? ['L', ...rows.map(r => r.id)] : rows[0]?.id || 0;
       }
       return rows.map(r => code(target, r)).join(list ? ', ' : '');
@@ -48,6 +49,9 @@ window.MeetingPointPlan = (() => {
     if (record) baseExpected(kind, primaryId, fields, record);
     actions.push([record ? 'UpdateRecord' : 'AddRecord', table(kind), primaryId, { ...fields }]);
     if (kind === 'points') {
+      for (const [target, field] of Object.entries(fieldsByKind))
+        if (col('points', field)?.type.startsWith('Ref:') && state.refs.filter(r => r.kind === target).length > 1)
+          throw Error('Référence simple : un seul rattachement est autorisé dans points.' + field + '.');
       for (const ref of state.refs) if (!(state.baseRefs || []).some(r => r.kind === ref.kind && r.id === ref.id)) requireRow(ref.kind, ref.id);
       const origin = col('points', 'NoteOrigine');
       if (record && origin && Object.hasOwn(fields, origin.colId) && !same(fields[origin.colId], record[origin.colId])) {
@@ -98,12 +102,12 @@ window.MeetingPointPlan = (() => {
         if (!existing && !refs.length) {
           const m = col('points', field);
           // An explicit empty association must not inherit a data-column initial formula.
-          if (m && !m.isFormula && (m.type === 'Text' || m.type === 'RefList:' + table(target)))
+          if (m && !m.isFormula && (m.type === 'Text' || m.type === 'RefList:' + table(target) || m.type === 'Ref:' + table(target)))
             delta[m.colId] = encode('points', field, target, [], true);
           continue;
         }
         const selected = refs.map(ref => requireRow(target, ref.id));
-        const column = requireColumn('points', field, ['Text', /^RefList:/]);
+        const column = requireColumn('points', field, ['Text', /^Ref:/, /^RefList:/]);
         delta[column.colId] = encode('points', field, target, selected, true);
       }
       if (existing) {

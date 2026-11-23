@@ -3254,9 +3254,10 @@
       writable, hasField: field => !!col("points", field), label: ref => byRef.get(ref.kind + ":" + ref.id)?.path,
       canLink(kind, block) {
         const m = col("points", pointRefFields[kind]);
-        return !!m && !m.isFormula && (m.type === "Text" || m.type === "RefList:" + cfg(kind).table) &&
+        return !!m && !m.isFormula && (m.type === "Text" || m.type === "RefList:" + cfg(kind).table || m.type === "Ref:" + cfg(kind).table) &&
           !(block ? block.lockedRefs?.includes(kind) : k === "points" && r && unresolved(r, kind));
       },
+      linkLimit: kind => col("points", pointRefFields[kind])?.type === "Ref:" + cfg(kind).table ? 1 : Infinity,
       initialRefs: k === "points" ? readRefs() : [], readRefs,
       writeRefs(refs) {
         for (const [kind, field] of Object.entries(pointRefFields)) {

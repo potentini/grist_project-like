@@ -4,7 +4,7 @@ Ce dépôt **grist_project-like-preview** est une copie de travail indépendante
 
 ## Prévisualisation : notes de réunion avec `@`
 
-Prérequis : table Points distincte de la table des réunions ; mapping de Points.Titre et Points.Contenu vers des colonnes Texte modifiables, et de Points.NoteOrigine vers la réunion source. Pour les associations, mapper Projets, Chantiers et Taches vers des listes de références de leurs tables respectives. Les liens par codes Texte sont aussi acceptés lorsque les codes cibles sont uniques et mappés. Decision et Ordre sont facultatifs. Aucun nouveau champ de continuité des réunions n’est requis.
+Prérequis : table Points distincte de la table des réunions ; mapping de Points.Titre et Points.Contenu vers des colonnes Texte modifiables, et de Points.NoteOrigine vers la réunion source. Pour les associations, mapper Projets, Chantiers et Taches vers des références ou listes de références de leurs tables respectives. Une référence simple accepte un seul lien de ce niveau : retirer son étiquette avant d’en choisir un autre ; une liste permet plusieurs liens. Les liens par codes Texte sont aussi acceptés lorsque les codes cibles sont uniques et mappés. Decision et Ordre sont facultatifs. Aucun nouveau champ de continuité des réunions n’est requis.
 
 En mode Édition d’une réunion :
 

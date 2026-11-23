@@ -92,8 +92,12 @@ window.MeetingMentions = (() => {
       trigger = { textarea, block, ...p, at, query, token: !!match };
       const words = norm(query).split(/\s+/).filter(Boolean);
       const matches = indexed.filter(c => words.every(word => c.search.includes(word)));
-      options = matches.slice(0, 12).map(c => ({ ref: {kind: c.kind, id: c.id}, label: c.label,
-        disabled: !ctx.canLink(c.kind, block), path: c.path }));
+      options = matches.slice(0, 12).map(c => {
+        const full = linkFull(c, block);
+        return { ref: {kind: c.kind, id: c.id}, label: c.label,
+          disabled: !ctx.canLink(c.kind, block) || full, path: c.path,
+          reason: full ? 'Référence simple : retirez le rattachement actuel avant d’en choisir un autre.' : '' };
+      });
       options.push({ ref: null, label: ctx.kind === 'notes' && !block
         ? 'Créer un point sans rattachement' : 'Ne pas ajouter de rattachement' });
       active = Math.max(0, options.findIndex(o => !o.disabled));
@@ -104,7 +108,7 @@ window.MeetingMentions = (() => {
         button.setAttribute('aria-selected', String(index === active)); button.disabled = !!option.disabled;
         const title = document.createElement('span'); title.textContent = option.label;
         const path = document.createElement('small');
-        path.textContent = option.disabled ? 'Rattachement non modifiable : vérifier le mapping du point.' : option.path || '';
+        path.textContent = option.disabled ? option.reason || 'Rattachement non modifiable : vérifier le mapping du point.' : option.path || '';
         button.append(title, path);
         button.onclick = () => choose(index);
         menu.append(button);
@@ -119,10 +123,16 @@ window.MeetingMentions = (() => {
       if (menu.showPopover && !menu.matches(':popover-open')) menu.showPopover();
       positionMenu();
     }
+    function linkFull(ref, block) {
+      const refs = block ? block.refs : ctx.kind === 'points' ? ctx.readRefs() : [];
+      return !refs.some(r => r.kind === ref.kind && r.id === ref.id) &&
+        refs.filter(r => r.kind === ref.kind).length >= (ctx.linkLimit?.(ref.kind) ?? Infinity);
+    }
     function choose(index) {
       if (locked || !trigger || options[index]?.disabled) return;
       let t = trigger;
       const ref = options[index].ref;
+      if (ref && linkFull(ref, t.block)) { showMenu(t.textarea, t.block); return; }
       if (t.textarea.value !== t.value) {
         const p = paragraph(t.textarea), match = p.value.slice(p.start, p.caret).match(/(?:^|[\s(])@([^@\n]{0,80})$/);
         const candidate = ref && indexed.find(c => c.kind === ref.kind && c.id === ref.id);
@@ -143,7 +153,7 @@ window.MeetingMentions = (() => {
         if (ref && !t.block.refs.some(r => r.kind === ref.kind && r.id === ref.id)) t.block.refs.push(ref);
         renderBlocks();
       } else {
-        if (ref) ctx.writeRefs([...ctx.readRefs(), ref]);
+        if (ref && !ctx.readRefs().some(r => r.kind === ref.kind && r.id === ref.id)) ctx.writeRefs([...ctx.readRefs(), ref]);
         renderPointChips();
       }
       touched = true;
