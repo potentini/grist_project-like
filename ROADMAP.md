@@ -88,7 +88,7 @@ Conserver les tables actuelles, sans ajouter de table de cycles ni de sujets dur
 | --- | --- | --- |
 | Sujets (réunions) | Instance | Réutiliser et mapper ; Choix pour commencer |
 | Sujets | Date | Réutiliser et mapper ; Date |
-| Sujets | Nom | Ajouter ; Texte libre pour les réunions ponctuelles |
+| Sujets | Nom | Mapping distinct du titre libre déjà disponible ; colonne Texte du document pour les réunions ponctuelles |
 | Sujets | Titre | Formule texte : Instance + « du » + date ; sans Instance, utiliser Nom ; sans date, afficher Instance seule |
 | Sujets | Etat | Vérifier et adapter les valeurs existantes pour distinguer séances prévues, tenues et annulées |
 | Points de discussion | PointPrecedent | Ajouter ; Référence vers cette même table |
@@ -114,9 +114,25 @@ Pour de nouveaux points, proposer À reprendre par défaut. Un état historique 
 - Empêcher les autoréférences et les boucles de PointPrecedent.
 - Éviter une double reprise dans la même réunion ; signaler un sujet déjà repris dans une autre séance prévue.
 - Définir précisément la gestion d’une réunion annulée, de la suppression ou du déplacement d’un point et des changements d’Instance, sans perdre les sujets à reprendre.
-- Limiter les reprises à une même Instance pour une première version ; les reprises entre instances restent à étudier.
+- Pour la reprise automatique, rechercher dans une même Instance. Prévoir aussi un renvoi manuel vers une autre instance ou une réunion ponctuelle, selon la proposition du 23 novembre ci-dessous.
 - Développer le mapping des nouvelles colonnes, les formulaires compatibles avec le titre calculé, l’aperçu de reprise, la lecture de l’historique et l’agrégation des actions.
 - Articuler ensuite ce workflow avec la saisie rapide `@` et la création d’action depuis un paragraphe déjà inscrites à la feuille de route.
+
+### Anticipation dans la saisie `@` et renvoi vers une réunion future
+
+Proposition de conception discutée le 23 novembre 2026, à valider avant développement. Aucune colonne ni fonctionnalité n’est créée par cette inscription.
+
+- Un bloc de discussion doit avoir une identité locale stable puis correspondre à une seule ligne Points. Son identité ne doit dépendre ni de son texte, ni de sa position, ni de ses mentions. Le premier choix validé après `@` prépare la création du point ; les suivants ajoutent des rattachements au même point. Proposer aussi un point sans rattachement au suivi, toujours lié à sa réunion.
+- Rechercher les projets, chantiers et tâches actifs accessibles par titres, codes et chemins parents, sans distinction de casse ni d’accents. Recherche locale sur les données chargées ; aucune création à la seule frappe. Les rattachements multiples restent possibles.
+- Anticiper les mappings PointPrecedent, EtatSuivi et éventuellement ReprendreApres, sans les rendre obligatoires pour utiliser `@`. Un nouveau point indépendant démarre sans PointPrecedent ; ce lien est réservé à une reprise explicite, jamais déduit de titres similaires.
+- Le brouillon structuré devra conserver les identifiants de blocs, références, ordre et éventuels liens de reprise, avec compatibilité des brouillons texte existants. Les textes généraux restent distincts du contenu des points ; ne pas stocker deux copies modifiables du même paragraphe.
+- Proposer ultérieurement **Renvoyer à une réunion…** : choisir une séance future existante ou en créer une, récurrente (Instance) ou ponctuelle (Nom libre), avec date ou date à préciser. Prévoir son état « prévue » et une confirmation avant écriture.
+- Pour un sujet déjà abordé, conserver le point et ses échanges dans la réunion source. Créer un nouveau point dans la destination avec NoteOrigine vers cette réunion et PointPrecedent vers le point source. Reprendre titre et rattachements ; laisser les nouveaux échanges et décisions vides, en affichant l’historique en contexte. Un simple changement de NoteOrigine déplace la provenance et ne doit pas servir de renvoi historique.
+- Aucun champ ReunionCible n’est nécessaire d’emblée : le nouveau point et sa NoteOrigine portent déjà la destination. La création de la réunion éventuelle et de son point doit être cohérente, sans doublon lors d’un nouvel essai après erreur.
+- Première version recommandée : un seul successeur planifié par point, toutes instances confondues, avec accès à la destination et possibilité de réorienter explicitement. Plusieurs destinations simultanées créeraient des branches de discussion : périmètre à décider séparément.
+- Une reprise déjà planifiée doit être signalée et exclue des nouvelles propositions automatiques de reprise pour éviter les doublons. Distinguer les séances prévues des séances tenues ; ne pas perdre un sujet si sa séance cible est annulée, supprimée ou reportée. Le suivi du sujet reste distinct de la planification d’une séance.
+- Les actions existantes restent attachées à leur point/réunion d’origine et sont retrouvées via le fil des points, sans copie ni changement de provenance. Les nouvelles actions appartiennent à la séance qui les crée.
+- Maintenir la distinction : reprise automatique par Instance ; renvoi manuel entre toutes réunions accessibles. Étudier séparément le déplacement d’un point ajouté par erreur à une réunion avant qu’il soit abordé.
 
 ## Utilisateur courant et filtres « Mes… »
 
