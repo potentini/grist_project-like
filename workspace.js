@@ -109,6 +109,7 @@
         "Type",
         "Date",
         "DateSource",
+        "PointsReportes",
         "Instance",
         "Participants",
         "Contenu",
@@ -179,7 +180,7 @@
   const links = {
     streams: { Projet: "projects", TacheOrigine: "tasks" },
     tasks: { Chantier: "streams", ActionOrigine: "actions" },
-    notes: { Projet: "projects", Chantiers: "streams", Taches: "tasks" },
+    notes: { Projet: "projects", Chantiers: "streams", Taches: "tasks", PointsReportes: "points" },
     points: {
       NoteOrigine: "notes",
       Projets: "projects",
@@ -194,7 +195,7 @@
       NoteOrigine: "notes",
     },
   };
-  const multi = new Set(["Projets", "Chantiers", "Taches"]);
+  const multi = new Set(["Projets", "Chantiers", "Taches", "PointsReportes"]);
   const textareas = new Set([
     "Contenu",
     "Decision",
@@ -1959,7 +1960,7 @@
     if (k === "notes")
       result.push(
         ...outlineRows("points")
-          .filter((x) => has("points", x, "NoteOrigine", r))
+          .filter((x) => meetingContainsPoint(r, x))
           .map((x) => ["points", x]),
       );
     if (k === "points")
@@ -2570,11 +2571,102 @@
       .forEach((x) => x.classList.remove("drop-target", "dragging"));
   };
 
+  function forwardedPointColumn() {
+    const column = col("notes", "PointsReportes");
+    return cfg("points").table && column?.type === "RefList:" + cfg("points").table ? column : null;
+  }
+  function forwardedPoints(note) {
+    return forwardedPointColumn() ? targets("notes", note, "PointsReportes") : [];
+  }
+  function meetingContainsPoint(note, point) {
+    return has("points", point, "NoteOrigine", note) || forwardedPoints(note).some(row => row.id === point.id);
+  }
+  function pointStartsInMeeting(point, meeting) {
+    const native = /^Ref/.test(col("points", "NoteOrigine")?.type || "");
+    const origin = native ? meeting.id : val("notes", meeting, "Code");
+    return origin !== "" && values(val("points", point, "NoteOrigine")).some(value => String(value) === String(origin));
+  }
+  function pointForwardButton(point) {
+    return editionEnabled && !demo && !inactive("points", point)
+      ? '<button type="button" data-forward-point="' + point.id + '">Renvoyer vers une réunion…</button>'
+      : "";
+  }
+  const forwardDialog = $("pointForwardDialog");
+  const forwardTarget = $("pointForwardTarget");
+  let forwardingPoint = null;
+  searchableSelect(forwardTarget, {label: "Réunion destinataire", listId: "pointForwardOptions", floating: true});
+  function openPointForward(id) {
+    if (!editionEnabled || demo || editing || moving || busy) return;
+    const point = (data.points || []).find(row => row.id === id);
+    if (!point || inactive("points", point)) return;
+    const column = forwardedPointColumn();
+    if (!column || column.isFormula) {
+      message("Dans Grist, ajoutez une liste de références vers Points à la table des réunions, puis mappez-la dans « Points reportés ».", true);
+      return;
+    }
+    forwardingPoint = point;
+    $("pointForwardTitle").textContent = "Renvoyer « " + title("points", point) + " »";
+    $("pointForwardError").textContent = "";
+    const candidates = (data.notes || []).filter(note => !inactive("notes", note) && !meetingContainsPoint(note, point));
+    candidates.sort((a, b) => dateText(val("notes", b, "Date")).localeCompare(dateText(val("notes", a, "Date"))));
+    forwardTarget.innerHTML = '<option value="">— Choisir une réunion —</option>' + candidates.map(note => {
+      const label = [dateText(val("notes", note, "Date")), displayValue("notes", note, "Instance"), title("notes", note)].filter(Boolean).join(" · ");
+      return '<option value="' + note.id + '">' + esc(label) + '</option>';
+    }).join("");
+    $("pointForwardSave").disabled = !candidates.length;
+    forwardDialog.showModal();
+  }
+  $("pointForwardCancel").onclick = () => forwardDialog.close();
+  $("pointForwardNew").onclick = () => {
+    const point = forwardingPoint;
+    forwardDialog.close();
+    openEditor("notes", null, point);
+  };
+  forwardDialog.addEventListener("close", () => forwardTarget.closest(".reference-picker").dispatchEvent(new Event("pickerclose")));
+  forwardDialog.addEventListener("cancel", event => { if (moving) event.preventDefault(); });
+  $("pointForwardSave").onclick = async () => {
+    const id = Number(forwardTarget.value);
+    if (!id || !forwardingPoint || moving) {
+      $("pointForwardError").textContent = "Choisissez une réunion destinataire.";
+      return;
+    }
+    moving = true;
+    const controls = [...forwardDialog.querySelectorAll("button,input,select")];
+    for (const control of controls) control.disabled = true;
+    try {
+      await refreshMetadata();
+      const column = forwardedPointColumn();
+      if (!column || column.isFormula) throw Error("Le mapping « Points reportés » a changé.");
+      const [meetings, points] = await Promise.all([
+        grist.docApi.fetchTable(mappedTableId("notes")), grist.docApi.fetchTable(mappedTableId("points")),
+      ]);
+      const meeting = rows(meetings).find(row => row.id === id);
+      const point = rows(points).find(row => row.id === forwardingPoint.id);
+      if (!point || inactive("points", point) || !meeting || inactive("notes", meeting))
+        throw Error("Le point ou la réunion n’est plus disponible.");
+      const existing = values(meeting[column.colId]).map(Number).filter(Boolean);
+      if (!pointStartsInMeeting(point, meeting) && !existing.includes(point.id)) {
+        await grist.docApi.applyUserActions([["UpdateRecord", mappedTableId("notes"), id, {
+          [column.colId]: ["L", ...existing, point.id],
+        }]]);
+      }
+      forwardDialog.close();
+      moving = false;
+      await load();
+      message("Point disponible dans « " + title("notes", meeting) + " ».");
+    } catch (error) {
+      $("pointForwardError").textContent = error.message;
+    } finally {
+      moving = false;
+      for (const control of controls) control.disabled = false;
+    }
+  };
+
   function linkedTo(k, r, kind, row) {
     if (k === "projects" && kind === "notes")
       return noteProjects(row).some((p) => p.id === r.id);
     if (kind === "points") {
-      if (k === "notes") return has("points", row, "NoteOrigine", r);
+      if (k === "notes") return meetingContainsPoint(r, row);
       if (k === "projects")
         return pointProjects(row).some((p) => p.id === r.id);
       if (k === "streams")
@@ -2812,6 +2904,7 @@
         Tache: "Tâche",
         Taches: "Tâches",
         NoteOrigine: "Note / réunion d’origine",
+        PointsReportes: "Points reportés",
         PointOrigine: "Point de discussion d’origine",
         Projets: "Projets",
       }[field] || field
@@ -2930,21 +3023,28 @@
         : '<p class="muted">Pour structurer cette réunion en points, importez la table Points puis configurez son mapping.</p>';
     if (k === "points")
       html +=
-        '<div class="actions"><button data-new="actions">+ Action issue de ce point</button></div>';
+        '<div class="actions"><button data-new="actions">+ Action issue de ce point</button>' + pointForwardButton(r) + '</div>' +
+        (data.notes || []).filter(note => forwardedPoints(note).some(point => point.id === r.id)).map(note =>
+          '<p>Reporté vers <button type="button" data-kind="notes" data-id="' + note.id + '">' + esc(title('notes', note)) + '</button></p>').join('');
     if (["projects", "streams", "tasks", "notes"].includes(k)) {
-      const related = ordered("points").filter((x) =>
-        linkedTo(k, r, "points", x),
-      );
-      if (related.length)
-        html +=
-          `<section ${k === "notes" ? 'data-meeting-points' : ''}><h3>Points de discussion</h3>` +
-          related
-            .map((x) => branch(tree("points", x), "right-points") + (k === "notes"
-              ? `<div class="meeting-point-reading">${["Contenu", "Decision"].filter(f => val("points", x, f)).map(f =>
-                `<h4>${esc(f === "Contenu" ? "Échanges" : "Décision")}</h4><div class="text">${esc(displayValue("points", x, f))}</div>`).join("")}${["Projets", "Chantiers", "Taches"].filter(f => val("points", x, f) && targets("points", x, f).length).map(f =>
-                `<p>${esc(fieldLabel("points", f))} : ${esc(displayValue("points", x, f))}</p>`).join("")}</div>`
-              : ""))
-            .join("") + "</section>";
+      const related = ordered("points").filter(point => linkedTo(k, r, "points", point));
+      if (related.length) {
+        const cards = related.map(point => {
+          const card = branch(tree("points", point), "right-points");
+          if (k !== "notes") return card;
+          const origin = targets("points", point, "NoteOrigine")[0];
+          const owned = has("points", point, "NoteOrigine", r);
+          const provenance = owned ? "" : `<p>Point reporté depuis ${esc(origin ? title("notes", origin) : "une réunion non retrouvée")}</p>`;
+          const texts = ["Contenu", "Decision"].filter(field => val("points", point, field)).map(field =>
+            `<h4>${field === "Contenu" ? "Échanges" : "Décision"}</h4><div class="text">${esc(displayValue("points", point, field))}</div>`);
+          const associations = ["Projets", "Chantiers", "Taches"].filter(field => targets("points", point, field).length).map(field =>
+            `<p>${esc(fieldLabel("points", field))} : ${esc(displayValue("points", point, field))}</p>`);
+          return `<div ${owned ? "data-owned-point" : ""}>${card}<div class="meeting-point-reading">
+            ${provenance}${pointForwardButton(point)}${texts.join("")}${associations.join("")}
+          </div></div>`;
+        });
+        html += `<section ${k === "notes" ? "data-meeting-points" : ""}><h3>Points de discussion</h3>${cards.join("")}</section>`;
+      }
     }
     if (k === "notes")
       html +=
@@ -3274,10 +3374,14 @@
         }
       },
     });
-    if (composer && k === "notes") form.querySelector('[data-meeting-points]')?.setAttribute("hidden", "");
+    if (composer && k === "notes") {
+      const section = form.querySelector("[data-meeting-points]");
+      section?.querySelectorAll("[data-owned-point]").forEach(el => el.hidden = true);
+      if (section && !section.querySelector(":scope > div:not([hidden])")) section.hidden = true;
+    }
     return composer;
   }
-  function openEditor(k, r = null) {
+  function openEditor(k, r = null, forwardedPoint = null) {
     if (r && archived(k, r)) {
       message("Restaurez cet élément avant de le modifier.");
       return;
@@ -3324,7 +3428,7 @@
       );
       return;
     }
-    editing = { k, r: r ? structuredClone(r) : null };
+    editing = { k, r: r ? structuredClone(r) : null, forwardedPointId: forwardedPoint?.id };
     updateHistoryControls();
     $("editorTitle").textContent =
       (r ? "Modifier — " : "Créer — ") + schemas[k].label;
@@ -3345,12 +3449,17 @@
           cfg(k).fields?.[f] &&
           !col(k, f)?.isFormula &&
           !(r && f === "Code") &&
+          (f !== "PointsReportes" || forwardedPointColumn()) &&
           !["Archive", "Transforme", "ActionOrigine", "TacheOrigine"].includes(
             f,
           ),
       )
       .map((f) => {
         let v = r ? val(k, r, f) : "";
+        if (forwardedPoint && f === "Instance") {
+          const source = targets("points", forwardedPoint, "NoteOrigine")[0];
+          if (source) v = val("notes", source, "Instance");
+        }
         if (!r && f === "Code") {
           const prefix = {
             projects: "P",
@@ -3386,7 +3495,8 @@
             )
             .filter((x) => x !== 0);
           const unresolved = !!r && sourceLinks.length !== selected.length;
-          if (!r && context && target === selection.k) selected = [context.id];
+          if (!r && context && target === selection.k && f !== "PointsReportes") selected = [context.id];
+          if (f === "PointsReportes" && forwardedPoint) selected = [forwardedPoint.id];
           input =
             `<select name="${f}" ${multi.has(f) ? "multiple" : ""}><option value="">— Aucun —</option>${unresolved ? '<option value="unresolved" selected>Lien non reconnu — choisir le rattachement</option>' : ""}` +
             rows
@@ -3496,6 +3606,7 @@
       form.querySelector('[name="Titre"]')?.focus();
     } else {
       $("cancel").textContent = "Annuler";
+      $("editor").dataset.kind = k;
       $("editor").showModal();
     }
     for (const control of $("editForm").querySelectorAll("[name]"))
@@ -4058,6 +4169,20 @@
       throw Error("L’enregistrement des points nécessite un brouillon local disponible pour sécuriser une reprise après coupure. Le stockage de ce navigateur est indisponible : copiez vos textes avant de quitter.");
     return grist.docApi.applyUserActions(plan.actions);
   }
+  async function saveForwardDestination(fields) {
+    const table = mappedTableId("notes");
+    const fresh = { notes: rows(await grist.docApi.fetchTable(table)) };
+    const signature = JSON.stringify(fields);
+    let plan = editing.forwardAttempt;
+    if (plan) {
+      const outcome = MeetingPointPlan.inspect(plan, fresh, () => "notes");
+      if (outcome === "committed" && plan.signature === signature) return { retValues: [plan.primaryId] };
+      if (outcome !== "retry") throw Error("Vérifiez si la réunion a déjà été créée dans Grist avant de réessayer.");
+    }
+    plan = MeetingPointPlan.make({ kind: "notes", record: null, fields, state: {blocks: []}, fresh, cfg, col, inactive });
+    editing.forwardAttempt = { ...plan, signature };
+    return grist.docApi.applyUserActions(plan.actions);
+  }
   async function save(e) {
     e.preventDefault();
     if (busy || !editionEnabled || moving) return;
@@ -4221,7 +4346,25 @@
             delete fields[key];
         }
       }
-      const composed = !!meetingComposer && (meetingComposer.needsTransaction() || meetingComposer.pending);
+      const composed = !!meetingComposer && (meetingComposer.needsTransaction() || meetingComposer.pending || editing.forwardedPointId && noteDraftScope);
+      const forwardColumn = k === "notes" && forwardedPointColumn();
+      if (editing.forwardedPointId && (!forwardColumn || !values(fields[forwardColumn.colId]).includes(editing.forwardedPointId)))
+        throw Error("Conservez le point source dans « Points reportés » ou annulez la création.");
+      if (forwardColumn && Object.hasOwn(fields, forwardColumn.colId)) {
+        const chosen = values(fields[forwardColumn.colId]);
+        if (chosen.length) {
+          const freshPoints = rows(await grist.docApi.fetchTable(mappedTableId("points")));
+          if (chosen.some(id => !freshPoints.some(point => point.id === id && !inactive("points", point))))
+            throw Error("Un point reporté a disparu ou a été archivé. Vérifiez les rattachements.");
+          if (r && chosen.some(id => pointStartsInMeeting(freshPoints.find(row => row.id === id), r)))
+            throw Error("Un point de cette réunion ne peut pas être reporté vers sa propre séance.");
+        }
+        if (r && !composed) {
+          const fresh = rows(await grist.docApi.fetchTable(mappedTableId("notes"))).find(row => row.id === r.id);
+          if (!fresh || JSON.stringify(values(fresh[forwardColumn.colId])) !== JSON.stringify(values(r[forwardColumn.colId])))
+            throw Error("Les points reportés ont changé dans Grist. Rouvrez la réunion avant de les modifier.");
+        }
+      }
       if (!composed && r && ["notes", "points"].includes(k)) {
         const fresh = rows(await grist.docApi.fetchTable(targetTable)).find(row => row.id === r.id);
         if (!fresh) throw Error("Cet élément n’existe plus. Le brouillon local est conservé.");
@@ -4231,7 +4374,7 @@
             throw Error("Le texte « " + fieldLabel(k, field) + " » a changé dans Grist. Le brouillon est conservé ; copiez-le puis rouvrez l’élément pour comparer les versions.");
         }
       }
-      const result = composed ? await saveMeetingComposer(k, r, fields) : await grist.docApi.applyUserActions([
+      const result = composed ? await saveMeetingComposer(k, r, fields) : editing.forwardedPointId ? await saveForwardDestination(fields) : await grist.docApi.applyUserActions([
         [r ? "UpdateRecord" : "AddRecord", targetTable, r?.id ?? null, fields],
         ...dependentLinkUpdates(k, r, fields),
       ]);
@@ -4720,6 +4863,8 @@
     }
   };
   document.querySelector("main").onclick = (e) => {
+    const forward = e.target.closest("[data-forward-point]");
+    if (forward) { openPointForward(Number(forward.dataset.forwardPoint)); return; }
     if (
       (editing || moving) &&
       e.target.closest(
@@ -5121,7 +5266,7 @@
   };
   window.createMeetingFollowup?.({
     data:()=>data, view:()=>view, config:cfg, column:col, value:val, display:displayValue,
-    values, targets, pointProjects, noteProjects, projectOf, title, fieldLabel, dateText,
+    values, targets, forwardedPoints, pointProjects, noteProjects, projectOf, title, fieldLabel, dateText,
     referenceText:refText, normalize:norm, archived, searchableSelect, selection:()=>selection,
     busy:()=>!!editing||moving, showArchived:()=>$("showArchived").checked,
     message, openRecord:(kind,id)=>selectRecord(kind,id,null),

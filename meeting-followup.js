@@ -71,9 +71,10 @@
         const associated=byNote.get(note.id)||[], projects=unique(ctx.noteProjects(note));
         const content=ctx.display('notes',note,'Contenu');
         if(content || projects.length || !associated.length)result.push({kind:'notes',row:note,note,projects,content,decision:'',inherited:false});
-        for(const point of associated) {
+        const reported = (ctx.forwardedPoints?.(note) || []).filter(point => available("points", point) && !associated.some(row => row.id === point.id));
+        for(const point of [...associated, ...reported]) {
           const scope=pointScope(point,note);
-          result.push({kind:'points',row:point,note,...scope,content:ctx.display('points',point,'Contenu'),decision:ctx.display('points',point,'Decision')});
+          result.push({kind:'points',row:point,note,reported:reported.includes(point),...scope,content:ctx.display('points',point,'Contenu'),decision:ctx.display('points',point,'Decision')});
         }
       }
       // Orphan points remain discoverable by their own project, with explicit missing provenance.
@@ -148,6 +149,7 @@
             return `<article class="followup-entry" data-followup-entry="${entry.kind}:${entry.row.id}">
               <div class="followup-entry-heading"><h5>${esc(heading)}</h5>${entry.kind==='points'?sourceButton('points',entry.row.id,'Ouvrir le point'):''}</div>
               ${links?`<p class="followup-meta">${esc(links)}</p>`:''}
+              ${entry.reported?'<p class="followup-meta">Point reporté</p>':''}
               ${entry.inherited&&entry.projects.length?'<p class="followup-meta">Projet associé via la réunion</p>':''}
               ${ctx.archived(entry.kind,entry.row)?'<p class="followup-meta">Archivé</p>':''}
               ${entry.content?`<div class="followup-text">${esc(entry.content)}</div>`:entry.kind==='notes'?'<p class="followup-meta">Aucune note générale renseignée.</p>':''}

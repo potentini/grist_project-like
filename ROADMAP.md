@@ -1,6 +1,6 @@
 # Feuille de route du widget de suivi
 
-Cette feuille conserve les évolutions discutées et reportées. La première version `@` est développée uniquement dans ce dépôt de prévisualisation ; les autres sujets restent reportés et leur présence ne vaut pas autorisation de développement. Ajouter ici les nouveaux sujets explicitement laissés pour plus tard, avec les décisions déjà prises et les questions ouvertes.
+Cette feuille conserve les évolutions discutées et reportées. La première version `@` est développée uniquement dans ce dépôt de prévisualisation ; le renvoi manuel est également disponible dans cette prévisualisation et les autres sujets restent reportés et leur présence ne vaut pas autorisation de développement. Ajouter ici les nouveaux sujets explicitement laissés pour plus tard, avec les décisions déjà prises et les questions ouvertes.
 
 ## Enregistrement automatique des notes dans Grist
 
@@ -12,7 +12,7 @@ Limiter initialement cette sauvegarde aux textes de réunions et points, après 
 
 ## Prise de notes de réunion et rattachements rapides
 
-Statut : première version expérimentale développée le 23 novembre 2026 dans `grist_project-like-preview` uniquement. Le dépôt stable `grist_project-like` n’est pas modifié. Voir README pour les prérequis et essais. La création d’action depuis un paragraphe, la continuité des séances et le renvoi vers une réunion future restent reportés.
+Statut : première version expérimentale développée le 23 novembre 2026 dans `grist_project-like-preview` uniquement. Le dépôt stable `grist_project-like` n’est pas modifié. Voir README pour les prérequis et essais. La création d’action depuis un paragraphe et la reprise automatique des séances restent reportées.
 
 Objectif : écrire les notes de réunion avec un minimum d’interruptions, tout en produisant des points de discussion structurés, lisibles dans le widget et dans les tables Grist.
 
@@ -71,7 +71,7 @@ Questions ouvertes : conversions entre projets différents ; choix détaillés d
 
 ## Réunions récurrentes et continuité des points de discussion
 
-Statut : proposition discutée puis explicitement reportée, à reprendre ultérieurement. Aucun changement de tables ou de comportement à réaliser à ce stade.
+Statut : le renvoi manuel est disponible dans le preview. La reprise automatique et les échanges propres à chaque séance restent à concevoir.
 
 ### Modèle proposé
 
@@ -126,13 +126,8 @@ Proposition de conception discutée le 23 novembre 2026, à valider avant dével
 - Rechercher les projets, chantiers et tâches actifs accessibles par titres, codes et chemins parents, sans distinction de casse ni d’accents. Recherche locale sur les données chargées ; aucune création à la seule frappe. Les rattachements multiples restent possibles.
 - Anticiper les mappings PointPrecedent, EtatSuivi et éventuellement ReprendreApres, sans les rendre obligatoires pour utiliser `@`. Un nouveau point indépendant démarre sans PointPrecedent ; ce lien est réservé à une reprise explicite, jamais déduit de titres similaires.
 - Le brouillon structuré devra conserver les identifiants de blocs, références, ordre et éventuels liens de reprise, avec compatibilité des brouillons texte existants. Les textes généraux restent distincts du contenu des points ; ne pas stocker deux copies modifiables du même paragraphe.
-- Proposer ultérieurement **Renvoyer à une réunion…** : choisir une séance future existante ou en créer une, récurrente (Instance) ou ponctuelle (Nom libre), avec date ou date à préciser. Prévoir son état « prévue » et une confirmation avant écriture.
-- Pour un sujet déjà abordé, conserver le point et ses échanges dans la réunion source. Créer un nouveau point dans la destination avec NoteOrigine vers cette réunion et PointPrecedent vers le point source. Reprendre titre et rattachements ; laisser les nouveaux échanges et décisions vides, en affichant l’historique en contexte. Un simple changement de NoteOrigine déplace la provenance et ne doit pas servir de renvoi historique.
-- Aucun champ ReunionCible n’est nécessaire d’emblée : le nouveau point et sa NoteOrigine portent déjà la destination. La création de la réunion éventuelle et de son point doit être cohérente, sans doublon lors d’un nouvel essai après erreur.
-- Première version recommandée : un seul successeur planifié par point, toutes instances confondues, avec accès à la destination et possibilité de réorienter explicitement. Plusieurs destinations simultanées créeraient des branches de discussion : périmètre à décider séparément.
-- Une reprise déjà planifiée doit être signalée et exclue des nouvelles propositions automatiques de reprise pour éviter les doublons. Distinguer les séances prévues des séances tenues ; ne pas perdre un sujet si sa séance cible est annulée, supprimée ou reportée. Le suivi du sujet reste distinct de la planification d’une séance.
-- Les actions existantes restent attachées à leur point/réunion d’origine et sont retrouvées via le fil des points, sans copie ni changement de provenance. Les nouvelles actions appartiennent à la séance qui les crée.
-- Maintenir la distinction : reprise automatique par Instance ; renvoi manuel entre toutes réunions accessibles. Étudier séparément le déplacement d’un point ajouté par erreur à une réunion avant qu’il soit abordé.
+- Le renvoi manuel associe la réunion destinataire au point via la liste de références facultative PointsReportes. Le point, sa provenance, ses échanges et ses actions sont partagés entre les séances. Chaque réunion contient au plus un lien vers le point.
+- Pour la reprise automatique, distinguer les séances prévues des séances tenues et signaler les sujets déjà planifiés. Les échanges et décisions propres à chaque séance restent à modéliser.
 
 ## Utilisateur courant et filtres « Mes… »
 

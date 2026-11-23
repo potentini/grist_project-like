@@ -1328,3 +1328,13 @@ body.phone-mode .advanced-join-control select { width: 100%; min-width: 0; }
 body.phone-mode .quick-picker { flex: none; width: 100%; max-width: 100%; }
 body.phone-mode .quick-picker > input { font-size: 16px; padding: 5px 24px 5px 6px; }
 body.phone-mode .quick-picker::after { top: 6px; }
+
+@media (min-width: 1000px) and (pointer: fine) {
+  #editor[data-kind="notes"] {
+    width: 92vw;
+    max-width: 92vw;
+    box-sizing: border-box;
+  }
+}
+#pointForwardDialog .actions { flex-wrap: wrap; }
+#pointForwardError { color: #9a2633; }

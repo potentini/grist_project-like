@@ -1,10 +1,10 @@
 # Projets, notes et actions — widget Grist V1
 
-Ce dépôt **grist_project-like-preview** est une copie de travail indépendante du [widget d’origine](https://github.com/potentini/grist_project-like). La saisie `@` décrite ci-dessous est une première version expérimentale propre à cette prévisualisation. La tester sur une **copie du document Grist**, avec un widget pointant vers l’URL Pages de ce dépôt. Aucun changement de schéma Grist n’est effectué automatiquement.
+Ce dépôt **grist_project-like-preview** est une copie de travail indépendante du [widget d’origine](https://github.com/potentini/grist_project-like). La saisie `@` et le renvoi des points sont disponibles dans cette prévisualisation. La tester sur une **copie du document Grist**, avec un widget pointant vers l’URL Pages de ce dépôt. Aucun changement de schéma Grist n’est effectué automatiquement.
 
 ## Prévisualisation : notes de réunion avec `@`
 
-Prérequis : table Points distincte de la table des réunions ; mapping de Points.Titre et Points.Contenu vers des colonnes Texte modifiables, et de Points.NoteOrigine vers la réunion source. Pour les associations, mapper Projets, Chantiers et Taches vers des références ou listes de références de leurs tables respectives. Une référence simple accepte un seul lien de ce niveau : retirer son étiquette avant d’en choisir un autre ; une liste permet plusieurs liens. Les liens par codes Texte sont aussi acceptés lorsque les codes cibles sont uniques et mappés. Decision et Ordre sont facultatifs. Aucun nouveau champ de continuité des réunions n’est requis.
+Prérequis : table Points distincte de la table des réunions ; mapping de Points.Titre et Points.Contenu vers des colonnes Texte modifiables, et de Points.NoteOrigine vers la réunion source. Pour les associations, mapper Projets, Chantiers et Taches vers des références ou listes de références de leurs tables respectives. Une référence simple accepte un seul lien de ce niveau : retirer son étiquette avant d’en choisir un autre ; une liste permet plusieurs liens. Les liens par codes Texte sont aussi acceptés lorsque les codes cibles sont uniques et mappés. Decision et Ordre sont facultatifs. La saisie `@` seule ne nécessite aucun champ de continuité.
 
 En mode Édition d’une réunion :
 
@@ -21,7 +21,7 @@ Les brouillons locaux versionnés conservent aussi l’identité des blocs, les 
 
 Une tentative d’enregistrement est conservée avant son envoi. Après une réponse réseau perdue, une nouvelle tentative vérifie les lignes déjà présentes au lieu de créer des doublons. Si une collision ou un changement concurrent empêche de confirmer l’état, aucune ligne n’est écrasée : conserver les textes et vérifier les points dans Grist avant de reprendre. Les changements concurrents des champs modifiés et le déplacement d’un point vers une autre réunion sont contrôlés ; ses actions conservent leur provenance cohérente. Ce contrôle avant écriture ne constitue pas un verrou collaboratif entre utilisateurs.
 
-Ne sont **pas** inclus : autosave dans Grist, reprise des réunions récurrentes, renvoi d’un point vers une réunion future, création d’action depuis un paragraphe ou transformation automatique des anciennes notes. Les identifiants locaux et les identifiants Grist préparent cette continuité sans l’activer.
+Ne sont **pas** inclus : autosave dans Grist, reprise automatique des réunions récurrentes, création d’action depuis un paragraphe ou transformation automatique des anciennes notes. Les identifiants locaux et les identifiants Grist préparent cette continuité sans l’activer.
 
 Vérifications dédiées avec API Grist simulée : `python -m http.server 8771 --bind 127.0.0.1`, puis `node tests/meeting-mentions.cjs` et `node tests/meeting-mentions-ux.cjs`. Les parcours couvrent PC, tablette, téléphone, références natives et codes Texte, récupération, permissions, conflits et erreurs réseau.
 
@@ -288,6 +288,14 @@ La liste générale Notes et réunions est indépendante du périmètre Grist pr
 La vue générale À faire suit la même règle transverse : les filtres Grist de la hiérarchie Projets/Chantiers/Tâches ne limitent ni ses actions ni les parents affichés comme contexte. Les actions autonomes et celles liées à des projets hors de cette sélection restent donc accessibles. La vue Projets conserve son filtrage contextuel ; les filtres Grist directement appliqués à Actions et les filtres explicites du widget restent respectés.
 
 Les notifications de configuration Grist ne réinitialisent plus un mapping en cours de saisie après renommage. Les sauvegardes d’options du widget (mapping, largeur des volets, tri et synchronisation de la timeline) sont sérialisées. Une révision du mapping empêche une ancienne notification de remplacer une sauvegarde plus récente. Le démarrage lit explicitement le mapping enregistré avant toute détection ; l’enregistrement capture également les libellés et cases à cocher dont l’événement de changement est encore en attente. Les champs volontairement non mappés sont conservés.
+
+## Renvoyer un point vers une réunion
+
+Dans la table des réunions, ajouter une colonne **PointsReportes** de type **Liste de références**, vers la table **Points**. Dans le widget, vérifier son association au champ **Points reportés** du mapping des réunions. Cette colonne facultative peut être ajoutée à la copie du document utilisée pour tester le preview.
+
+En mode **Édition**, ouvrir un point enregistré ou sa réunion et cliquer sur **Renvoyer vers une réunion…**. Rechercher une réunion existante, ou cliquer sur **Créer une réunion destinataire…**. Le formulaire de création présélectionne le point et, si elle existe, l’instance d’origine. Pour une réunion ponctuelle, effacer l’instance et renseigner le titre libre. Le point est associé à la nouvelle réunion à l’enregistrement.
+
+La réunion destinataire et le suivi affichent le point reporté. Ouvrir le point donne accès à sa réunion d’origine, à ses échanges, à ses décisions et à ses actions. Un même point reste une seule ligne et peut être lié à plusieurs réunions. Pour retirer un renvoi, enlever le point du champ **Points reportés** de la réunion destinataire et enregistrer. Le renvoi manuel peut servir de base à la reprise automatique par instance.
 
 ## Suivi des notes et réunions
 
