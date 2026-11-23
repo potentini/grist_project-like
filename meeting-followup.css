@@ -49,3 +49,6 @@ body.phone-mode #meetingFollowup .followup-target { flex-basis: 180px; }
 body.phone-mode #meetingFollowup .followup-search { flex-basis: 170px; }
 body.phone-mode #meetingFollowup input, body.phone-mode #meetingFollowup select { font-size: 16px; padding: 5px; }
 body.phone-mode #meetingFollowup .followup-meeting { padding: 8px; }
+/* Keep the native backing select inside its searchable control on small screens. */
+#meetingFollowup .reference-source { left: 0; top: 0; padding: 0; }
+#meetingFollowup .reference-picker > input { box-sizing: border-box; }

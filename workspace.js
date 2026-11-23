@@ -5122,7 +5122,7 @@
   window.createMeetingFollowup?.({
     data:()=>data, view:()=>view, config:cfg, column:col, value:val, display:displayValue,
     values, targets, pointProjects, noteProjects, projectOf, title, fieldLabel, dateText,
-    referenceText:refText, normalize:norm, archived, selection:()=>selection,
+    referenceText:refText, normalize:norm, archived, searchableSelect, selection:()=>selection,
     busy:()=>!!editing||moving, showArchived:()=>$("showArchived").checked,
     message, openRecord:(kind,id)=>selectRecord(kind,id,null),
   });

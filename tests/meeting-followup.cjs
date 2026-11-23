@@ -52,6 +52,7 @@ async function setup({fixture,refs}) {
       }
     }
   }
+  if(!refs)db.data.notes[0].Date='1/11/2026';
   const mapping=Object.fromEntries(Object.entries(roles).map(([id,kind])=>[kind,{table:db.tables.find(t=>t.id===Number(id)).tableId,fields:Object.fromEntries(db.meta.filter(c=>c.parentId===Number(id)).map(c=>[c.colId,c.colId]))}]));
   let opts={projectWorkspaceMappingV1:mapping},callback;
   window.writes=[];window.testDb=db;
@@ -60,8 +61,9 @@ async function setup({fixture,refs}) {
 (async()=>{
   const browser=await chromium.launch({executablePath:'/usr/bin/chromium',args:['--no-sandbox']});
   try {
-    for(const phone of [false,true])for(const refs of [false,true])for(const colorScheme of ['light','dark']) {
-      const page=await browser.newPage({viewport:{width:phone?390:1400,height:phone?844:1000},screen:{width:phone?390:1400,height:phone?844:1000},hasTouch:phone,isMobile:phone,colorScheme}),errors=[];
+    for(const width of [1400,768,390])for(const refs of [false,true])for(const colorScheme of ['light','dark']) {
+      const phone=width===390;
+      const page=await browser.newPage({viewport:{width,height:phone?844:1000},screen:{width,height:phone?844:1000},hasTouch:phone,isMobile:phone,colorScheme}),errors=[];
       page.setDefaultTimeout(10000);page.on('pageerror',e=>errors.push(e.message));
       await page.route('https://docs.getgrist.com/**',r=>r.fulfill({body:''}));
       await page.addInitScript(setup,{fixture,refs});
@@ -81,22 +83,31 @@ async function setup({fixture,refs}) {
       const popup=page.locator('#meetingFollowup');await popup.waitFor();
       const bounds=await popup.evaluate(e=>{const r=e.getBoundingClientRect();return {width:r.width,height:r.height,iw:innerWidth,ih:innerHeight,scroll:e.scrollWidth}});
       assert.ok(bounds.width<=bounds.iw && bounds.height<=bounds.ih);
-      assert.ok(bounds.scroll<=bounds.width);
+      assert.ok(bounds.scroll<=bounds.width,JSON.stringify({width,refs,colorScheme,bounds}));
       if(phone){assert.equal(bounds.width,bounds.iw);assert.equal(bounds.height,bounds.ih);}
       if(process.env.FOLLOWUP_SCREENSHOT && !phone && !refs && colorScheme==='light')await page.screenshot({path:process.env.FOLLOWUP_SCREENSHOT});
       assert.equal(await page.locator('#meetingFollowupMode').inputValue(),'instance');
-      await popup.getByRole('heading',{name:'Projet Alpha',exact:true}).waitFor();
-      await popup.getByRole('heading',{name:'Projet Bêta',exact:true}).waitFor();
+      await popup.getByRole('heading',{name:'Projet Alpha',exact:true}).first().waitFor();
+      await popup.getByRole('heading',{name:'Projet Bêta',exact:true}).first().waitFor();
       await popup.getByRole('heading',{name:'Sans projet / Notes générales',exact:true}).waitFor();
       assert.match(await page.locator('#meetingFollowupStatus').innerText(),/3 réunion\(s\) · 4 point\(s\)/);
       assert.equal(await popup.locator('img').count(),0);
       assert.equal(await page.evaluate(()=>window.injected),undefined);
       assert.ok((await popup.innerText()).includes('<img src=x'));
+      const meetingIds=()=>popup.locator('.followup-meeting').evaluateAll(rows=>rows.map(r=>Number(r.dataset.followupMeeting)));
+      assert.deepEqual(await meetingIds(),[2,1,4]);
+      await page.locator('#meetingFollowupOrder').selectOption('asc');assert.deepEqual(await meetingIds(),[1,2,4]);
+      await page.locator('#meetingFollowupOrder').selectOption('desc');
+      const picker=popup.getByRole('combobox',{name:'Instance ou projet'});
+      await picker.fill('cod');await popup.getByRole('option',{name:'Codir',exact:true}).click();
+      assert.deepEqual(await meetingIds(),[3]);
+      await picker.fill('amand');await picker.press('ArrowDown');await picker.press('Enter');
+      assert.deepEqual(await meetingIds(),[2,1,4]);
       const alpha=popup.locator('.followup-group').filter({has:page.getByRole('heading',{name:'Projet Alpha',exact:true})});
       assert.equal(await alpha.getByText('Point Bêta',{exact:true}).count(),0);
       assert.equal(await alpha.getByText('Autre projet dans réunion Alpha',{exact:true}).count(),0);
       await alpha.getByText('Projet associé via la réunion',{exact:true}).waitFor();
-      await page.locator('#meetingFollowupMode').selectOption('project');await page.locator('#meetingFollowupTarget').selectOption('1');
+      await page.locator('#meetingFollowupMode').selectOption('project');await picker.fill('alpha');await popup.getByRole('option',{name:'Projet Alpha',exact:true}).click();
       await popup.getByText('Sujet Codir',{exact:true}).waitFor();
       assert.equal(await popup.getByText('Point Bêta',{exact:true}).count(),0);
       assert.equal(await popup.getByText('Autre projet dans réunion Alpha',{exact:true}).count(),0);
@@ -119,7 +130,7 @@ async function setup({fixture,refs}) {
       assert.equal(await page.locator('#search').inputValue(),filtersBefore);
       assert.equal(await page.locator('#list [data-kind=notes]').count(),0);
       // Opening a source uses the existing detail navigation, without editing data.
-      await page.locator('[data-meeting-followup]').click();await page.locator('#meetingFollowupMode').selectOption('project');await page.locator('#meetingFollowupTarget').selectOption('1');
+      await page.locator('[data-meeting-followup]').click();await page.locator('#meetingFollowupMode').selectOption('project');await picker.fill('alpha');await popup.getByRole('option',{name:'Projet Alpha',exact:true}).click();
       await popup.locator('[data-followup-entry="points:4"]').getByRole('button',{name:'Ouvrir le point'}).click();
       await popup.waitFor({state:'hidden'});await page.locator('#detail h2').filter({hasText:'Sujet Codir'}).waitFor();
       if(phone){
@@ -141,6 +152,6 @@ async function setup({fixture,refs}) {
       assert.equal(await page.evaluate(()=>writes.length),0);
       assert.deepEqual(errors,[]);await page.close();
     }
-    console.log('PASS follow-up by instance/project, date/source metadata, own filters, explicit/inherited/multiple links, archive/missing provenance, safe text, source navigation and no writes in Text/Ref mappings and light/dark modes on desktop/phone');
+    console.log('PASS follow-up global chronological order in both directions, searchable instance/project selection by text and keyboard, date/source metadata, own filters, explicit/inherited/multiple links, archive/missing provenance, safe text, source navigation and no writes in Text/Ref mappings and light/dark modes on PC/tablet/phone');
   } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1});

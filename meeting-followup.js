@@ -35,7 +35,7 @@
     function dateInfo(note) {
       const raw=note && (ctx.dateText(ctx.value('notes',note,'Date')) || ctx.display('notes',note,'DateSource'));
       if(!raw)return {label:'Date non renseignée',time:null};
-      const iso=String(raw).match(/^(\d{4})-(\d{2})-(\d{2})/), fr=String(raw).match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      const iso=String(raw).trim().match(/^(\d{4})-(\d{2})-(\d{2})/), fr=String(raw).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
       const parts=iso ? [iso[1],iso[2],iso[3]] : fr ? [fr[3],fr[2],fr[1]] : null;
       if(!parts)return {label:String(raw),time:null};
       const time=Date.UTC(+parts[0],+parts[1]-1,+parts[2]), parsed=new Date(time);
@@ -100,7 +100,7 @@
       target.innerHTML=sorted.map(([key,label])=>`<option value="${esc(key)}">${esc(label)}</option>`).join('');
       if(preferred && choices.has(String(preferred)))target.value=String(preferred);
       $('TargetLabel').textContent=mode.value==='instance'?'Instance':'Projet';
-      render();
+      target.dispatchEvent(new Event('change'));
     }
     function sourceButton(kind,id,label) {
       return `<button type="button" class="followup-source" data-followup-kind="${kind}" data-followup-id="${id}">${esc(label)}</button>`;
@@ -125,21 +125,24 @@
       ].join(' ')).includes(query));
       const meetingIds=new Set(selected.filter(e=>e.note).map(e=>e.note.id)), pointIds=new Set(selected.filter(e=>e.kind==='points').map(e=>e.row.id));
       status.textContent=`${meetingIds.size} réunion(s) · ${pointIds.size} point(s) de discussion`;
-      const groups=new Map();
+      // Sort meetings globally; project groups belong inside their source meeting.
+      const meetings=new Map();
       for(const entry of selected) {
+        const noteKey=entry.note?.id??0;
+        if(!meetings.has(noteKey))meetings.set(noteKey,{note:entry.note,groups:new Map(),entries:[]});
+        const meeting=meetings.get(noteKey);
+        meeting.entries.push(entry);
         const keys=mode.value==='instance' ? entry.projects.length?entry.projects.map(p=>[String(p.id),ctx.title('projects',p)]):[['none','Sans projet / Notes générales']] : [['project',null]];
         for(const [key,label] of keys) {
-          if(!groups.has(key))groups.set(key,{label,meetings:new Map()});
-          const meetings=groups.get(key).meetings, noteKey=entry.note?.id??0;
-          if(!meetings.has(noteKey))meetings.set(noteKey,{note:entry.note,entries:[]});
-          meetings.get(noteKey).entries.push(entry);
+          if(!meeting.groups.has(key))meeting.groups.set(key,{label,entries:[]});
+          meeting.groups.get(key).entries.push(entry);
         }
       }
-      body.innerHTML=[...groups.values()].sort((a,b)=>a.label===null?0:a.label.localeCompare(b.label,'fr',{numeric:true})).map(group=>
-        `<section class="followup-group">${group.label?`<h3>${esc(group.label)}</h3>`:''}${[...group.meetings.values()].sort(compareMeetings).map(meeting=>{
+      body.innerHTML=[...meetings.values()].sort(compareMeetings).map(meeting=>{
           const note=meeting.note, when=dateInfo(note);
           const meetingMeta=note?metadata('notes',note,['Code','Instance','Type','Participants','Etat']):'Réunion d’origine non renseignée ou introuvable';
-          const cards=meeting.entries.sort((a,b)=>(a.kind==='notes'?-1:b.kind==='notes'?1:Number(ctx.value('points',a.row,'Ordre')||a.row.id)-Number(ctx.value('points',b.row,'Ordre')||b.row.id))).map(entry=>{
+          const groups=[...meeting.groups.values()].sort((a,b)=>a.label===null?0:a.label.localeCompare(b.label,'fr',{numeric:true})).map(group=>{
+          const cards=group.entries.sort((a,b)=>(a.kind==='notes'?-1:b.kind==='notes'?1:Number(ctx.value('points',a.row,'Ordre')||a.row.id)-Number(ctx.value('points',b.row,'Ordre')||b.row.id))).map(entry=>{
             const heading=entry.kind==='notes'?'Notes de réunion':ctx.title('points',entry.row);
             const links=metadata(entry.kind,entry.row,entry.kind==='notes'?['Chantiers','Taches']:['Projets','Chantiers','Taches']);
             return `<article class="followup-entry" data-followup-entry="${entry.kind}:${entry.row.id}">
@@ -151,12 +154,14 @@
               ${entry.decision?`<p class="followup-decision"><strong>Décision</strong><span class="followup-text">${esc(entry.decision)}</span></p>`:''}
             </article>`;
           }).join('');
+          return `<section class="followup-group">${group.label?`<h3>${esc(group.label)}</h3>`:''}${cards}</section>`;
+          }).join('');
           return `<section class="followup-meeting" data-followup-meeting="${note?.id??0}">
             <div class="followup-meeting-heading"><h4>${esc(when.label)} — ${esc(note?ctx.title('notes',note):'Réunion non retrouvée')}</h4>${note?sourceButton('notes',note.id,'Ouvrir la réunion'):''}</div>
             <p class="followup-meta">${esc(meetingMeta)}</p>
             ${note&&ctx.archived('notes',note)?'<p class="followup-meta">Réunion archivée</p>':''}
-            ${mode.value==='project'&&note&&!meeting.entries.some(e=>e.kind==='notes')?'<p class="followup-meta">Réunion associée via ses points de discussion</p>':''}${cards}</section>`;
-        }).join('')}</section>`).join('') || '<p class="empty">Aucune note ni aucun point pour ces critères.</p>';
+            ${mode.value==='project'&&note&&!meeting.entries.some(e=>e.kind==='notes')?'<p class="followup-meta">Réunion associée via ses points de discussion</p>':''}${groups}</section>`;
+        }).join('') || '<p class="empty">Aucune note ni aucun point pour ces critères.</p>';
       if(selected.some(e=>e.projects.length>1))status.textContent+=' · Un élément lié à plusieurs projets peut apparaître dans plusieurs groupes.';
       if(mode.value==='instance') {
         const orphans=points().filter(point=>!sourceNote(point)).length;
@@ -188,11 +193,13 @@
     });
     $('Close').onclick=()=>dialog.close();
     dialog.addEventListener('close',()=>{
+      target.closest('.reference-picker')?.dispatchEvent(new Event('pickerclose'));
       if(!navigating) {
         for(const [id,top] of returnScroll||[])document.getElementById(id).scrollTop=top;
         if(returnFocus?.isConnected)returnFocus.focus({preventScroll:true});
       }
     });
+    ctx.searchableSelect(target, {label:'Instance ou projet', listId:'meetingFollowupTargetOptions', placeholder:'Choisir ou rechercher…', floating:true});
     mode.onchange=()=>populateTarget();
     target.onchange=render;order.onchange=render;search.oninput=render;
     includeArchived.onchange=()=>populateTarget(target.value);
