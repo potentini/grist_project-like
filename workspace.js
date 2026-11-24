@@ -4152,7 +4152,10 @@
     message(`« ${title(kind,record)} » a été enregistré dans « ${cfg(kind).table} ».`);
   }
   async function saveMeetingComposer(kind, record, fields) {
-    const state = meetingComposer.snapshot();
+    const { state, general } = meetingComposer.snapshot();
+    const contentColumn = cfg(kind).fields?.Contenu;
+    if (kind === "notes" && contentColumn && Object.hasOwn(fields, contentColumn))
+      fields = { ...fields, [contentColumn]: general };
     if (state.schema !== meetingMentionSchema(kind) || state.forwardSchema && state.forwardSchema !== meetingForwardSchema())
       throw Error("Le mapping des points ou des rattachements a changé. Le brouillon est conservé : copiez les textes avant de rouvrir.");
     const fresh = Object.fromEntries(await Promise.all(["notes", "points", "projects", "streams", "tasks", "actions"].map(async k => [

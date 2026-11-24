@@ -10,9 +10,9 @@ for(const width of [1440,768,390]){
  await p.locator('#list [data-kind=notes][data-id="1"]').first().click();await p.locator('#editionButton').click();await p.locator('#detail [data-edit]').click();
  const block=p.locator('.mention-block').first(),menu=p.locator('.mention-menu');
  async function mention(text){await block.getByRole('button',{name:'@ Ajouter un rattachement',exact:true}).click();await block.locator('[data-block-field=content]').pressSequentially(text);await menu.waitFor()}
- await mention('hceres');await menu.getByRole('option',{name:/Projets — Auto/}).click();assert.equal(await block.locator('.mention-chips button').count(),1);
+ await mention('hceres');await menu.getByRole('option',{name:/Projets — Auto/}).click();assert.match(await block.locator('[data-block-field=content]').inputValue(),/@\[Auto-évaluation/);
  await mention('externe');const other=menu.getByRole('option',{name:/Projets — Projet externe/});await other.waitFor();assert.equal(await other.isDisabled(),true);assert.match(await other.innerText(),/Référence simple/);
- await block.locator('[data-block-field=content]').press('Escape');await block.locator('.mention-chips button').click();
+ await block.locator('[data-block-field=content]').press('Escape');
  await block.locator('[data-block-field=content]').fill('Échanges modifiés');await mention('externe');await menu.getByRole('option',{name:/Projets — Projet externe/}).click();
  await p.locator('#save').click();await p.locator('#editForm').waitFor({state:'hidden'});assert.equal(await p.evaluate(()=>testDb.data.points[0].Projets),2);
  // Standalone point keeps its single-select field and chip consistent.

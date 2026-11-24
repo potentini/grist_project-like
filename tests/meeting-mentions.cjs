@@ -25,7 +25,10 @@ async function newBlock(page,query='hceres',noRef=false){
  await text.pressSequentially('@'+query);
  const menu=page.locator('.mention-menu');await menu.waitFor();
  if(noRef)await menu.getByRole('option',{name:'Créer un point sans rattachement',exact:false}).click();
- else await menu.getByRole('option',{name:/Tâches — Confirmer les participants/}).click();
+ else {
+  await menu.getByRole('option',{name:/Tâches — Confirmer les participants/}).click();
+  await page.getByRole('button',{name:'Transformer le paragraphe en point'}).click();
+ }
  await page.locator('.mention-proposal').waitFor();
  await page.locator('.mention-proposal input').fill('Calendrier à confirmer');
  await page.getByRole('button',{name:'Créer le point (brouillon)',exact:true}).click();
@@ -44,7 +47,7 @@ async function save(page){await page.locator('#save').click();await page.locator
   await block.getByRole('button',{name:'@ Ajouter un rattachement',exact:true}).click();
   await block.locator('[data-block-field=content]').pressSequentially('externe');
   await p.locator('.mention-menu').getByRole('option',{name:/Tâches — Tâche externe/}).click();
-  assert.equal(await block.locator('.mention-chips button').count(),2);
+  assert.match(await block.locator('[data-block-field=content]').inputValue(),/@\[.*Confirmer les participants.*@\[.*Tâche externe/);
   await save(p);
   let db=await p.evaluate(()=>testDb);
   assert.equal(db.data.points.length,2);const point=db.data.points[1];

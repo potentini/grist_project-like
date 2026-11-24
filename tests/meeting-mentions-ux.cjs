@@ -11,8 +11,10 @@ for(const phone of [false,true]){
  await text.fill('Sujet @hceres');await menu.waitFor();await text.press('Escape');assert.equal(await menu.isVisible(),false);assert.equal(await p.locator('#editForm').isVisible(),true);assert.equal(await p.locator('.mention-proposal').isVisible(),false);
  await text.fill('Texte conservé @hceres');await menu.waitFor();
  if(phone)await menu.getByRole('option',{name:/Tâches — Confirmer/}).tap();else await text.press('Enter');
+ assert.match(await text.inputValue(),/@\[/);assert.equal(await p.locator('.mention-proposal').isVisible(),false);
+ await p.getByRole('button',{name:'Transformer le paragraphe en point'}).click();
  await p.locator('.mention-proposal').waitFor();assert.equal(await p.locator('.mention-block').count(),1);
- await p.getByRole('button',{name:'Garder en notes générales',exact:true}).click();assert.equal(await text.inputValue(),'Texte conservé @hceres');assert.deepEqual(await p.evaluate(()=>writes),[]);
+ await p.getByRole('button',{name:'Garder en notes générales',exact:true}).click();assert.match(await text.inputValue(),/^Texte conservé @\[/);assert.deepEqual(await p.evaluate(()=>writes),[]);
  await text.fill('Autre paragraphe @aucun');await menu.waitFor();await menu.getByRole('option',{name:'Créer un point sans rattachement'}).click();
  await p.getByRole('button',{name:'Créer le point (brouillon)',exact:true}).click();assert.equal(await p.locator('.mention-block').count(),2);
  const pending=p.locator('.mention-block').last();await pending.locator('[data-block-field=decision]').fill('Décision temporaire');

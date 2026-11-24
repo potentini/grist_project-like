@@ -14,6 +14,7 @@ window.MeetingMentions = (() => {
       return !initial || ['title', 'content', 'decision'].some(f => b[f] !== initial[f]) || !same(b.refs, initial.refs) || !same(b.forwards || [], initial.forwards || []);
     };
     let blocks = copy(initialBlocks), touched = false, pending = null, locked = false, dead = false;
+    const inlineMentions = new Map();
     let pointBaseRefs = copy(ctx.initialRefs || []);
     let timer, trigger = null, active = 0, options = [], proposal = null, composing = false;
     const listeners = [], observed = new WeakSet(), controlsBeforeLock = new Map();
@@ -22,7 +23,7 @@ window.MeetingMentions = (() => {
     const hint = document.createElement('p');
     hint.className = 'mention-hint';
     hint.textContent = ctx.kind === 'notes'
-      ? 'Tapez @ pour rechercher un projet, chantier ou une tâche. Séparez les paragraphes par une ligne vide. Un point peut aussi rester sans rattachement au suivi.'
+      ? 'Tapez @ pour rattacher un paragraphe à un projet, un chantier ou une tâche. Cliquez sur une mention pour la modifier. À l’enregistrement, chaque paragraphe marqué devient un point. Une ligne vide sépare les paragraphes.'
       : 'Tapez @ dans les échanges pour ajouter un rattachement à ce point, sans créer de nouveau point.';
     if (ctx.forwardSchema) hint.textContent += ' Tapez # pour reporter un point vers une réunion existante.';
     const notice = document.createElement('p');
@@ -89,28 +90,61 @@ window.MeetingMentions = (() => {
     }
     const searchWords = query => norm(query).split(/\s+/).filter(Boolean);
     const matchesQuery = (candidate, words) => words.every(word => candidate.search.includes(word));
-    function showMenu(textarea, block) {
+    function mentionsIn(text) {
+      if (!inlineMentions.size) return [];
+      return [...text.matchAll(/[@#]\[[^\]\n]+\]/g)].flatMap(match => {
+        const mention = inlineMentions.get(match[0]);
+        return mention ? [{ ...mention, text: match[0], start: match.index, end: match.index + match[0].length }] : [];
+      });
+    }
+    function mentionText(marker, label, link) {
+      const safeLabel = label.replace(/[\]\r\n]/g, ' ').trim() || 'Sans titre';
+      let text = marker + '[' + safeLabel + ']';
+      const base = text;
+      for (let suffix = 2; inlineMentions.has(text) && !same(inlineMentions.get(text), link); suffix++)
+        text = base.slice(0, -1) + ' · ' + suffix + ']';
+      inlineMentions.set(text, link);
+      return text;
+    }
+    function replaceMention(trigger, text) {
+      const { textarea, at, caret } = trigger;
+      textarea.setRangeText(text, at, caret, 'end');
+      touched = true;
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      closeMenu();
+      textarea.focus();
+      notify();
+    }
+    function showMenu(textarea, block, edit = false) {
       if (locked || dead || composing) return;
       const p = paragraph(textarea);
       if (textarea.selectionEnd !== p.caret) { closeMenu(); return; }
-      const match = token(p.value.slice(p.start, p.caret));
-      if (!match) { closeMenu(); return; }
-      const [, marker, query] = match;
-      const at = p.caret - query.length - 1;
-      trigger = { textarea, block, ...p, at, marker };
+      const current = edit && mentionsIn(p.value).find(mention => p.caret >= mention.start && p.caret <= mention.end);
+      const match = current ? null : token(p.value.slice(p.start, p.caret));
+      if (!current && !match) { closeMenu(); return; }
+      const marker = current ? current.text[0] : match[1];
+      const query = current ? '' : match[2];
+      if (!current && (query.startsWith('[') || query.includes(']'))) { closeMenu(); return; }
+      const at = current ? current.start : p.caret - query.length - 1;
+      trigger = { textarea, block, ...p, at, caret: current ? current.end : p.caret, marker, current };
       const forwarding = marker === '#';
       const source = forwarding ? meetingIndex : indexed;
+      const scopeStart = block ? 0 : p.start;
+      const scopeEnd = block ? p.value.length : p.end;
+      const occupied = mentionsIn(p.value.slice(scopeStart, scopeEnd)).filter(mention => mention.start + scopeStart !== current?.start);
       const words = searchWords(query);
       const matches = source.filter(candidate => matchesQuery(candidate, words) &&
-        (!forwarding || ctx.canForward(candidate.id, block) && !block?.forwards?.includes(candidate.id)));
+        (!forwarding || ctx.canForward(candidate.id, block) && !block?.forwards?.includes(candidate.id) &&
+          !occupied.some(mention => mention.destination === candidate.id)));
       options = matches.slice(0, 12).map(candidate => {
         if (forwarding) return { destination: candidate, label: candidate.label, path: candidate.path };
-        const full = linkFull(candidate, block);
+        const full = linkFull(candidate, block, occupied);
         return { candidate, ref: {kind: candidate.kind, id: candidate.id}, label: candidate.label,
           disabled: !ctx.canLink(candidate.kind, block) || full, path: candidate.path,
           reason: full ? 'Référence simple : retirez le rattachement actuel avant d’en choisir un autre.' : '' };
       });
-      if (!forwarding) options.push({ ref: null, label: ctx.kind === 'notes' && !block
+      if (current) options.unshift({ remove: true, label: 'Retirer cette mention' }, { search: true, label: 'Rechercher un autre choix…' });
+      else if (!forwarding) options.push({ ref: null, label: ctx.kind === 'notes' && !block
         ? 'Créer un point sans rattachement' : 'Ne pas ajouter de rattachement' });
       menu.setAttribute('aria-label', forwarding ? 'Réunions destinataires' : 'Rattachements proposés');
       active = options.findIndex(o => !o.disabled);
@@ -137,8 +171,9 @@ window.MeetingMentions = (() => {
       if (menu.showPopover && !menu.matches(':popover-open')) menu.showPopover();
       positionMenu();
     }
-    function linkFull(ref, block) {
-      const refs = block ? block.refs : ctx.kind === 'points' ? ctx.readRefs() : [];
+    function linkFull(ref, block, occupied) {
+      const base = block ? block.refs : ctx.kind === 'points' ? ctx.readRefs() : [];
+      const refs = [...base, ...occupied.filter(mention => mention.ref).map(mention => mention.ref)];
       return !refs.some(r => r.kind === ref.kind && r.id === ref.id) &&
         refs.filter(r => r.kind === ref.kind).length >= (ctx.linkLimit?.(ref.kind) ?? Infinity);
     }
@@ -147,28 +182,40 @@ window.MeetingMentions = (() => {
       if (locked || !trigger || !option || option.disabled) return;
       let t = trigger;
       const { ref, destination, candidate } = option;
-      if (ref && linkFull(ref, t.block)) { showMenu(t.textarea, t.block); return; }
+      if (t.current && t.textarea.value !== t.value) { showMenu(t.textarea, t.block, true); return; }
+      if (option.remove || option.search) {
+        replaceMention(t, option.search ? t.marker : '');
+        if (option.search) showMenu(t.textarea, t.block);
+        return;
+      }
       const p = paragraph(t.textarea);
-      if (p.value !== t.value || p.caret !== t.caret) {
+      if (!t.current && (p.value !== t.value || p.caret !== t.caret)) {
         const match = token(p.value.slice(p.start, p.caret));
         if (!match || match[1] !== t.marker || (candidate || destination) && !matchesQuery(candidate || destination, searchWords(match[2]))) {
           showMenu(t.textarea, t.block); return;
         }
         t = { ...t, ...p, at: p.caret - match[2].length - 1 };
       }
+      if (ref && !t.current) {
+        const scope = t.block ? t.value : t.value.slice(t.start, t.end);
+        if (linkFull(ref, t.block, mentionsIn(scope))) { showMenu(t.textarea, t.block); return; }
+      }
+      if (ctx.kind === 'notes' && (ref || destination)) {
+        const label = destination?.label || refLabel(ref);
+        const link = destination ? { destination: destination.id } : { ref };
+        const text = mentionText(t.marker, label, link);
+        replaceMention(t, text + (!t.current && !/^[\s.,;:!?)]/.test(t.value.slice(t.caret)) ? ' ' : ''));
+        return;
+      }
       closeMenu();
       const clean = t.value.slice(0, t.at) + t.value.slice(t.caret);
       if (ctx.kind === 'notes' && !t.block) {
-        propose({ ...t, cleanParagraph: t.value.slice(t.start, t.at) + t.value.slice(t.caret, t.end), ref, destination });
+        propose({ ...t, cleanParagraph: t.value.slice(t.start, t.at) + t.value.slice(t.caret, t.end), ref });
         return;
       }
       t.textarea.value = clean;
       if (t.block) {
         t.block.content = clean;
-        if (destination) {
-          t.block.forwards = [...(t.block.forwards || []), destination.id];
-          notice.textContent = 'Renvoi préparé vers « ' + destination.label + ' ». Il sera ajouté à l’enregistrement.';
-        }
         if (ref && !t.block.refs.some(r => r.kind === ref.kind && r.id === ref.id)) t.block.refs.push(ref);
         renderBlocks();
       } else {
@@ -191,19 +238,18 @@ window.MeetingMentions = (() => {
       const preview = document.createElement('p'); preview.className = 'mention-paragraph'; preview.textContent = p.cleanParagraph;
       const label = document.createElement('label'); label.textContent = 'Titre du point';
       const title = document.createElement('input'); title.type = 'text';
-      title.value = p.cleanParagraph.trim().split('\n')[0].slice(0, 120) || (p.ref ? refLabel(p.ref) : 'Nouveau point');
+      title.value = extract(p.cleanParagraph).text.trim().split('\n')[0].slice(0, 120) || (p.ref ? refLabel(p.ref) : 'Nouveau point');
       label.append(title);
       const target = document.createElement('p');
-      target.textContent = p.destination ? 'Renvoyer vers « ' + p.destination.label + ' »' :
-        p.ref ? refLabel(p.ref) : 'Sans rattachement au suivi — lié à cette réunion';
+      target.textContent = p.ref ? refLabel(p.ref) : 'Sans rattachement au suivi — lié à cette réunion';
       const yes = document.createElement('button'), no = document.createElement('button'); yes.type = no.type = 'button';
-      yes.textContent = p.destination ? 'Créer et reporter le point (brouillon)' : 'Créer le point (brouillon)'; no.textContent = 'Garder en notes générales';
+      yes.textContent = 'Créer le point (brouillon)'; no.textContent = 'Garder en notes générales';
       yes.onclick = () => {
         if (locked) return;
         if (content.value !== p.value) { notice.textContent = 'Les notes ont changé. Recommencez la transformation de ce paragraphe.'; return; }
         if (!title.value.trim()) { title.focus(); notice.textContent = 'Donnez un titre au point.'; return; }
         blocks.push({ uid: crypto.randomUUID(), id: null, title: title.value, content: p.cleanParagraph, decision: '',
-          refs: p.ref ? [p.ref] : [], base: null, lockedRefs: [], ...(p.destination ? {forwards: [p.destination.id]} : {}) });
+          refs: p.ref ? [p.ref] : [], base: null, lockedRefs: [] });
         content.value = p.value.slice(0, p.start) + p.value.slice(p.end);
         proposal = null; proposalBox.hidden = true; touched = true;
         renderBlocks(); content.dispatchEvent(new Event('input', { bubbles: true })); notify();
@@ -337,7 +383,7 @@ window.MeetingMentions = (() => {
           menu.querySelectorAll('[role="option"]')[active]?.scrollIntoView({ block: 'nearest' });
         } else if (e.key === 'Tab') closeMenu();
       });
-      textarea.addEventListener('click', () => { if (!locked) showMenu(textarea, block); });
+      textarea.addEventListener('click', () => { if (!locked) showMenu(textarea, block, true); });
     }
     command.onclick = () => {
       if (locked) return;
@@ -352,14 +398,59 @@ window.MeetingMentions = (() => {
     if (window.visualViewport) { on(window.visualViewport, 'resize', positionMenu); on(window.visualViewport, 'scroll', positionMenu); }
     on(form, 'change', () => { renderPointChips(); notify(); });
     attach(content, null); renderBlocks(); renderPointChips();
-    function forwardState() {
-      return blocks.some(block => block.forwards?.length) ? { forwardSchema: ctx.forwardSchema } : {};
+    function extract(text) {
+      const mentions = mentionsIn(text);
+      let clean = '', cursor = 0;
+      for (const mention of mentions) {
+        clean += text.slice(cursor, mention.start);
+        // Remove the second separator space when a mention sits between words.
+        cursor = mention.end + Number(/[ \t]$/.test(clean) && text[mention.end] === ' ');
+      }
+      return { mentions, text: clean + text.slice(cursor) };
+    }
+    function applyMentions(block, mentions) {
+      const refs = [...block.refs], forwards = [...(block.forwards || [])];
+      for (const mention of mentions) {
+        if (mention.ref && !refs.some(ref => same(ref, mention.ref))) refs.push(mention.ref);
+        if (mention.destination && !forwards.includes(mention.destination)) forwards.push(mention.destination);
+      }
+      return { ...block, refs, ...(forwards.length ? { forwards } : {}) };
+    }
+    function materialize() {
+      const preparedBlocks = blocks.map(block => {
+        const parsed = extract(block.content);
+        return parsed.mentions.length ? applyMentions({ ...block, content: parsed.text.trim() }, parsed.mentions) : block;
+      });
+      const parts = content.value.split(/(\n[ \t]*\n(?:[ \t]*\n)*)/);
+      const remaining = [];
+      for (let i = 0; i < parts.length; i += 2) {
+        const parsed = extract(parts[i]);
+        if (!parsed.mentions.length) { remaining.push({ i, value: parts[i] }); continue; }
+        const text = parsed.text.trim();
+        preparedBlocks.push(applyMentions({
+          uid: 'inline:' + i, id: null, title: text.split('\n')[0].slice(0, 120) || 'Nouveau point',
+          content: text, decision: '', refs: [], base: null, lockedRefs: [],
+        }, parsed.mentions));
+      }
+      // Keep the original divider between paragraphs retained in the general notes.
+      const general = remaining.map((part, index) => (index ? parts[part.i - 1] : '') + part.value).join('');
+      return { preparedBlocks, general };
+    }
+    function forwardState(entries = blocks) {
+      return entries.some(block => block.forwards?.length) || [...inlineMentions.values()].some(mention => mention.destination)
+        ? { forwardSchema: ctx.forwardSchema } : {};
     }
     function snapshot() {
-      return { version: 1, schema: ctx.schema, blocks: copy(blocks), refs: ctx.kind === 'points' ? ctx.readRefs() : [], baseRefs: copy(pointBaseRefs), touched, pending: copy(pending), ...forwardState() };
+      const { preparedBlocks, general } = inlineMentions.size ? materialize() : { preparedBlocks: blocks, general: content.value };
+      const state = { version: 1, schema: ctx.schema, blocks: copy(preparedBlocks), refs: ctx.kind === 'points' ? ctx.readRefs() : [], baseRefs: copy(pointBaseRefs), touched, pending: copy(pending), ...forwardState(preparedBlocks) };
+      return { state, general };
     }
     function compatible(state) {
       return !!state && state.version === 1 && state.schema === ctx.schema && Array.isArray(state.blocks) &&
+        (state.inlineMentions === undefined || Array.isArray(state.inlineMentions) && state.inlineMentions.every(entry =>
+          Array.isArray(entry) && typeof entry[0] === 'string' && entry[1] &&
+          (entry[1].ref ? validRefs([entry[1].ref]) : Number.isInteger(entry[1].destination) && entry[1].destination > 0 &&
+            !!ctx.forwardSchema && state.forwardSchema === ctx.forwardSchema))) &&
         new Set(state.blocks.map(b => b?.uid)).size === state.blocks.length &&
         state.blocks.every(b => b && typeof b.uid === 'string' && (b.id === null || Number.isInteger(b.id) && b.id > 0) &&
           ['title', 'content', 'decision'].every(f => typeof b[f] === 'string') && validRefs(b.refs) &&
@@ -389,10 +480,13 @@ window.MeetingMentions = (() => {
       draft: {
         capture: () => changed() || pending ? { version: 1, schema: ctx.schema, partial: true,
           blocks: copy(blocks.filter(blockChanged)), refs: ctx.kind === 'points' ? ctx.readRefs() : [],
-          baseRefs: copy(pointBaseRefs), touched, pending: copy(pending), ...forwardState() } : null,
+          baseRefs: copy(pointBaseRefs), touched, pending: copy(pending), ...forwardState(),
+          ...(inlineMentions.size ? { inlineMentions: copy([...inlineMentions]) } : {}) } : null,
         compatible,
         restore(state) {
           if (!compatible(state)) throw Error('Brouillon structuré incompatible avec ce mapping.');
+          inlineMentions.clear();
+          for (const [text, link] of state.inlineMentions || []) inlineMentions.set(text, copy(link));
           if (state.partial) {
             const stored = new Map(state.blocks.map(b => [b.uid, b]));
             blocks = initialBlocks.map(b => copy(stored.get(b.uid) || b));

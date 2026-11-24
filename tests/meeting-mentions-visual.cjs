@@ -24,7 +24,8 @@ async function audit(p){return p.evaluate(()=>{
   let result=await audit(p);assert.deepEqual(result.failures,[],JSON.stringify(result));assert.ok(result.width<=result.viewport);
   if(process.env.MENTIONS_SCREENSHOT_DIR)await p.screenshot({path:process.env.MENTIONS_SCREENSHOT_DIR+`/menu-${width}-${colorScheme}.png`});
   await p.locator('.mention-menu').getByRole('option',{name:/Tâches — Confirmer/}).click();
-  assert.equal(await p.locator('.mention-proposal input').evaluate(e=>e===document.activeElement),true);
+  assert.equal(await p.locator('#editForm [name=Contenu]').evaluate(e=>e===document.activeElement&&e.selectionStart===e.value.length),true);
+  await p.getByRole('button',{name:'Transformer le paragraphe en point'}).click();
   await p.getByRole('button',{name:'Créer le point (brouillon)',exact:true}).click();
   const block=p.locator('.mention-block').last();assert.equal(await block.locator('[data-block-field=content]').evaluate(e=>e===document.activeElement&&e.selectionStart===e.value.length),true);
   await block.getByRole('button',{name:'@ Ajouter un rattachement',exact:true}).click();await block.locator('[data-block-field=content]').pressSequentially('externe');await p.locator('.mention-menu').getByRole('option',{name:/Tâches — Tâche externe/}).click();
