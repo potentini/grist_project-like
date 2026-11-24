@@ -37,10 +37,12 @@ function setup(fixture) {
   const doc=new URLSearchParams(location.search).get('doc')||'mentions-doc';
   const db=JSON.parse(sessionStorage.getItem('mentions-db:'+doc)||'null')||structuredClone(fixture);
   const mapping=Object.fromEntries(kinds.map((k,i)=>[k,{table:db.tables[i].tableId,fields:Object.fromEntries(db.meta.filter(c=>c.parentId===i+1).map(c=>[c.colId,c.colId]))}]));
-  let opts={projectWorkspaceMappingV1:mapping},cb;
+  const optionStore = fixture.persistOptions ? 'mentions-options:'+doc : null;
+  if (fixture.unmappedNoteColumn) delete mapping.notes.fields[fixture.unmappedNoteColumn];
+  let opts = (optionStore && JSON.parse(localStorage.getItem(optionStore))) || {projectWorkspaceMappingV1:mapping}, cb;
   window.testDb=db;window.writes=[];window.batches=[];window.reads=0;window.rejectWrite=false;window.loseAck=false;
   window.persistDb=()=>sessionStorage.setItem('mentions-db:'+doc,JSON.stringify(db));
-  window.grist={ready(){},onOptions(f){cb=f;f(opts)},onRecords(){},selectedTable:{getTableId:async()=>null},getOption:async k=>opts[k],setOption:async(k,v)=>{opts[k]=v;cb(opts)},docApi:{
+  window.grist={ready(){},onOptions(f){cb=f;f(opts)},onRecords(){},selectedTable:{getTableId:async()=>null},getOption:async k=>opts[k],setOption:async(k,v)=>{opts[k]=v;if(optionStore)localStorage.setItem(optionStore,JSON.stringify(opts));cb(opts)},docApi:{
     getDocName:async()=>doc,
     fetchTable:async table=>{
       window.reads++;

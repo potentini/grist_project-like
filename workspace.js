@@ -3312,6 +3312,12 @@
       }),
     ])]);
   }
+  function meetingForwardSchema() {
+    const column = forwardedPointColumn();
+    return column && !column.isFormula
+      ? JSON.stringify([cfg("notes").tableRef, cfg("notes").table, column.id, column.colId, column.type])
+      : null;
+  }
   function createMeetingComposer(k, r) {
     if (!["notes", "points"].includes(k)) return null;
     const form = $("editForm"), content = form.elements.namedItem("Contenu");
@@ -3350,7 +3356,23 @@
       const select = form.elements.namedItem(field);
       return select ? [...select.selectedOptions].filter(o => Number(o.value) > 0).map(o => ({kind, id: Number(o.value)})) : r ? targets("points", r, field).map(row => ({kind, id: row.id})) : [];
     });
+    const forwardSchema = k === "notes" ? meetingForwardSchema() : null;
+    const forwardMeetings = new Map(forwardSchema ? (data.notes || [])
+      .filter(note => note.id !== r?.id && !inactive("notes", note)).map(note => [note.id, note]) : []);
+    const meetings = [...forwardMeetings.values()].map(note => {
+      const date = dateText(val("notes", note, "Date"));
+      const [year, month, day] = date.split("-");
+      const localDate = day ? [day, month, year].join("/") : date;
+      const label = title("notes", note);
+      const path = [localDate, displayValue("notes", note, "Instance")].filter(Boolean).join(" · ");
+      return { id: note.id, label, path, date, search: [label, path, date, val("notes", note, "Code")].join(" ") };
+    }).sort((a, b) => b.date.localeCompare(a.date) || a.label.localeCompare(b.label, "fr"));
+    const alreadyForwarded = new Map([...forwardMeetings.values()].map(note => [
+      note.id, new Set(values(val("notes", note, "PointsReportes")).map(Number)),
+    ]));
     const composer = MeetingMentions.create({ kind: k, form, content, enabled: true, schema: meetingMentionSchema(k), candidates, blocks,
+      forwardSchema, meetings,
+      canForward: (id, block) => !block?.id || !alreadyForwarded.get(id)?.has(block.id),
       writable, hasField: field => !!col("points", field), label: ref => byRef.get(ref.kind + ":" + ref.id)?.path,
       canLink(kind, block) {
         const m = col("points", pointRefFields[kind]);
@@ -4131,7 +4153,7 @@
   }
   async function saveMeetingComposer(kind, record, fields) {
     const state = meetingComposer.snapshot();
-    if (state.schema !== meetingMentionSchema(kind))
+    if (state.schema !== meetingMentionSchema(kind) || state.forwardSchema && state.forwardSchema !== meetingForwardSchema())
       throw Error("Le mapping des points ou des rattachements a changé. Le brouillon est conservé : copiez les textes avant de rouvrir.");
     const fresh = Object.fromEntries(await Promise.all(["notes", "points", "projects", "streams", "tasks", "actions"].map(async k => [
       k, cfg(k).table ? rows(await grist.docApi.fetchTable(mappedTableId(k))) : [],

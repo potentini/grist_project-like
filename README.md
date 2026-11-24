@@ -295,6 +295,8 @@ Dans la table des réunions, ajouter une colonne **PointsReportes** de type **Li
 
 En mode **Édition**, ouvrir un point enregistré ou sa réunion et cliquer sur **Renvoyer vers une réunion…**. Rechercher une réunion existante, ou cliquer sur **Créer une réunion destinataire…**. Le formulaire de création présélectionne le point et, si elle existe, l’instance d’origine. Pour une réunion ponctuelle, effacer l’instance et renseigner le titre libre. Le point est associé à la nouvelle réunion à l’enregistrement.
 
+Dans l’éditeur d’une réunion, tapez aussi **`#` suivi de quelques lettres** pour chercher une réunion existante par titre, instance, date ou code. Dans les notes générales, la commande propose de transformer le paragraphe en point et de le reporter. Dans les échanges d’un bloc, choisir une réunion prépare le renvoi du même point. L’étiquette du renvoi permet de le retirer du brouillon. La réunion d’origine et les points reportés sont enregistrés en une seule opération au bouton **Enregistrer**.
+
 La réunion destinataire et le suivi affichent le point reporté. Ouvrir le point donne accès à sa réunion d’origine, à ses échanges, à ses décisions et à ses actions. Un même point reste une seule ligne et peut être lié à plusieurs réunions. Pour retirer un renvoi, enlever le point du champ **Points reportés** de la réunion destinataire et enregistrer. Le renvoi manuel peut servir de base à la reprise automatique par instance.
 
 ## Suivi des notes et réunions

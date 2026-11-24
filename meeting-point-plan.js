@@ -74,8 +74,15 @@ window.MeetingPointPlan = (() => {
     let pointId = nextId('points');
     const usedCodes = new Set((fresh.points || []).map(row => String(row[cfg('points').fields?.Code])));
     let order = Math.max(0, ...(fresh.points || []).map(row => Number(row[cfg('points').fields?.Ordre]) || 0));
+    const forwardsByMeeting = new Map();
     for (const block of state.blocks) {
       const delta = {}, base = block.base || {};
+      const id = block.id ?? pointId++;
+      for (const destination of block.forwards || []) {
+        if (destination === primaryId) throw Error('Choisissez une autre réunion pour ce renvoi.');
+        if (!forwardsByMeeting.has(destination)) forwardsByMeeting.set(destination, new Set());
+        forwardsByMeeting.get(destination).add(id);
+      }
       const existing = block.id ? requireRow('points', block.id) : null;
       if (existing) {
         const origin = col('points', 'NoteOrigine');
@@ -128,7 +135,18 @@ window.MeetingPointPlan = (() => {
         }
         const om = col('points', 'Ordre');
         if (om && !om.isFormula && ['Int', 'Numeric'].includes(om.type)) delta[om.colId] = ++order;
-        actions.push(['AddRecord', table('points'), pointId++, delta]);
+        actions.push(['AddRecord', table('points'), id, delta]);
+      }
+    }
+    if (forwardsByMeeting.size) {
+      const column = requireColumn('notes', 'PointsReportes', ['RefList:' + table('points')]);
+      for (const [id, pointIds] of forwardsByMeeting) {
+        const destination = requireRow('notes', id);
+        const existing = values(destination[column.colId]).map(Number).filter(Boolean);
+        if ([...pointIds].every(pointId => existing.includes(pointId))) continue;
+        const delta = { [column.colId]: ['L', ...new Set([...existing, ...pointIds])] };
+        baseExpected('notes', id, delta, destination);
+        actions.push(['UpdateRecord', table('notes'), id, delta]);
       }
     }
     return { version: 1, actions, expected, primaryId, newPrimary: !record };
