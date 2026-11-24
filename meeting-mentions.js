@@ -24,6 +24,7 @@ window.MeetingMentions = (() => {
     hint.className = 'mention-hint';
     hint.textContent = ctx.kind === 'notes'
       ? 'Tapez @ pour rattacher un paragraphe à un projet, un chantier ou une tâche. Cliquez sur une mention pour la modifier. À l’enregistrement, chaque paragraphe marqué devient un point. Une ligne vide sépare les paragraphes.'
+      : ctx.kind === 'actions' ? 'Tapez @ pour ajouter un rattachement complémentaire à cette action. Cliquez sur la mention pour la modifier avant d’enregistrer.'
       : 'Tapez @ dans les échanges pour ajouter un rattachement à ce point, sans créer de nouveau point.';
     if (ctx.forwardSchema) hint.textContent += ' Tapez # pour reporter un point vers une réunion existante.';
     const notice = document.createElement('p');
@@ -144,7 +145,7 @@ window.MeetingMentions = (() => {
           reason: full ? 'Référence simple : retirez le rattachement actuel avant d’en choisir un autre.' : '' };
       });
       if (current) options.unshift({ remove: true, label: 'Retirer cette mention' }, { search: true, label: 'Rechercher un autre choix…' });
-      else if (!forwarding) options.push({ ref: null, label: ctx.kind === 'notes' && !block
+      else if (!forwarding && ctx.kind !== 'actions') options.push({ ref: null, label: ctx.kind === 'notes' && !block
         ? 'Créer un point sans rattachement' : 'Ne pas ajouter de rattachement' });
       menu.setAttribute('aria-label', forwarding ? 'Réunions destinataires' : 'Rattachements proposés');
       active = options.findIndex(o => !o.disabled);
@@ -155,7 +156,10 @@ window.MeetingMentions = (() => {
         button.setAttribute('aria-selected', String(index === active)); button.disabled = !!option.disabled;
         const title = document.createElement('span'); title.textContent = option.label;
         const path = document.createElement('small');
-        path.textContent = option.disabled ? option.reason || 'Rattachement non modifiable : vérifier le mapping du point.' : option.path || '';
+        const mappingHint = ctx.kind === 'actions'
+          ? 'Mappez la liste de références complémentaire dans Actions.'
+          : 'Rattachement non modifiable : vérifier le mapping du point.';
+        path.textContent = option.disabled ? option.reason || mappingHint : option.path || '';
         button.append(title, path);
         button.onclick = () => choose(index);
         menu.append(button);
@@ -200,7 +204,7 @@ window.MeetingMentions = (() => {
         const scope = t.block ? t.value : t.value.slice(t.start, t.end);
         if (linkFull(ref, t.block, mentionsIn(scope))) { showMenu(t.textarea, t.block); return; }
       }
-      if (ctx.kind === 'notes' && (ref || destination)) {
+      if (['notes', 'actions'].includes(ctx.kind) && (ref || destination)) {
         const label = destination?.label || refLabel(ref);
         const link = destination ? { destination: destination.id } : { ref };
         const text = mentionText(t.marker, label, link);
@@ -441,6 +445,11 @@ window.MeetingMentions = (() => {
         ? { forwardSchema: ctx.forwardSchema } : {};
     }
     function snapshot() {
+      if (ctx.kind === 'actions') {
+        const { text, mentions } = extract(content.value);
+        const { refs } = applyMentions({ refs: [] }, mentions);
+        return { general: text, state: { version: 1, schema: ctx.schema, refs, pending: copy(pending) } };
+      }
       const { preparedBlocks, general } = inlineMentions.size ? materialize() : { preparedBlocks: blocks, general: content.value };
       const state = { version: 1, schema: ctx.schema, blocks: copy(preparedBlocks), refs: ctx.kind === 'points' ? ctx.readRefs() : [], baseRefs: copy(pointBaseRefs), touched, pending: copy(pending), ...forwardState(preparedBlocks) };
       return { state, general };

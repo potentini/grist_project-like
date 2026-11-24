@@ -145,6 +145,9 @@
         "DateFin",
         "Echeance",
         "Commentaire",
+        "ProjetsAssocies",
+        "ChantiersAssocies",
+        "TachesAssociees",
         "NoteOrigine",
         "PointOrigine",
         "Projet",
@@ -177,6 +180,8 @@
     NoteOrigine: ["NoteOrigine", "Reunion", "Note"],
     Echeance: ["Echeance", "DeadlineTexte"],
   };
+  const actionRefFields = { projects: "ProjetsAssocies", streams: "ChantiersAssocies", tasks: "TachesAssociees" };
+  const actionRefTargets = Object.fromEntries(Object.entries(actionRefFields).map(([kind, field]) => [field, kind]));
   const links = {
     streams: { Projet: "projects", TacheOrigine: "tasks" },
     tasks: { Chantier: "streams", ActionOrigine: "actions" },
@@ -188,6 +193,7 @@
       Taches: "tasks",
     },
     actions: {
+      ...actionRefTargets,
       PointOrigine: "points",
       Projet: "projects",
       Chantier: "streams",
@@ -195,7 +201,7 @@
       NoteOrigine: "notes",
     },
   };
-  const multi = new Set(["Projets", "Chantiers", "Taches", "PointsReportes"]);
+  const multi = new Set(["Projets", "Chantiers", "Taches", "PointsReportes", ...Object.keys(actionRefTargets)]);
   const textareas = new Set([
     "Contenu",
     "Decision",
@@ -985,6 +991,25 @@
     }
     return [...new Map(projects.map((p) => [p.id, p])).values()];
   }
+  function actionAssociationColumn(kind) {
+    const field = actionRefFields[kind];
+    const column = field && col("actions", field);
+    if (!column || column.type !== "RefList:" + cfg(kind).table) return null;
+    const duplicate = Object.entries(cfg("actions").fields || {}).some(([name, id]) => name !== field && id === column.colId);
+    return duplicate ? null : column;
+  }
+  function actionAssociations(row) {
+    return Object.entries(actionRefFields).flatMap(([kind, field]) =>
+      actionAssociationColumn(kind) ? targets("actions", row, field).map(target => [kind, target]) : []);
+  }
+  function actionAssociatedWith(kind, row, action) {
+    if (!Object.hasOwn(actionRefFields, kind)) return false;
+    return actionAssociations(action).some(([target, related]) => {
+      if (kind === target) return row.id === related.id;
+      if (kind === "projects") return projectOf(target, related)?.id === row.id;
+      return kind === "streams" && target === "tasks" && has("tasks", related, "Chantier", row);
+    });
+  }
   function noteProjects(note) {
     const all = [...targets("notes", note, "Projet")];
     for (const stream of targets("notes", note, "Chantiers"))
@@ -1732,7 +1757,8 @@
       (!p.length ||
         (k === "points"
           ? pointProjects(r).some((x) => p.includes(String(x.id)))
-          : p.includes(String(projectOf(k, r)?.id)))) &&
+          : p.includes(String(projectOf(k, r)?.id)) || k === "actions" &&
+            (data.projects || []).some(project => p.includes(String(project.id)) && actionAssociatedWith("projects", project, r)))) &&
       (!o.length ||
         filterValues(k, r, "Responsable").some((v) => o.includes(v))) &&
       (!s.length ||
@@ -1749,7 +1775,7 @@
         ((!$("unlinked").checked ||
           (!targets(k, r, "Projet").length &&
             !targets(k, r, "Chantier").length &&
-            !targets(k, r, "Tache").length)) &&
+            !targets(k, r, "Tache").length && (k !== "actions" || !actionAssociations(r).length))) &&
           (!$("overdue").checked || overdue(r))))
     );
   }
@@ -2905,6 +2931,9 @@
         Taches: "Tâches",
         NoteOrigine: "Note / réunion d’origine",
         PointsReportes: "Points reportés",
+        ProjetsAssocies: "Projets complémentaires",
+        ChantiersAssocies: "Chantiers complémentaires",
+        TachesAssociees: "Tâches complémentaires",
         PointOrigine: "Point de discussion d’origine",
         Projets: "Projets",
       }[field] || field
@@ -2989,6 +3018,7 @@
         .join("") +
       "</dl>";
     for (const f of Object.keys(links[k] || {})) {
+      if (k === "actions" && actionRefTargets[f] && !actionAssociationColumn(actionRefTargets[f])) continue;
       const target = links[k][f],
         rs = targets(k, r, f);
       const emptyOrigin =
@@ -3069,7 +3099,7 @@
     if (k !== "actions") {
       let actions = (data.actions || []).filter(
         (x) =>
-          linkedTo(k, r, "actions", x) &&
+          (linkedTo(k, r, "actions", x) || actionAssociatedWith(k, r, x)) &&
           (!archived("actions", x) || $("showArchived").checked) &&
           (["notes", "points"].includes(k) || !transformed("actions", x)),
       );
@@ -3305,6 +3335,14 @@
   }
   const pointRefFields = { projects: "Projets", streams: "Chantiers", tasks: "Taches" };
   function meetingMentionSchema(kind) {
+    if (kind === "actions") {
+      const comment = col(kind, "Commentaire");
+      return JSON.stringify([kind, cfg(kind).tableRef, cfg(kind).table, comment?.id, comment?.colId, comment?.type, !!comment?.isFormula,
+        ...Object.keys(actionRefFields).map(target => {
+          const column = actionAssociationColumn(target);
+          return [target, cfg(target).tableRef, cfg(target).table, column?.id, column?.colId, !!column?.isFormula];
+        })]);
+    }
     return JSON.stringify([kind, ...["notes", "points", "projects", "streams", "tasks"].map(k => [
       k, cfg(k).tableRef || cfg(k).table, cfg(k).table,
       ...["Titre", "Nom", "Contenu", "Decision", "Code", "NoteOrigine", "Projets", "Chantiers", "Taches", "Ordre"].map(f => {
@@ -3319,9 +3357,14 @@
       : null;
   }
   function createMeetingComposer(k, r) {
-    if (!["notes", "points"].includes(k)) return null;
-    const form = $("editForm"), content = form.elements.namedItem("Contenu");
-    if (!content || col(k, "Contenu")?.type !== "Text" || col(k, "Contenu")?.isFormula) return null;
+    if (!["notes", "points", "actions"].includes(k)) return null;
+    const textField = k === "actions" ? "Commentaire" : "Contenu";
+    const form = $("editForm"), content = form.elements.namedItem(textField);
+    if (!content || col(k, textField)?.type !== "Text" || col(k, textField)?.isFormula) return null;
+    if (k === "actions" && !Object.keys(actionRefFields).some(kind => {
+      const column = actionAssociationColumn(kind);
+      return column && !column.isFormula;
+    })) return null;
     const writable = field => col("points", field)?.type === "Text" && !col("points", field).isFormula;
     const origin = col("points", "NoteOrigine");
     const canCreate = !!cfg("points").table && writable("Titre") && writable("Contenu") && origin && !origin.isFormula &&
@@ -3375,11 +3418,15 @@
       canForward: (id, block) => !block?.id || !alreadyForwarded.get(id)?.has(block.id),
       writable, hasField: field => !!col("points", field), label: ref => byRef.get(ref.kind + ":" + ref.id)?.path,
       canLink(kind, block) {
+        if (k === "actions") {
+          const column = actionAssociationColumn(kind);
+          return !!column && !column.isFormula;
+        }
         const m = col("points", pointRefFields[kind]);
         return !!m && !m.isFormula && (m.type === "Text" || m.type === "RefList:" + cfg(kind).table || m.type === "Ref:" + cfg(kind).table) &&
           !(block ? block.lockedRefs?.includes(kind) : k === "points" && r && unresolved(r, kind));
       },
-      linkLimit: kind => col("points", pointRefFields[kind])?.type === "Ref:" + cfg(kind).table ? 1 : Infinity,
+      linkLimit: kind => k !== "actions" && col("points", pointRefFields[kind])?.type === "Ref:" + cfg(kind).table ? 1 : Infinity,
       initialRefs: k === "points" ? readRefs() : [], readRefs,
       writeRefs(refs) {
         for (const [kind, field] of Object.entries(pointRefFields)) {
@@ -3472,6 +3519,7 @@
           !col(k, f)?.isFormula &&
           !(r && f === "Code") &&
           (f !== "PointsReportes" || forwardedPointColumn()) &&
+          (k !== "actions" || !actionRefTargets[f] || actionAssociationColumn(actionRefTargets[f])) &&
           !["Archive", "Transforme", "ActionOrigine", "TacheOrigine"].includes(
             f,
           ),
@@ -3517,7 +3565,7 @@
             )
             .filter((x) => x !== 0);
           const unresolved = !!r && sourceLinks.length !== selected.length;
-          if (!r && context && target === selection.k && f !== "PointsReportes") selected = [context.id];
+          if (!r && context && target === selection.k && f !== "PointsReportes" && !actionRefTargets[f]) selected = [context.id];
           if (f === "PointsReportes" && forwardedPoint) selected = [forwardedPoint.id];
           input =
             `<select name="${f}" ${multi.has(f) ? "multiple" : ""}><option value="">— Aucun —</option>${unresolved ? '<option value="unresolved" selected>Lien non reconnu — choisir le rattachement</option>' : ""}` +
@@ -3645,12 +3693,14 @@
     if (k === "actions" && origin?.value)
       origin.dispatchEvent(new Event("change", { bubbles: true }));
     meetingComposer = createMeetingComposer(k, r);
-    const draftFields = ["notes", "points"].includes(k)
-      ? ["Titre", "Contenu", ...(k === "points" ? ["Decision"] : ["Nom"])].flatMap(field => {
-          const m = col(k, field), control = $("editForm").elements.namedItem(field);
-          return m?.type === "Text" && !m.isFormula && control
-            ? [{ field, ref: m.id, control, base: control.value }] : [];
-        }) : [];
+    const draftText = k === "notes" ? ["Titre", "Contenu", "Nom"] :
+      k === "points" ? ["Titre", "Contenu", "Decision"] :
+      k === "actions" && meetingComposer ? ["Titre", "Commentaire"] : [];
+    const draftFields = draftText.flatMap(field => {
+      const m = col(k, field), control = $("editForm").elements.namedItem(field);
+      return m?.type === "Text" && !m.isFormula && control
+        ? [{ field, ref: m.id, control, base: control.value }] : [];
+    });
     noteDrafts.start({ scope: noteDraftScope, table: cfg(k).tableRef || cfg(k).table,
       row: r?.id, context: k === "points" ? $("editForm").elements.namedItem("NoteOrigine")?.value || "" : "",
       fields: draftFields, extension: meetingComposer?.draft });
@@ -4153,11 +4203,11 @@
   }
   async function saveMeetingComposer(kind, record, fields) {
     const { state, general } = meetingComposer.snapshot();
-    const contentColumn = cfg(kind).fields?.Contenu;
-    if (kind === "notes" && contentColumn && Object.hasOwn(fields, contentColumn))
+    const contentColumn = cfg(kind).fields?.[kind === "actions" ? "Commentaire" : "Contenu"];
+    if (["notes", "actions"].includes(kind) && contentColumn && Object.hasOwn(fields, contentColumn))
       fields = { ...fields, [contentColumn]: general };
     if (state.schema !== meetingMentionSchema(kind) || state.forwardSchema && state.forwardSchema !== meetingForwardSchema())
-      throw Error("Le mapping des points ou des rattachements a changé. Le brouillon est conservé : copiez les textes avant de rouvrir.");
+      throw Error("Le mapping des rattachements a changé. Le brouillon est conservé : copiez les textes avant de rouvrir.");
     const fresh = Object.fromEntries(await Promise.all(["notes", "points", "projects", "streams", "tasks", "actions"].map(async k => [
       k, cfg(k).table ? rows(await grist.docApi.fetchTable(mappedTableId(k))) : [],
     ])));
@@ -4176,17 +4226,17 @@
       const outcome = MeetingPointPlan.inspect(plan, fresh, table => ["notes", "points", "actions"].find(k => cfg(k).table === table));
       if (outcome === "committed") {
         if (plan.signature !== signature)
-          throw Error("L’enregistrement précédent est déjà présent dans Grist, mais le formulaire a changé. Copiez vos nouveaux textes puis rouvrez la réunion ; aucune ligne supplémentaire n’a été créée.");
+          throw Error("L’enregistrement précédent est déjà présent dans Grist, mais le formulaire a changé. Copiez vos nouveaux textes puis rouvrez l’élément ; aucune ligne supplémentaire n’a été créée.");
         return { retValues: [plan.primaryId] };
       }
       if (outcome === "conflict")
-        throw Error("L’enregistrement précédent ne peut pas être confirmé : des données ont changé. Le brouillon est conservé ; vérifiez les points dans Grist avant de reprendre. Aucune ligne n’a été écrasée.");
+        throw Error("L’enregistrement précédent ne peut pas être confirmé : des données ont changé. Le brouillon est conservé ; vérifiez les données dans Grist avant de reprendre. Aucune ligne n’a été écrasée.");
       // No part of this atomic attempt is present. Rebuild with fresh targets,
       // codes and IDs rather than replaying links that may now be stale.
       plan = null;
     }
     if (!plan) {
-      plan = { ...MeetingPointPlan.make({ kind, record, fields, state, fresh, cfg, col, inactive }),
+      plan = { ...MeetingPointPlan.make({ kind, record, fields, state, fresh, cfg, col, inactive, actionRefFields }),
         kind, recordId: record?.id ?? null, schema: state.schema, scope: noteDraftScope, signature };
       meetingComposer.setPending(plan);
     }
@@ -4390,10 +4440,10 @@
             throw Error("Les points reportés ont changé dans Grist. Rouvrez la réunion avant de les modifier.");
         }
       }
-      if (!composed && r && ["notes", "points"].includes(k)) {
+      if (!composed && r && (["notes", "points"].includes(k) || k === "actions" && meetingComposer)) {
         const fresh = rows(await grist.docApi.fetchTable(targetTable)).find(row => row.id === r.id);
         if (!fresh) throw Error("Cet élément n’existe plus. Le brouillon local est conservé.");
-        for (const field of ["Titre", "Nom", "Contenu", "Decision"]) {
+        for (const field of ["Titre", "Nom", "Contenu", "Decision", "Commentaire"]) {
           const column = cfg(k).fields?.[field];
           if (column && Object.hasOwn(fields, column) && JSON.stringify(fresh[column] ?? "") !== JSON.stringify(r[column] ?? ""))
             throw Error("Le texte « " + fieldLabel(k, field) + " » a changé dans Grist. Le brouillon est conservé ; copiez-le puis rouvrez l’élément pour comparer les versions.");

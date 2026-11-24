@@ -46,8 +46,19 @@ window.MeetingPointPlan = (() => {
     const primaryCode = cfg(kind).fields?.Code;
     if (!record && primaryCode && fields[primaryCode] && (fresh[kind] || []).some(row => String(row[primaryCode]) === String(fields[primaryCode])))
       throw Error('Le code de la nouvelle ligne est déjà utilisé. Modifiez ce code dans le formulaire avant de réessayer.');
+    if (kind === 'actions') {
+      for (const [target, field] of Object.entries(ctx.actionRefFields)) {
+        const refs = state.refs.filter(ref => ref.kind === target);
+        if (!refs.length) continue;
+        const column = requireColumn(kind, field, ['RefList:' + table(target)]);
+        const existing = values(Object.hasOwn(fields, column.colId) ? fields[column.colId] : record?.[column.colId]);
+        for (const ref of refs) requireRow(target, ref.id);
+        fields[column.colId] = ['L', ...new Set([...existing, ...refs.map(ref => ref.id)])];
+      }
+    }
     if (record) baseExpected(kind, primaryId, fields, record);
     actions.push([record ? 'UpdateRecord' : 'AddRecord', table(kind), primaryId, { ...fields }]);
+    if (kind === 'actions') return { version: 1, actions, expected, primaryId, newPrimary: !record };
     if (kind === 'points') {
       for (const [target, field] of Object.entries(fieldsByKind))
         if (col('points', field)?.type.startsWith('Ref:') && state.refs.filter(r => r.kind === target).length > 1)

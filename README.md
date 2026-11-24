@@ -290,6 +290,20 @@ La vue générale À faire suit la même règle transverse : les filtres Grist d
 
 Les notifications de configuration Grist ne réinitialisent plus un mapping en cours de saisie après renommage. Les sauvegardes d’options du widget (mapping, largeur des volets, tri et synchronisation de la timeline) sont sérialisées. Une révision du mapping empêche une ancienne notification de remplacer une sauvegarde plus récente. Le démarrage lit explicitement le mapping enregistré avant toute détection ; l’enregistrement capture également les libellés et cases à cocher dont l’événement de changement est encore en attente. Les champs volontairement non mappés sont conservés.
 
+## Rattacher rapidement une action avec `@`
+
+Pour activer les rattachements complémentaires, ajoutez dans la table **Actions** une ou plusieurs de ces colonnes modifiables et vérifiez leur mapping dans le widget.
+
+| Colonne | Type Grist | Champ du widget |
+| --- | --- | --- |
+| `ProjetsAssocies` | Liste de références vers Projets | Projets complémentaires |
+| `ChantiersAssocies` | Liste de références vers Chantiers | Chantiers complémentaires |
+| `TachesAssociees` | Liste de références vers Tâches | Tâches complémentaires |
+
+Le **Commentaire** de l’action doit être mappé vers une colonne Texte modifiable. Tapez `@` dans le commentaire, choisissez un élément et continuez à écrire. La mention reste dans le brouillon et peut être remplacée ou retirée au clic. **Enregistrer** associe les éléments à la même action. Pour modifier les liens enregistrés, utilisez ensuite les champs complémentaires dans le formulaire.
+
+Le parent principal continue de déterminer la place de l’action dans l’arborescence. Les rattachements complémentaires rendent cette action accessible dans **Actions associées** des éléments concernés et de leurs parents. Le filtre Projet de la vue des actions tient compte de ces liens.
+
 ## Renvoyer un point vers une réunion
 
 Dans la table des réunions, ajouter une colonne **PointsReportes** de type **Liste de références**, vers la table **Points**. Dans le widget, vérifier son association au champ **Points reportés** du mapping des réunions. Cette colonne facultative peut être ajoutée à la copie du document utilisée pour tester le preview.
