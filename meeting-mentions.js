@@ -87,7 +87,7 @@ window.MeetingMentions = (() => {
       return { value, caret, start, end };
     }
     function token(text) {
-      return text.match(ctx.forwardSchema ? /(?:^|[\s(])([@#])([^@#\n]{0,80})$/ : /(?:^|[\s(])(@)([^@\n]{0,80})$/);
+      return text.match(ctx.forwardSchema ? /(?:^|[\s().:,;])([@#])([^@#\n]{0,80})$/ : /(?:^|[\s().:,;])(@)([^@\n]{0,80})$/);
     }
     const searchWords = query => norm(query).split(/\s+/).filter(Boolean);
     const matchesQuery = (candidate, words) => words.every(word => candidate.search.includes(word));
@@ -372,7 +372,12 @@ window.MeetingMentions = (() => {
         if (e.key === 'Escape' && (!menu.hidden || timer) && token(textarea.value.slice(0, textarea.selectionStart))) {
           e.preventDefault(); e.stopPropagation(); closeMenu(); return;
         }
-        if (menu.hidden || trigger?.textarea !== textarea || !options.length) return;
+        if (timer && ['Enter', 'ArrowDown', 'ArrowUp'].includes(e.key)) {
+          clearTimeout(timer);
+          timer = null;
+          showMenu(textarea, block);
+        }
+        if (menu.hidden || trigger?.textarea !== textarea || active < 0) return;
         if (['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(e.key)) {
           e.preventDefault(); e.stopPropagation();
           if (e.key === 'Escape') { closeMenu(); return; }

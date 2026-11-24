@@ -3364,7 +3364,13 @@
     if (k === "actions" && !Object.keys(actionRefFields).some(kind => {
       const column = actionAssociationColumn(kind);
       return column && !column.isFormula;
-    })) return null;
+    })) {
+      const help = document.createElement("p");
+      help.className = "mention-hint";
+      help.textContent = "Pour utiliser @, mappez une liste de références modifiable dans Projets, Chantiers ou Tâches complémentaires de la table Actions.";
+      content.after(help);
+      return null;
+    }
     const writable = field => col("points", field)?.type === "Text" && !col("points", field).isFormula;
     const origin = col("points", "NoteOrigine");
     const canCreate = !!cfg("points").table && writable("Titre") && writable("Contenu") && origin && !origin.isFormula &&
