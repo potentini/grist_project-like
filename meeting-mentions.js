@@ -24,8 +24,12 @@ window.MeetingMentions = (() => {
     hint.className = 'mention-hint';
     hint.textContent = ctx.kind === 'notes'
       ? 'Tapez @ pour rattacher un paragraphe à un projet, un chantier ou une tâche. Cliquez sur une mention pour la modifier. À l’enregistrement, chaque paragraphe marqué devient un point. Une ligne vide sépare les paragraphes.'
-      : ctx.kind === 'actions' ? 'Tapez @ pour ajouter un rattachement complémentaire à cette action. Cliquez sur la mention pour la modifier avant d’enregistrer.'
+      : ctx.kind === 'actions' ? 'Tapez @ puis quelques lettres pour chercher un projet, un chantier ou une tâche. La mention reste modifiable au clic jusqu’à Enregistrer.'
       : 'Tapez @ dans les échanges pour ajouter un rattachement à ce point, sans créer de nouveau point.';
+    if (ctx.kind === 'actions') {
+      hint.id = 'actionMentionHelp';
+      content.setAttribute('aria-describedby', hint.id);
+    }
     if (ctx.forwardSchema) hint.textContent += ' Tapez # pour reporter un point vers une réunion existante.';
     const notice = document.createElement('p');
     notice.className = 'mention-message'; notice.setAttribute('role', 'status');
@@ -140,9 +144,10 @@ window.MeetingMentions = (() => {
       options = matches.slice(0, 12).map(candidate => {
         if (forwarding) return { destination: candidate, label: candidate.label, path: candidate.path };
         const full = linkFull(candidate, block, occupied);
+        const allowed = ctx.canLink(candidate.kind, block);
         return { candidate, ref: {kind: candidate.kind, id: candidate.id}, label: candidate.label,
-          disabled: !ctx.canLink(candidate.kind, block) || full, path: candidate.path,
-          reason: full ? 'Référence simple : retirez le rattachement actuel avant d’en choisir un autre.' : '' };
+          disabled: !allowed || full, path: candidate.path,
+          reason: full ? 'Référence simple : retirez le rattachement actuel avant d’en choisir un autre.' : !allowed ? ctx.linkHint?.(candidate.kind) : '' };
       });
       if (current) options.unshift({ remove: true, label: 'Retirer cette mention' }, { search: true, label: 'Rechercher un autre choix…' });
       else if (!forwarding && ctx.kind !== 'actions') options.push({ ref: null, label: ctx.kind === 'notes' && !block

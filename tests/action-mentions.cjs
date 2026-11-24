@@ -11,6 +11,7 @@ const fixture = require('./mentions-fixture.cjs');
         model.meta.push({id:2200+index, parentId:5, table:'Actions', colId, label:colId, type:'RefList:'+target, isFormula:false});
       model.data.actions[0].ProjetsAssocies = ['L', 1];
       model.data.actions[0].Commentaire = 'Compte rendu :';
+      if (width === 1440) model.meta.find(column => column.table === 'Actions' && column.colId === 'Commentaire').type = 'Any';
       const context = await browser.newContext({ viewport:{width,height:900}, screen:{width,height:900}, hasTouch:width<1000, isMobile:width===390 });
       await context.addInitScript(fixture.setup, model);
       await context.route('https://docs.getgrist.com/**', route => route.fulfill({body:''}));
@@ -36,6 +37,7 @@ const fixture = require('./mentions-fixture.cjs');
       await page.goto(process.env.TEST_ORIGIN || 'http://127.0.0.1:8781/');
       await editAction();
       const comment = page.locator('#editForm [name=Commentaire]');
+      assert.match(await comment.evaluate(el => el.nextElementSibling.innerText), /Tapez @ puis quelques lettres/);
       const menu = page.getByRole('listbox', {name:'Rattachements proposés'});
       async function choose(name) {
         const option = menu.getByRole('option', {name});
@@ -84,6 +86,7 @@ const fixture = require('./mentions-fixture.cjs');
         await view('actions');
         await page.locator('#list [data-new="actions"]').first().click();
         await page.locator('#editor [name=Titre]').fill('Action transverse');
+        assert.match(await comment.evaluate(el => el.nextElementSibling.innerText), /Tapez @ puis quelques lettres/);
         await comment.fill('Coordonner avec @externe');
         await choose(/Chantiers — Chantier externe/);
         await page.locator('#save').click();
@@ -93,6 +96,43 @@ const fixture = require('./mentions-fixture.cjs');
         await page.locator('#list [data-kind=actions][data-id="4"]').waitFor();
       }
       assert.deepEqual(errors, []);
+      await context.close();
+    }
+    for (const problem of ['missing-comment', 'wrong-reference', 'missing-reference']) {
+      const model = fixture.make(true);
+      if (problem === 'missing-comment')
+        model.meta = model.meta.filter(column => column.table !== 'Actions' || column.colId !== 'Commentaire');
+      if (problem === 'wrong-reference')
+        model.meta.push({id:2200, parentId:5, table:'Actions', colId:'ProjetsAssocies', type:'Ref:Projets', isFormula:false});
+      const context = await browser.newContext();
+      await context.addInitScript(fixture.setup, model);
+      await context.route('https://docs.getgrist.com/**', route => route.fulfill({body:''}));
+      const page = await context.newPage();
+      page.setDefaultTimeout(10000);
+      await page.goto(process.env.TEST_ORIGIN || 'http://127.0.0.1:8781/');
+      await page.locator('#list > *').first().waitFor();
+      await page.locator('nav [data-view=actions]').click();
+      await page.locator('#editionButton').click();
+      const help = page.locator('#editForm #actionMentionHelp');
+      const expected = problem === 'missing-comment' ? /mappez Commentaire vers une colonne Texte/ :
+        problem === 'wrong-reference' ? /Projets complémentaires : mappez une Liste de références vers « Projets »/ : /Dans Mapping → Actions/;
+      await page.locator('#list [data-new=actions]').click();
+      await help.waitFor();
+      assert.match(await help.innerText(), expected);
+      await page.locator('#cancel').click();
+      await page.locator('#search').fill('Envoyer les invitations');
+      await page.locator('#list [data-kind=actions][data-id="1"]').first().click();
+      await page.locator('#detail [data-edit]').click();
+      await help.waitFor();
+      assert.match(await help.innerText(), expected);
+      if (problem !== 'missing-comment') {
+        const comment = page.locator('#editForm [name=Commentaire]');
+        assert.equal(await comment.getAttribute('aria-describedby'), 'actionMentionHelp');
+        await comment.fill('Commentaire ordinaire');
+        await page.locator('#save').click();
+        await page.locator('#editForm').waitFor({state:'hidden'});
+        assert.equal(await page.evaluate(() => testDb.data.actions[0].Commentaire), 'Commentaire ordinaire');
+      }
       await context.close();
     }
     console.log('PASS inline action mentions, local recovery, idempotent retry, secondary discovery, unchanged primary links, new action on PC/tablet/phone');

@@ -3273,7 +3273,7 @@
             s.fields
               .map(
                 (f) =>
-                  `<label>${esc(f === "ResponsableDiPSi" ? "Responsable externe" : f)}${f === "Titre" ? " *" : ""}<select data-map="${k}" data-field="${f}">${options(
+                  `<label>${esc(f === "ResponsableDiPSi" ? "Responsable externe" : k === "actions" && actionRefTargets[f] ? relationLabel(f) : f)}${f === "Titre" ? " *" : ""}<select data-map="${k}" data-field="${f}">${options(
                     meta
                       .filter(
                         (x) =>
@@ -3356,21 +3356,58 @@
       ? JSON.stringify([cfg("notes").tableRef, cfg("notes").table, column.id, column.colId, column.type])
       : null;
   }
+  function actionMentionTextColumn(row) {
+    const comment = col("actions", "Commentaire");
+    if (!comment || comment.isFormula) return null;
+    if (comment.type === "Text" || comment.type === "Any" && typeof val("actions", row, "Commentaire") === "string")
+      return comment;
+    return null;
+  }
+  function actionMentionMappingHint(kind) {
+    const field = actionRefFields[kind];
+    const name = relationLabel(field);
+    const target = cfg(kind).table || kindLabels[kind];
+    const column = col("actions", field);
+    if (column?.isFormula) return name + " : choisissez une colonne modifiable dans Mapping.";
+    if (column?.type === "RefList:" + cfg(kind).table && !actionAssociationColumn(kind))
+      return name + " : utilisez une colonne distincte des autres champs de l’action.";
+    return name + " : mappez une Liste de références vers « " + target + " » dans Actions.";
+  }
+  function actionMentionHelp(form, content, text) {
+    const help = document.createElement("p");
+    help.id = "actionMentionHelp";
+    help.className = "mention-hint";
+    help.textContent = text;
+    if (content) {
+      content.after(help);
+      content.setAttribute("aria-describedby", help.id);
+    } else {
+      const slot = form.querySelector('[data-slot="Commentaire"], [data-readonly-field="Commentaire"]');
+      if (slot) slot.after(help);
+      else $("fields").append(help);
+    }
+  }
   function createMeetingComposer(k, r) {
     if (!["notes", "points", "actions"].includes(k)) return null;
     const textField = k === "actions" ? "Commentaire" : "Contenu";
     const form = $("editForm"), content = form.elements.namedItem(textField);
-    if (!content || col(k, textField)?.type !== "Text" || col(k, textField)?.isFormula) return null;
-    if (k === "actions" && !Object.keys(actionRefFields).some(kind => {
-      const column = actionAssociationColumn(kind);
-      return column && !column.isFormula;
-    })) {
-      const help = document.createElement("p");
-      help.className = "mention-hint";
-      help.textContent = "Pour utiliser @, mappez une liste de références modifiable dans Projets, Chantiers ou Tâches complémentaires de la table Actions.";
-      content.after(help);
-      return null;
-    }
+    if (k === "actions") {
+      if (!content || !actionMentionTextColumn(r)) {
+        actionMentionHelp(form, content, "Pour utiliser @ dans une action, mappez Commentaire vers une colonne Texte modifiable de la table Actions.");
+        return null;
+      }
+      const available = Object.keys(actionRefFields).some(kind => {
+        const column = actionAssociationColumn(kind);
+        return column && !column.isFormula;
+      });
+      if (!available) {
+        const mapped = Object.keys(actionRefFields).filter(kind => cfg("actions").fields?.[actionRefFields[kind]]);
+        const guidance = mapped.length ? mapped.map(actionMentionMappingHint).join(" ") :
+          "Dans Mapping → Actions, associez Projets complémentaires, Chantiers complémentaires ou Tâches complémentaires à une colonne Liste de références modifiable vers la table correspondante.";
+        actionMentionHelp(form, content, "Pour utiliser @ : " + guidance);
+        return null;
+      }
+    } else if (!content || col(k, textField)?.type !== "Text" || col(k, textField)?.isFormula) return null;
     const writable = field => col("points", field)?.type === "Text" && !col("points", field).isFormula;
     const origin = col("points", "NoteOrigine");
     const canCreate = !!cfg("points").table && writable("Titre") && writable("Contenu") && origin && !origin.isFormula &&
@@ -3421,6 +3458,7 @@
     ]));
     const composer = MeetingMentions.create({ kind: k, form, content, enabled: true, schema: meetingMentionSchema(k), candidates, blocks,
       forwardSchema, meetings,
+      linkHint: k === "actions" ? actionMentionMappingHint : undefined,
       canForward: (id, block) => !block?.id || !alreadyForwarded.get(id)?.has(block.id),
       writable, hasField: field => !!col("points", field), label: ref => byRef.get(ref.kind + ":" + ref.id)?.path,
       canLink(kind, block) {
@@ -3704,8 +3742,8 @@
       k === "actions" && meetingComposer ? ["Titre", "Commentaire"] : [];
     const draftFields = draftText.flatMap(field => {
       const m = col(k, field), control = $("editForm").elements.namedItem(field);
-      return m?.type === "Text" && !m.isFormula && control
-        ? [{ field, ref: m.id, control, base: control.value }] : [];
+      const draftable = k === "actions" && field === "Commentaire" ? actionMentionTextColumn(r) : m?.type === "Text" && !m.isFormula;
+      return draftable && control ? [{ field, ref: m.id, control, base: control.value }] : [];
     });
     noteDrafts.start({ scope: noteDraftScope, table: cfg(k).tableRef || cfg(k).table,
       row: r?.id, context: k === "points" ? $("editForm").elements.namedItem("NoteOrigine")?.value || "" : "",

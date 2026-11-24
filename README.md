@@ -300,7 +300,7 @@ Pour activer les rattachements complémentaires, ajoutez dans la table **Actions
 | `ChantiersAssocies` | Liste de références vers Chantiers | Chantiers complémentaires |
 | `TachesAssociees` | Liste de références vers Tâches | Tâches complémentaires |
 
-Le **Commentaire** de l’action doit être mappé vers une colonne Texte modifiable. Tapez `@` dans le commentaire, choisissez un élément et continuez à écrire. La mention reste dans le brouillon et peut être remplacée ou retirée au clic. **Enregistrer** associe les éléments à la même action. Pour modifier les liens enregistrés, utilisez ensuite les champs complémentaires dans le formulaire.
+Mappez le **Commentaire** de l’action sur une colonne Texte modifiable. Une colonne Grist de type Any convient aussi si sa valeur est du texte ou si elle est vide. L’aide du formulaire indique le mapping à corriger si `@` est indisponible. Tapez `@` dans le commentaire, choisissez un élément et continuez à écrire. La mention reste dans le brouillon et peut être remplacée ou retirée au clic. **Enregistrer** associe les éléments à la même action. Pour modifier les liens enregistrés, utilisez ensuite les champs complémentaires dans le formulaire.
 
 Le parent principal continue de déterminer la place de l’action dans l’arborescence. Les rattachements complémentaires rendent cette action accessible dans **Actions associées** des éléments concernés et de leurs parents. Le filtre Projet de la vue des actions tient compte de ces liens.
 
