@@ -298,7 +298,7 @@ Une action garde une seule ligne Grist. Elle apparaît dans ses différentes bra
 
 Dans le **Commentaire**, tapez `@` et choisissez un élément. **Enregistrer** ajoute le lien à la même action. Le commentaire doit être mappé sur une colonne Texte modifiable, ou sur une colonne Any contenant du texte. Les liens peuvent aussi être ajoutés ou retirés dans les sélecteurs du formulaire. La flèche de la carte ouvre ce formulaire dans le mode multirattachement. Supprimer l’action depuis sa fiche supprime la ligne commune à toutes ses branches.
 
-Les anciennes colonnes complémentaires (ProjetsAssocies, ChantiersAssocies et TachesAssociees) restent lisibles et modifiables. Si les champs habituels restent en référence simple, elles continuent d’alimenter `@` comme auparavant. Quand le modèle multirattachement est activé, `@` privilégie les champs habituels modifiables. Le widget n’effectue aucune migration de colonne ou de données Grist.
+Si vous avez utilisé les anciennes colonnes complémentaires dans le preview, reportez leurs valeurs dans **Projet**, **Chantier** ou **Tâche**, en conservant aussi les liens déjà présents. Le widget lit désormais ces trois champs. Les anciennes colonnes et leurs données restent disponibles dans Grist pour ce transfert.
 
 ## Renvoyer un point vers une réunion
 

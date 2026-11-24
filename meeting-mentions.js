@@ -163,7 +163,7 @@ window.MeetingMentions = (() => {
         const title = document.createElement('span'); title.textContent = option.label;
         const path = document.createElement('small');
         const mappingHint = ctx.kind === 'actions'
-          ? 'Mappez la liste de références complémentaire dans Actions.'
+          ? 'Vérifiez le mapping du rattachement dans Actions.'
           : 'Rattachement non modifiable : vérifier le mapping du point.';
         path.textContent = option.disabled ? option.reason || mappingHint : option.path || '';
         button.append(title, path);

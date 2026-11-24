@@ -7,9 +7,14 @@ const fixture = require('./mentions-fixture.cjs');
   try {
     for (const width of [1440, 768, 390]) {
       const model = fixture.make(true);
-      for (const [index, [colId, target]] of [['ProjetsAssocies','Projets'], ['ChantiersAssocies','Chantiers'], ['TachesAssociees','Taches']].entries())
-        model.meta.push({id:2200+index, parentId:5, table:'Actions', colId, label:colId, type:'RefList:'+target, isFormula:false});
-      model.data.actions[0].ProjetsAssocies = ['L', 1];
+      for (const field of ['Projet', 'Tache']) {
+        const column = model.meta.find(c => c.table === 'Actions' && c.colId === field);
+        column.type = column.type.replace('Ref:', 'RefList:');
+        for (const action of model.data.actions) action[field] = ['L', ...(action[field] ? [action[field]] : [])];
+      }
+      // Simulate a previous preview mapping that still lists the obsolete column.
+      model.meta.push({id:2200,parentId:5,table:'Actions',colId:'ProjetsAssocies',type:'RefList:Projets',isFormula:false});
+      model.data.actions[0].ProjetsAssocies = ['L', 2];
       model.data.actions[0].Commentaire = 'Compte rendu :';
       if (width === 1440) model.meta.find(column => column.table === 'Actions' && column.colId === 'Commentaire').type = 'Any';
       const context = await browser.newContext({ viewport:{width,height:900}, screen:{width,height:900}, hasTouch:width<1000, isMobile:width===390 });
@@ -35,7 +40,14 @@ const fixture = require('./mentions-fixture.cjs');
         await page.locator('#detail [data-edit]').click();
       }
       await page.goto(process.env.TEST_ORIGIN || 'http://127.0.0.1:8781/');
+      if (width === 1440) {
+        await page.locator('#list > *').first().waitFor();
+        await page.locator('#mappingButton').click();
+        assert.equal(await page.locator('#mapping select[data-map=actions][data-field=ProjetsAssocies]').count(), 0);
+        await page.locator('#mappingButton').click();
+      }
       await editAction();
+      assert.equal(await page.locator('#editForm [name=ProjetsAssocies]').count(), 0);
       const comment = page.locator('#editForm [name=Commentaire]');
       assert.match(await comment.evaluate(el => el.nextElementSibling.innerText), /Tapez @ puis quelques lettres/);
       const menu = page.getByRole('listbox', {name:'Rattachements proposés'});
@@ -71,10 +83,10 @@ const fixture = require('./mentions-fixture.cjs');
       const result = await page.evaluate(() => ({row:testDb.data.actions[0], count:testDb.data.actions.length, writes}));
       assert.equal(result.count, 3);
       assert.equal(result.writes.length, 1);
-      assert.deepEqual(result.row.ProjetsAssocies, ['L',1,2]);
-      assert.deepEqual(result.row.TachesAssociees, ['L',2]);
-      assert.equal(result.row.Tache, 1);
-      assert.equal(result.row.Projet, 1);
+      assert.deepEqual(result.row.Projet, ['L',1,2]);
+      assert.deepEqual(result.row.Tache, ['L',1,2]);
+      assert.deepEqual(result.row.ProjetsAssocies, ['L',2]);
+      assert.equal(Object.hasOwn(result.writes[0][3], 'ProjetsAssocies'), false);
       assert.equal(result.row.PointOrigine, 1);
       assert.equal(result.row.Commentaire, 'Compte rendu : puis vérifier avant vendredi.');
       if (width === 390 && await page.locator('#phoneBack').isVisible()) await page.locator('#phoneBack').click();
@@ -91,8 +103,8 @@ const fixture = require('./mentions-fixture.cjs');
         await choose(/Chantiers — Chantier externe/);
         await page.locator('#save').click();
         await page.locator('#editForm').waitFor({state:'hidden'});
-        assert.deepEqual(await page.evaluate(() => testDb.data.actions.at(-1).ChantiersAssocies), ['L',2]);
-        assert.equal(await page.evaluate(() => testDb.data.actions.at(-1).Projet), 0);
+        assert.equal(await page.evaluate(() => testDb.data.actions.at(-1).Chantier), 2);
+        assert.deepEqual(await page.evaluate(() => testDb.data.actions.at(-1).Projet), ['L']);
         await page.locator('#list [data-kind=actions][data-id="4"]').waitFor();
       }
       assert.deepEqual(errors, []);
@@ -103,7 +115,7 @@ const fixture = require('./mentions-fixture.cjs');
       if (problem === 'missing-comment')
         model.meta = model.meta.filter(column => column.table !== 'Actions' || column.colId !== 'Commentaire');
       if (problem === 'wrong-reference')
-        model.meta.push({id:2200, parentId:5, table:'Actions', colId:'ProjetsAssocies', type:'Ref:Projets', isFormula:false});
+        model.meta.find(c => c.table === 'Actions' && c.colId === 'Projet').type = 'RefList:Chantiers';
       const context = await browser.newContext();
       await context.addInitScript(fixture.setup, model);
       await context.route('https://docs.getgrist.com/**', route => route.fulfill({body:''}));
@@ -115,7 +127,7 @@ const fixture = require('./mentions-fixture.cjs');
       await page.locator('#editionButton').click();
       const help = page.locator('#editForm #actionMentionHelp');
       const expected = problem === 'missing-comment' ? /mappez Commentaire vers une colonne Texte/ :
-        problem === 'wrong-reference' ? /Projets complémentaires : mappez une Liste de références vers « Projets »/ : /Dans Mapping → Actions/;
+        /mappez Projet, Chantier ou Tâche dans Actions vers une colonne Liste de références/;
       await page.locator('#list [data-new=actions]').click();
       await help.waitFor();
       assert.match(await help.innerText(), expected);
@@ -135,6 +147,6 @@ const fixture = require('./mentions-fixture.cjs');
       }
       await context.close();
     }
-    console.log('PASS inline action mentions, local recovery, idempotent retry, secondary discovery, unchanged primary links, new action on PC/tablet/phone');
+    console.log('PASS inline action mentions, local recovery, idempotent retry, direct reference lists, obsolete mapping hidden and data retained, new action on PC/tablet/phone');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -145,9 +145,6 @@
         "DateFin",
         "Echeance",
         "Commentaire",
-        "ProjetsAssocies",
-        "ChantiersAssocies",
-        "TachesAssociees",
         "NoteOrigine",
         "PointOrigine",
         "Projet",
@@ -181,8 +178,6 @@
     Echeance: ["Echeance", "DeadlineTexte"],
   };
   const actionDirectFields = { projects: "Projet", streams: "Chantier", tasks: "Tache" };
-  const actionRefFields = { projects: "ProjetsAssocies", streams: "ChantiersAssocies", tasks: "TachesAssociees" };
-  const actionRefTargets = Object.fromEntries(Object.entries(actionRefFields).map(([kind, field]) => [field, kind]));
   const links = {
     streams: { Projet: "projects", TacheOrigine: "tasks" },
     tasks: { Chantier: "streams", ActionOrigine: "actions" },
@@ -194,7 +189,6 @@
       Taches: "tasks",
     },
     actions: {
-      ...actionRefTargets,
       PointOrigine: "points",
       Projet: "projects",
       Chantier: "streams",
@@ -202,7 +196,7 @@
       NoteOrigine: "notes",
     },
   };
-  const multi = new Set(["Projets", "Chantiers", "Taches", "PointsReportes", ...Object.keys(actionRefTargets)]);
+  const multi = new Set(["Projets", "Chantiers", "Taches", "PointsReportes"]);
   function isMultiLink(kind, field) {
     return multi.has(field) || (kind === "actions" && Object.values(actionDirectFields).includes(field) && /^RefList:/.test(col(kind, field)?.type || ""));
   }
@@ -894,6 +888,13 @@
     mappingOptionsRevision++;
     mappingWasSaved=true;
     const normalized=structuredClone(next);
+    // Ignore obsolete option keys while keeping the actual Grist columns and values intact.
+    const actions = normalized.actions;
+    for (const field of ["ProjetsAssocies", "ChantiersAssocies", "TachesAssociees"]) {
+      if (actions?.fields) delete actions.fields[field];
+      if (actions?.columnRefs) delete actions.columnRefs[field];
+      if (actions?.fieldLabels) delete actions.fieldLabels[field];
+    }
     reconcileMappingTables(normalized);
     reconcileMappingColumns(normalized);
     if(mappingSignature(normalized)===mappingSignature(mapping))return false;
@@ -1005,30 +1006,14 @@
     return Object.keys(actionDirectFields).some(kind => actionDirectColumn(kind)?.type.startsWith("RefList:"));
   }
   function actionMentionField(kind) {
-    if (multiActionLinks()) {
-      const column = actionDirectColumn(kind);
-      if (column && !column.isFormula && /^Ref/.test(column.type)) return actionDirectFields[kind];
-    }
-    const column = actionAssociationColumn(kind);
-    return column && !column.isFormula ? actionRefFields[kind] : null;
-  }
-  function actionAssociationColumn(kind) {
-    const field = actionRefFields[kind];
-    const column = field && col("actions", field);
-    if (!column || column.type !== "RefList:" + cfg(kind).table) return null;
-    const duplicate = Object.entries(cfg("actions").fields || {}).some(([name, id]) => name !== field && id === column.colId);
-    return duplicate ? null : column;
+    const column = actionDirectColumn(kind);
+    return column && !column.isFormula && /^Ref/.test(column.type) ? actionDirectFields[kind] : null;
   }
   function actionAssociations(row) {
-    const direct = multiActionLinks();
-    return Object.entries(actionRefFields).flatMap(([kind, field]) => {
-      const related = actionAssociationColumn(kind) ? targets("actions", row, field) : [];
-      if (direct && actionDirectColumn(kind)) related.push(...targets("actions", row, actionDirectFields[kind]));
-      return [...new Map(related.map(target => [target.id, target])).values()].map(target => [kind, target]);
-    });
+    return Object.entries(actionDirectFields).flatMap(([kind, field]) =>
+      actionDirectColumn(kind) ? targets("actions", row, field).map(target => [kind, target]) : []);
   }
   function actionAssociatedWith(kind, row, action) {
-    if (!Object.hasOwn(actionRefFields, kind)) return false;
     return actionAssociations(action).some(([target, related]) => {
       if (kind === target) return row.id === related.id;
       if (kind === "projects") return projectOf(target, related)?.id === row.id;
@@ -1227,37 +1212,22 @@
           : encodeLink(k, f, targetKind, targetRow);
     };
     if (sourceKind === "tasks") {
+      const transverse = multiActionLinks();
       for (const action of data.actions || []) {
-        if (transformed("actions", action)) continue;
-        const direct = has("actions", action, "Tache", source);
-        const supplemental = actionAssociationColumn("tasks") && has("actions", action, actionRefFields.tasks, source);
-        if (!direct && !supplemental) continue;
+        if (transformed("actions", action) || !has("actions", action, "Tache", source)) continue;
         const delta = {};
-        if (direct && !multiActionLinks()) {
-          setLink("actions", action, delta, "Tache", "tasks", null);
-          setLink("actions", action, delta, "Chantier", "streams", newRow);
-          if (cfg("actions").fields?.Projet && !col("actions", "Projet")?.isFormula)
-            setLink("actions", action, delta, "Projet", "projects", parent);
-        }
-        if ((direct && multiActionLinks()) || supplemental) {
-          const sourceFields = [
-            ...(direct && multiActionLinks() ? ["Tache"] : []),
-            ...(supplemental ? [actionRefFields.tasks] : []),
-          ];
-          for (const field of sourceFields) {
-            setLink("actions", action, delta, field, "tasks", null);
-            const column = col("actions", field);
-            if (column.type.startsWith("RefList:"))
-              delta[column.colId] = ["L", ...values(action[column.colId]).filter(value => Number(value) !== source.id)];
-          }
-          const field = direct && multiActionLinks() ? actionMentionField("streams") || "Chantier" : actionRefFields.streams;
-          setLink("actions", action, delta, field, "streams", newRow);
-          const column = col("actions", field);
-          if (column.type.startsWith("RefList:")) {
-            delta[column.colId] = ["L", ...new Set([...values(action[column.colId]), newRow.id])];
-          } else if (values(action[column.colId]).some(value => value !== 0 && value !== "")) {
+        setLink("actions", action, delta, "Tache", "tasks", null);
+        setLink("actions", action, delta, "Chantier", "streams", newRow);
+        if (transverse) {
+          const task = col("actions", "Tache"), stream = col("actions", "Chantier");
+          if (task.type.startsWith("RefList:"))
+            delta[task.colId] = ["L", ...values(action[task.colId]).filter(value => Number(value) !== source.id)];
+          if (stream.type.startsWith("RefList:"))
+            delta[stream.colId] = ["L", ...new Set([...values(action[stream.colId]), newRow.id])];
+          else if (values(action[stream.colId]).some(value => value !== 0 && value !== ""))
             throw Error("Le chantier de « " + title("actions", action) + " » est déjà renseigné. Utilisez une liste de références pour conserver les deux liens.");
-          }
+        } else if (cfg("actions").fields?.Projet && !col("actions", "Projet")?.isFormula) {
+          setLink("actions", action, delta, "Projet", "projects", parent);
         }
         updates.push(["UpdateRecord", cfg("actions").table, action.id, delta]);
         actionCount++;
@@ -1813,7 +1783,7 @@
       (!p.length ||
         (k === "points"
           ? pointProjects(r).some((x) => p.includes(String(x.id)))
-          : p.includes(String(projectOf(k, r)?.id)) || k === "actions" &&
+          : p.includes(String(projectOf(k, r)?.id)) || k === "actions" && multiActionLinks() &&
             (data.projects || []).some(project => p.includes(String(project.id)) && actionAssociatedWith("projects", project, r)))) &&
       (!o.length ||
         filterValues(k, r, "Responsable").some((v) => o.includes(v))) &&
@@ -1831,7 +1801,7 @@
         ((!$("unlinked").checked ||
           (!targets(k, r, "Projet").length &&
             !targets(k, r, "Chantier").length &&
-            !targets(k, r, "Tache").length && (k !== "actions" || !actionAssociations(r).length))) &&
+            !targets(k, r, "Tache").length)) &&
           (!$("overdue").checked || overdue(r))))
     );
   }
@@ -2998,9 +2968,6 @@
         Taches: "Tâches",
         NoteOrigine: "Note / réunion d’origine",
         PointsReportes: "Points reportés",
-        ProjetsAssocies: "Projets complémentaires",
-        ChantiersAssocies: "Chantiers complémentaires",
-        TachesAssociees: "Tâches complémentaires",
         PointOrigine: "Point de discussion d’origine",
         Projets: "Projets",
       }[field] || field
@@ -3085,7 +3052,6 @@
         .join("") +
       "</dl>";
     for (const f of Object.keys(links[k] || {})) {
-      if (k === "actions" && actionRefTargets[f] && !actionAssociationColumn(actionRefTargets[f])) continue;
       const target = links[k][f],
         rs = targets(k, r, f);
       const emptyOrigin =
@@ -3166,7 +3132,7 @@
     if (k !== "actions") {
       let actions = (data.actions || []).filter(
         (x) =>
-          (linkedTo(k, r, "actions", x) || actionAssociatedWith(k, r, x)) &&
+          linkedTo(k, r, "actions", x) &&
           (!archived("actions", x) || $("showArchived").checked) &&
           (["notes", "points"].includes(k) || !transformed("actions", x)),
       );
@@ -3339,7 +3305,7 @@
             s.fields
               .map(
                 (f) =>
-                  `<label>${esc(f === "ResponsableDiPSi" ? "Responsable externe" : k === "actions" && actionRefTargets[f] ? relationLabel(f) : f)}${f === "Titre" ? " *" : ""}<select data-map="${k}" data-field="${f}">${options(
+                  `<label>${esc(f === "ResponsableDiPSi" ? "Responsable externe" : f)}${f === "Titre" ? " *" : ""}<select data-map="${k}" data-field="${f}">${options(
                     meta
                       .filter(
                         (x) =>
@@ -3404,11 +3370,10 @@
     if (kind === "actions") {
       const comment = col(kind, "Commentaire");
       return JSON.stringify([kind, cfg(kind).tableRef, cfg(kind).table, comment?.id, comment?.colId, comment?.type, !!comment?.isFormula,
-        ...Object.keys(actionRefFields).map(target => {
-          const field = actionMentionField(target);
-          const column = field === actionDirectFields[target] ? actionDirectColumn(target) : actionAssociationColumn(target);
+        ...Object.keys(actionDirectFields).map(target => {
+          const column = actionDirectColumn(target);
           return [target, cfg(target).tableRef, cfg(target).table, column?.id, column?.colId, !!column?.isFormula,
-            ...(field === actionDirectFields[target] ? [field, column.type] : [])];
+            ...(actionMentionField(target) ? [actionDirectFields[target], column.type] : [])];
         })]);
     }
     return JSON.stringify([kind, ...["notes", "points", "projects", "streams", "tasks"].map(k => [
@@ -3432,16 +3397,7 @@
     return null;
   }
   function actionMentionMappingHint(kind) {
-    if (multiActionLinks() && !actionMentionField(kind))
-      return relationLabel(actionDirectFields[kind]) + " : mappez une référence modifiable vers « " + (cfg(kind).table || kindLabels[kind]) + " ».";
-    const field = actionRefFields[kind];
-    const name = relationLabel(field);
-    const target = cfg(kind).table || kindLabels[kind];
-    const column = col("actions", field);
-    if (column?.isFormula) return name + " : choisissez une colonne modifiable dans Mapping.";
-    if (column?.type === "RefList:" + cfg(kind).table && !actionAssociationColumn(kind))
-      return name + " : utilisez une colonne distincte des autres champs de l’action.";
-    return name + " : mappez une Liste de références vers « " + target + " » dans Actions.";
+    return relationLabel(actionDirectFields[kind]) + " : mappez une référence modifiable vers « " + (cfg(kind).table || kindLabels[kind]) + " ».";
   }
   function actionMentionHelp(form, content, text) {
     const help = document.createElement("p");
@@ -3466,16 +3422,12 @@
         actionMentionHelp(form, content, "Pour utiliser @ dans une action, mappez Commentaire vers une colonne Texte modifiable de la table Actions.");
         return null;
       }
-      const available = Object.keys(actionRefFields).some(actionMentionField);
-      if (!available) {
-        if (multiActionLinks()) {
-          actionMentionHelp(form, content, "Pour utiliser @, mappez un champ Projet, Chantier ou Tâche vers une référence modifiable dans Actions.");
-          return null;
-        }
-        const mapped = Object.keys(actionRefFields).filter(kind => cfg("actions").fields?.[actionRefFields[kind]]);
-        const guidance = mapped.length ? mapped.map(actionMentionMappingHint).join(" ") :
-          "Dans Mapping → Actions, associez Projets complémentaires, Chantiers complémentaires ou Tâches complémentaires à une colonne Liste de références modifiable vers la table correspondante.";
-        actionMentionHelp(form, content, "Pour utiliser @ : " + guidance);
+      if (!multiActionLinks()) {
+        actionMentionHelp(form, content, "Pour utiliser @, mappez Projet, Chantier ou Tâche dans Actions vers une colonne Liste de références de la table correspondante.");
+        return null;
+      }
+      if (!Object.keys(actionDirectFields).some(actionMentionField)) {
+        actionMentionHelp(form, content, "Pour utiliser @, mappez Projet, Chantier ou Tâche dans Actions vers une référence modifiable.");
         return null;
       }
     } else if (!content || col(k, textField)?.type !== "Text" || col(k, textField)?.isFormula) return null;
@@ -3639,7 +3591,6 @@
           !col(k, f)?.isFormula &&
           !(r && f === "Code") &&
           (f !== "PointsReportes" || forwardedPointColumn()) &&
-          (k !== "actions" || !actionRefTargets[f] || actionAssociationColumn(actionRefTargets[f])) &&
           !["Archive", "Transforme", "ActionOrigine", "TacheOrigine"].includes(
             f,
           ),
@@ -3685,7 +3636,7 @@
             )
             .filter((x) => x !== 0);
           const unresolved = !!r && sourceLinks.length !== selected.length;
-          if (!r && context && target === selection.k && f !== "PointsReportes" && !actionRefTargets[f]) selected = [context.id];
+          if (!r && context && target === selection.k && f !== "PointsReportes") selected = [context.id];
           if (f === "PointsReportes" && forwardedPoint) selected = [forwardedPoint.id];
           input =
             `<select name="${f}" ${isMultiLink(k, f) ? "multiple" : ""}><option value="">— Aucun —</option>${unresolved ? '<option value="unresolved" selected>Lien non reconnu — choisir le rattachement</option>' : ""}` +
@@ -4357,7 +4308,7 @@
     }
     if (!plan) {
       plan = { ...MeetingPointPlan.make({ kind, record, fields, state, fresh, cfg, col, inactive,
-        actionRefFields: Object.fromEntries(Object.keys(actionRefFields).map(target => [target, actionMentionField(target)])) }),
+        actionRefFields: actionDirectFields }),
         kind, recordId: record?.id ?? null, schema: state.schema, scope: noteDraftScope, signature };
       meetingComposer.setPending(plan);
     }
@@ -4564,7 +4515,7 @@
         }
       }
       const actionLinksToCheck = k === "actions" && multiActionLinks()
-        ? [...Object.values(actionDirectFields), ...Object.values(actionRefFields)].filter(field => Object.hasOwn(fields, cfg(k).fields?.[field]))
+        ? Object.values(actionDirectFields).filter(field => Object.hasOwn(fields, cfg(k).fields?.[field]))
         : [];
       if (!composed && r && (["notes", "points"].includes(k) || k === "actions" && (meetingComposer || actionLinksToCheck.length))) {
         const fresh = rows(await grist.docApi.fetchTable(targetTable)).find(row => row.id === r.id);
