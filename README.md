@@ -290,19 +290,15 @@ La vue générale À faire suit la même règle transverse : les filtres Grist d
 
 Les notifications de configuration Grist ne réinitialisent plus un mapping en cours de saisie après renommage. Les sauvegardes d’options du widget (mapping, largeur des volets, tri et synchronisation de la timeline) sont sérialisées. Une révision du mapping empêche une ancienne notification de remplacer une sauvegarde plus récente. Le démarrage lit explicitement le mapping enregistré avant toute détection ; l’enregistrement capture également les libellés et cases à cocher dont l’événement de changement est encore en attente. Les champs volontairement non mappés sont conservés.
 
-## Rattacher rapidement une action avec `@`
+## Rattacher une action à plusieurs éléments
 
-Pour activer les rattachements complémentaires, ajoutez dans la table **Actions** une ou plusieurs de ces colonnes modifiables et vérifiez leur mapping dans le widget.
+Dans la table **Actions**, configurez les champs habituels **Projet**, **Chantier** et **Tâche** selon le nombre de liens souhaité. Une **Liste de références** vers la table correspondante accepte plusieurs liens. Une référence simple en accepte un seul. Dès qu’un de ces champs est une liste de références, le widget traite les trois niveaux comme des rattachements indépendants, à la manière des points de discussion.
 
-| Colonne | Type Grist | Champ du widget |
-| --- | --- | --- |
-| `ProjetsAssocies` | Liste de références vers Projets | Projets complémentaires |
-| `ChantiersAssocies` | Liste de références vers Chantiers | Chantiers complémentaires |
-| `TachesAssociees` | Liste de références vers Tâches | Tâches complémentaires |
+Une action garde une seule ligne Grist. Elle apparaît dans ses différentes branches et dans **Actions associées** sur les éléments concernés. Lorsqu’un projet ou un chantier est déjà couvert par un rattachement plus précis dans la même branche, la carte apparaît au niveau le plus précis. Le filtre Projet tient compte de tous les rattachements.
 
-Mappez le **Commentaire** de l’action sur une colonne Texte modifiable. Une colonne Grist de type Any convient aussi si sa valeur est du texte ou si elle est vide. L’aide du formulaire indique le mapping à corriger si `@` est indisponible. Tapez `@` dans le commentaire, choisissez un élément et continuez à écrire. La mention reste dans le brouillon et peut être remplacée ou retirée au clic. **Enregistrer** associe les éléments à la même action. Pour modifier les liens enregistrés, utilisez ensuite les champs complémentaires dans le formulaire.
+Dans le **Commentaire**, tapez `@` et choisissez un élément. **Enregistrer** ajoute le lien à la même action. Le commentaire doit être mappé sur une colonne Texte modifiable, ou sur une colonne Any contenant du texte. Les liens peuvent aussi être ajoutés ou retirés dans les sélecteurs du formulaire. La flèche de la carte ouvre ce formulaire dans le mode multirattachement. Supprimer l’action depuis sa fiche supprime la ligne commune à toutes ses branches.
 
-Le parent principal continue de déterminer la place de l’action dans l’arborescence. Les rattachements complémentaires rendent cette action accessible dans **Actions associées** des éléments concernés et de leurs parents. Le filtre Projet de la vue des actions tient compte de ces liens.
+Les anciennes colonnes complémentaires (ProjetsAssocies, ChantiersAssocies et TachesAssociees) restent lisibles et modifiables. Si les champs habituels restent en référence simple, elles continuent d’alimenter `@` comme auparavant. Quand le modèle multirattachement est activé, `@` privilégie les champs habituels modifiables. Le widget n’effectue aucune migration de colonne ou de données Grist.
 
 ## Renvoyer un point vers une réunion
 

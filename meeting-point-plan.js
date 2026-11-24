@@ -50,10 +50,13 @@ window.MeetingPointPlan = (() => {
       for (const [target, field] of Object.entries(ctx.actionRefFields)) {
         const refs = state.refs.filter(ref => ref.kind === target);
         if (!refs.length) continue;
-        const column = requireColumn(kind, field, ['RefList:' + table(target)]);
+        const column = requireColumn(kind, field, ['RefList:' + table(target), 'Ref:' + table(target)]);
         const existing = values(Object.hasOwn(fields, column.colId) ? fields[column.colId] : record?.[column.colId]);
         for (const ref of refs) requireRow(target, ref.id);
-        fields[column.colId] = ['L', ...new Set([...existing, ...refs.map(ref => ref.id)])];
+        const ids = [...new Set([...existing.filter(Boolean).map(Number), ...refs.map(ref => ref.id)])];
+        if (column.type.startsWith('Ref:') && ids.length > 1)
+          throw Error('Ce champ est une référence simple. Retirez son rattachement actuel avant d’en choisir un autre : ' + field + '.');
+        fields[column.colId] = column.type.startsWith('RefList:') ? ['L', ...ids] : ids[0];
       }
     }
     if (record) baseExpected(kind, primaryId, fields, record);

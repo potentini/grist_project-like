@@ -180,6 +180,7 @@
     NoteOrigine: ["NoteOrigine", "Reunion", "Note"],
     Echeance: ["Echeance", "DeadlineTexte"],
   };
+  const actionDirectFields = { projects: "Projet", streams: "Chantier", tasks: "Tache" };
   const actionRefFields = { projects: "ProjetsAssocies", streams: "ChantiersAssocies", tasks: "TachesAssociees" };
   const actionRefTargets = Object.fromEntries(Object.entries(actionRefFields).map(([kind, field]) => [field, kind]));
   const links = {
@@ -202,6 +203,9 @@
     },
   };
   const multi = new Set(["Projets", "Chantiers", "Taches", "PointsReportes", ...Object.keys(actionRefTargets)]);
+  function isMultiLink(kind, field) {
+    return multi.has(field) || (kind === "actions" && Object.values(actionDirectFields).includes(field) && /^RefList:/.test(col(kind, field)?.type || ""));
+  }
   const textareas = new Set([
     "Contenu",
     "Decision",
@@ -445,6 +449,8 @@
     if(k==='notes' && ['projects','streams','tasks'].includes(source)) {
       return allowed.some(row=>linkedTo(source,row,'notes',r)) || (data.points||[]).some(p=>has('points',p,'NoteOrigine',r)&&nativeMatch('points',p));
     }
+    if (k === "actions" && multiActionLinks() && Object.hasOwn(actionDirectFields, source))
+      return allowed.some(parent => actionAssociatedWith(source, parent, r));
     if (source === "projects")
       return k === "points"
         ? pointProjects(r).some((p) => nativeIds.has(p.id))
@@ -965,7 +971,7 @@
     const target = links[k]?.[f];
     if (!target) return [];
     const raw = values(val(k, r, f)).flatMap((x) =>
-      multi.has(f) && typeof x === "string"
+      isMultiLink(k, f) && typeof x === "string"
         ? x.split(",").map((s) => s.trim())
         : [x],
     );
@@ -991,6 +997,21 @@
     }
     return [...new Map(projects.map((p) => [p.id, p])).values()];
   }
+  function actionDirectColumn(kind) {
+    const column = col("actions", actionDirectFields[kind]);
+    return column && [`Ref:${cfg(kind).table}`, `RefList:${cfg(kind).table}`, "Text"].includes(column.type) ? column : null;
+  }
+  function multiActionLinks() {
+    return Object.keys(actionDirectFields).some(kind => actionDirectColumn(kind)?.type.startsWith("RefList:"));
+  }
+  function actionMentionField(kind) {
+    if (multiActionLinks()) {
+      const column = actionDirectColumn(kind);
+      if (column && !column.isFormula && /^Ref/.test(column.type)) return actionDirectFields[kind];
+    }
+    const column = actionAssociationColumn(kind);
+    return column && !column.isFormula ? actionRefFields[kind] : null;
+  }
   function actionAssociationColumn(kind) {
     const field = actionRefFields[kind];
     const column = field && col("actions", field);
@@ -999,8 +1020,12 @@
     return duplicate ? null : column;
   }
   function actionAssociations(row) {
-    return Object.entries(actionRefFields).flatMap(([kind, field]) =>
-      actionAssociationColumn(kind) ? targets("actions", row, field).map(target => [kind, target]) : []);
+    const direct = multiActionLinks();
+    return Object.entries(actionRefFields).flatMap(([kind, field]) => {
+      const related = actionAssociationColumn(kind) ? targets("actions", row, field) : [];
+      if (direct && actionDirectColumn(kind)) related.push(...targets("actions", row, actionDirectFields[kind]));
+      return [...new Map(related.map(target => [target.id, target])).values()].map(target => [kind, target]);
+    });
   }
   function actionAssociatedWith(kind, row, action) {
     if (!Object.hasOwn(actionRefFields, kind)) return false;
@@ -1009,6 +1034,17 @@
       if (kind === "projects") return projectOf(target, related)?.id === row.id;
       return kind === "streams" && target === "tasks" && has("tasks", related, "Chantier", row);
     });
+  }
+  function actionPlacements(row) {
+    if (!multiActionLinks()) {
+      const parent = actionParent(row);
+      return parent ? [parent] : [];
+    }
+    const links = actionAssociations(row);
+    // Ancestor cards are redundant when a more specific branch already shows the action.
+    return links.filter(([kind, parent]) => !links.some(([target, related]) =>
+      (kind === "projects" && target !== "projects" && projectOf(target, related)?.id === parent.id) ||
+      (kind === "streams" && target === "tasks" && has("tasks", related, "Chantier", parent))));
   }
   function noteProjects(note) {
     const all = [...targets("notes", note, "Projet")];
@@ -1191,19 +1227,41 @@
           : encodeLink(k, f, targetKind, targetRow);
     };
     if (sourceKind === "tasks") {
-      for (const a of data.actions || [])
-        if (!transformed("actions", a) && has("actions", a, "Tache", source)) {
-          const delta = {};
-          setLink("actions", a, delta, "Tache", "tasks", null);
-          setLink("actions", a, delta, "Chantier", "streams", newRow);
-          if (
-            cfg("actions").fields?.Projet &&
-            !col("actions", "Projet")?.isFormula
-          )
-            setLink("actions", a, delta, "Projet", "projects", parent);
-          updates.push(["UpdateRecord", cfg("actions").table, a.id, delta]);
-          actionCount++;
+      for (const action of data.actions || []) {
+        if (transformed("actions", action)) continue;
+        const direct = has("actions", action, "Tache", source);
+        const supplemental = actionAssociationColumn("tasks") && has("actions", action, actionRefFields.tasks, source);
+        if (!direct && !supplemental) continue;
+        const delta = {};
+        if (direct && !multiActionLinks()) {
+          setLink("actions", action, delta, "Tache", "tasks", null);
+          setLink("actions", action, delta, "Chantier", "streams", newRow);
+          if (cfg("actions").fields?.Projet && !col("actions", "Projet")?.isFormula)
+            setLink("actions", action, delta, "Projet", "projects", parent);
         }
+        if ((direct && multiActionLinks()) || supplemental) {
+          const sourceFields = [
+            ...(direct && multiActionLinks() ? ["Tache"] : []),
+            ...(supplemental ? [actionRefFields.tasks] : []),
+          ];
+          for (const field of sourceFields) {
+            setLink("actions", action, delta, field, "tasks", null);
+            const column = col("actions", field);
+            if (column.type.startsWith("RefList:"))
+              delta[column.colId] = ["L", ...values(action[column.colId]).filter(value => Number(value) !== source.id)];
+          }
+          const field = direct && multiActionLinks() ? actionMentionField("streams") || "Chantier" : actionRefFields.streams;
+          setLink("actions", action, delta, field, "streams", newRow);
+          const column = col("actions", field);
+          if (column.type.startsWith("RefList:")) {
+            delta[column.colId] = ["L", ...new Set([...values(action[column.colId]), newRow.id])];
+          } else if (values(action[column.colId]).some(value => value !== 0 && value !== "")) {
+            throw Error("Le chantier de « " + title("actions", action) + " » est déjà renseigné. Utilisez une liste de références pour conserver les deux liens.");
+          }
+        }
+        updates.push(["UpdateRecord", cfg("actions").table, action.id, delta]);
+        actionCount++;
+      }
       for (const k of ["notes", "points"])
         for (const r of data[k] || [])
           if (has(k, r, "Taches", source)) {
@@ -1418,7 +1476,7 @@
           links[parent.k][f] === k && cfg(parent.k).fields?.[f] === column);
         if (!f) throw Error("Le lien du parent ne peut pas être retiré automatiquement.");
         const remaining = values(source[column]).flatMap((value) =>
-          multi.has(f) && typeof value === "string" ? value.split(",").map((s) => s.trim()) : [value],
+          isMultiLink(parent.k, f) && typeof value === "string" ? value.split(",").map((s) => s.trim()) : [value],
         ).filter((value) => String(value) !== String(val(k, row, "Code")));
         fields[column] = Array.isArray(source[column]) ? ["L", ...remaining] : remaining.join(", ");
       }
@@ -1661,11 +1719,9 @@
           children.push(sortDescriptor(childKind, child));
     if (kind !== "actions")
       for (const action of data.actions || []) {
-        const parent = actionParent(action);
         if (
           !inactive("actions", action) &&
-          parent?.[0] === kind &&
-          parent[1].id === row.id
+          actionPlacements(action).some(([type, parent]) => type === kind && parent.id === row.id)
         )
           children.push(sortDescriptor("actions", action));
       }
@@ -1977,10 +2033,7 @@
     if (["projects", "streams", "tasks"].includes(k))
       result.push(
         ...ordered("actions")
-          .filter((x) => {
-            const p = actionParent(x);
-            return p && p[0] === k && p[1].id === r.id;
-          })
+          .filter(action => actionPlacements(action).some(([type, parent]) => type === k && parent.id === r.id))
           .map((x) => ["actions", x]),
       );
     if (k === "notes")
@@ -2041,14 +2094,17 @@
         folded.add(key);
     }
     const open = !foldState(key).has(key);
-    const movable =
-      ["streams", "tasks", "actions"].includes(k) && !inactive(k, r);
+    const transverse = k === "actions" && multiActionLinks();
+    const movable = ["streams", "tasks", "actions"].includes(k) && !inactive(k, r) && !transverse;
     const leftActions = context.startsWith("left-") && ["projects", "streams", "tasks", "actions"].includes(k) && !inactive(k, r);
-    const remove = editionEnabled && (leftActions || (movable && ["right-dependents", "right-actions"].includes(context) && parent))
+    const remove = editionEnabled && !transverse && (leftActions || (movable && ["right-dependents", "right-actions"].includes(context) && parent))
       ? `<button type="button" class="dependent-delete" data-removal="delete" data-removal-kind="${k}" data-removal-id="${r.id}" ${parent ? `data-parent-kind="${parent.k}" data-parent-id="${parent.r.id}"` : ""} aria-label="Supprimer ${esc(title(k, r))}" title="Supprimer cet élément"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6"/></svg></button>`
       : "";
-    const move = editionEnabled && movable ? `<button class="move-button" type="button" data-move-kind="${k}" data-move-id="${r.id}" aria-label="Déplacer ${esc(title(k, r))}" title="Déplacer"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20 20 4M7 4h13v13"/></svg></button>` : "";
-    const quickButtons = remove ? `<div class="card-quick-actions">${move || '<button type="button" class="move-button" disabled aria-label="Déplacement non applicable" title="Ce niveau n’a pas de parent à réaffecter"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20 20 4M7 4h13v13"/></svg></button>'}${remove}${["Avancement", "Statut"].map((field) => {
+    const moveLabel = transverse ? "Modifier les rattachements" : "Déplacer";
+    const move = editionEnabled && (movable || transverse && !inactive(k, r))
+      ? `<button class="move-button" type="button" data-move-kind="${k}" data-move-id="${r.id}" aria-label="${moveLabel} ${esc(title(k, r))}" title="${moveLabel}"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20 20 4M7 4h13v13"/></svg></button>`
+      : "";
+    const quickButtons = remove || move && transverse && (leftActions || context === "right-actions") ? `<div class="card-quick-actions">${move || '<button type="button" class="move-button" disabled aria-label="Déplacement non applicable" title="Ce niveau n’a pas de parent à réaffecter"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20 20 4M7 4h13v13"/></svg></button>'}${remove || (transverse ? '<span aria-hidden="true"></span>' : "")}${["Avancement", "Statut"].map((field) => {
       const m = col(k, field), supported = field === "Avancement" ? /^(Numeric|Int)$/.test(m?.type || "") : /^(Text|Choice)$/.test(m?.type || "");
       const enabled = supported && !m.isFormula;
       return `<button type="button" class="card-quick-button" data-quick-field="${field}" data-quick-kind="${k}" data-quick-id="${r.id}" ${enabled ? "" : "disabled"} aria-label="Modifier ${field === "Statut" ? "le statut" : "l’avancement"} de ${esc(title(k, r))}" title="${field}${enabled ? "" : " : champ non mappé, calculé ou non modifiable"}">${field === "Avancement" ? '<span aria-hidden="true">%</span>' : '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 6h12M9 12h12M9 18h12M3 6h2M3 12h2M3 18h2"/></svg>'}</button>`;
@@ -2198,7 +2254,7 @@
         .join("");
       if (orphans) html += "<h3>Éléments sans parent reconnu</h3>" + orphans;
       const standalone = ordered("actions")
-        .filter((r) => !actionParent(r))
+        .filter((r) => !actionPlacements(r).length)
         .map((r) => branch(tree("actions", r, true), context))
         .join("");
       html += `<section class="unassigned" data-drop-kind="unassigned" data-drop-id="0"><h3>Actions sans rattachement au projet</h3>${standalone || '<p class="muted">Aucune action autonome.</p>'}</section>`;
@@ -2276,6 +2332,10 @@
         "Activez le mode Édition et terminez le formulaire en cours pour déplacer un élément.",
         true,
       );
+      return false;
+    }
+    if (source.k === "actions" && multiActionLinks()) {
+      message("Modifiez les rattachements de cette action dans son formulaire.", true);
       return false;
     }
     if (!canDrop(source.k, destination.k)) {
@@ -2363,11 +2423,11 @@
           set("actions", row, f, targetKind, null, values(val("actions", row, f)).some((v) => v !== 0 && v !== ""));
       } else if (source.k === "streams") {
         set("streams", row, "Projet", "projects", target, true);
-        for (const a of data.actions || [])
+        if (!multiActionLinks()) for (const a of data.actions || [])
           if (linkedTo("streams", row, "actions", a)) normalizeAction(a);
       } else if (source.k === "tasks") {
         set("tasks", row, "Chantier", "streams", target, true);
-        for (const a of data.actions || [])
+        if (!multiActionLinks()) for (const a of data.actions || [])
           if (has("actions", a, "Tache", row)) normalizeAction(a);
       } else if (destination.k === "notes") {
         set("actions", row, "NoteOrigine", "notes", target, true);
@@ -2478,6 +2538,11 @@
     if (!editionEnabled || editing || moving || demo) return;
     const source = (data[k] || []).find((r) => r.id === id);
     if (!source) return;
+    if (k === "actions" && multiActionLinks()) {
+      selectRecord(k, id, null);
+      openEditor(k, source);
+      return;
+    }
     const dialog = $("moveDialog");
     $("moveError").textContent = "";
     dialog.dataset.kind = k;
@@ -2705,6 +2770,8 @@
       if (k === "tasks") return has("points", row, "Taches", r);
       return false;
     }
+    if (kind === "actions" && multiActionLinks() && Object.hasOwn(actionDirectFields, k))
+      return actionAssociatedWith(k, r, row);
     if (k === "points")
       return kind === "actions" && has("actions", row, "PointOrigine", r);
     if (k === "projects") return projectOf(kind, row)?.id === r.id;
@@ -3122,8 +3189,7 @@
         actions
           .filter((x) => !filterDependents || !hideCompletedDependents || !completed("actions", x))
           .map((x) => {
-            const parent = actionParent(x);
-            return parent && parent[0] === k && parent[1].id === r.id
+            return actionPlacements(x).some(([type, parent]) => type === k && parent.id === r.id)
               ? branch(tree("actions", x), "right-actions", { k, r })
               : item("actions", x);
           })
@@ -3339,8 +3405,10 @@
       const comment = col(kind, "Commentaire");
       return JSON.stringify([kind, cfg(kind).tableRef, cfg(kind).table, comment?.id, comment?.colId, comment?.type, !!comment?.isFormula,
         ...Object.keys(actionRefFields).map(target => {
-          const column = actionAssociationColumn(target);
-          return [target, cfg(target).tableRef, cfg(target).table, column?.id, column?.colId, !!column?.isFormula];
+          const field = actionMentionField(target);
+          const column = field === actionDirectFields[target] ? actionDirectColumn(target) : actionAssociationColumn(target);
+          return [target, cfg(target).tableRef, cfg(target).table, column?.id, column?.colId, !!column?.isFormula,
+            ...(field === actionDirectFields[target] ? [field, column.type] : [])];
         })]);
     }
     return JSON.stringify([kind, ...["notes", "points", "projects", "streams", "tasks"].map(k => [
@@ -3364,6 +3432,8 @@
     return null;
   }
   function actionMentionMappingHint(kind) {
+    if (multiActionLinks() && !actionMentionField(kind))
+      return relationLabel(actionDirectFields[kind]) + " : mappez une référence modifiable vers « " + (cfg(kind).table || kindLabels[kind]) + " ».";
     const field = actionRefFields[kind];
     const name = relationLabel(field);
     const target = cfg(kind).table || kindLabels[kind];
@@ -3396,11 +3466,12 @@
         actionMentionHelp(form, content, "Pour utiliser @ dans une action, mappez Commentaire vers une colonne Texte modifiable de la table Actions.");
         return null;
       }
-      const available = Object.keys(actionRefFields).some(kind => {
-        const column = actionAssociationColumn(kind);
-        return column && !column.isFormula;
-      });
+      const available = Object.keys(actionRefFields).some(actionMentionField);
       if (!available) {
+        if (multiActionLinks()) {
+          actionMentionHelp(form, content, "Pour utiliser @, mappez un champ Projet, Chantier ou Tâche vers une référence modifiable dans Actions.");
+          return null;
+        }
         const mapped = Object.keys(actionRefFields).filter(kind => cfg("actions").fields?.[actionRefFields[kind]]);
         const guidance = mapped.length ? mapped.map(actionMentionMappingHint).join(" ") :
           "Dans Mapping → Actions, associez Projets complémentaires, Chantiers complémentaires ou Tâches complémentaires à une colonne Liste de références modifiable vers la table correspondante.";
@@ -3462,15 +3533,20 @@
       canForward: (id, block) => !block?.id || !alreadyForwarded.get(id)?.has(block.id),
       writable, hasField: field => !!col("points", field), label: ref => byRef.get(ref.kind + ":" + ref.id)?.path,
       canLink(kind, block) {
-        if (k === "actions") {
-          const column = actionAssociationColumn(kind);
-          return !!column && !column.isFormula;
-        }
+        if (k === "actions") return !!actionMentionField(kind);
         const m = col("points", pointRefFields[kind]);
         return !!m && !m.isFormula && (m.type === "Text" || m.type === "RefList:" + cfg(kind).table || m.type === "Ref:" + cfg(kind).table) &&
           !(block ? block.lockedRefs?.includes(kind) : k === "points" && r && unresolved(r, kind));
       },
-      linkLimit: kind => k !== "actions" && col("points", pointRefFields[kind])?.type === "Ref:" + cfg(kind).table ? 1 : Infinity,
+      linkLimit: kind => {
+        if (k === "actions") return col(k, actionMentionField(kind))?.type.startsWith("Ref:") ? 1 : Infinity;
+        return col("points", pointRefFields[kind])?.type === "Ref:" + cfg(kind).table ? 1 : Infinity;
+      },
+      occupiedRefs: k === "actions" ? () => Object.keys(actionDirectFields).flatMap(kind => {
+        const control = form.elements.namedItem(actionMentionField(kind));
+        return control ? [...control.selectedOptions].filter(option => Number(option.value) > 0)
+          .map(option => ({kind, id: Number(option.value)})) : [];
+      }) : undefined,
       initialRefs: k === "points" ? readRefs() : [], readRefs,
       writeRefs(refs) {
         for (const [kind, field] of Object.entries(pointRefFields)) {
@@ -3603,7 +3679,7 @@
           let selected = r ? targets(k, r, f).map((x) => x.id) : [];
           const sourceLinks = values(v)
             .flatMap((x) =>
-              multi.has(f) && typeof x === "string"
+              isMultiLink(k, f) && typeof x === "string"
                 ? x.split(",").map((s) => s.trim())
                 : [x],
             )
@@ -3612,7 +3688,7 @@
           if (!r && context && target === selection.k && f !== "PointsReportes" && !actionRefTargets[f]) selected = [context.id];
           if (f === "PointsReportes" && forwardedPoint) selected = [forwardedPoint.id];
           input =
-            `<select name="${f}" ${multi.has(f) ? "multiple" : ""}><option value="">— Aucun —</option>${unresolved ? '<option value="unresolved" selected>Lien non reconnu — choisir le rattachement</option>' : ""}` +
+            `<select name="${f}" ${isMultiLink(k, f) ? "multiple" : ""}><option value="">— Aucun —</option>${unresolved ? '<option value="unresolved" selected>Lien non reconnu — choisir le rattachement</option>' : ""}` +
             rows
               .map(
                 (x) =>
@@ -4012,7 +4088,7 @@
 
   // Form-only hierarchy: selections remain drafts until Save.
   function syncHierarchy(changed = "", infer = false) {
-    if (!editing) return;
+    if (!editing || editing.k === "actions" && multiActionLinks()) return;
     const { k, r } = editing,
       form = $("editForm");
     const fields = ["projects", "streams", "tasks"].map((target) =>
@@ -4184,7 +4260,7 @@
     const parentField =
       k === "tasks" ? "Chantier" : k === "streams" ? "Projet" : null;
     const column = parentField && cfg(k).fields?.[parentField];
-    if (!record || !column || !Object.hasOwn(fields, column)) return [];
+    if (!record || !column || !Object.hasOwn(fields, column) || multiActionLinks()) return [];
     const changed = { ...record, ...fields },
       updates = [];
     for (const action of data.actions || []) {
@@ -4280,7 +4356,8 @@
       plan = null;
     }
     if (!plan) {
-      plan = { ...MeetingPointPlan.make({ kind, record, fields, state, fresh, cfg, col, inactive, actionRefFields }),
+      plan = { ...MeetingPointPlan.make({ kind, record, fields, state, fresh, cfg, col, inactive,
+        actionRefFields: Object.fromEntries(Object.keys(actionRefFields).map(target => [target, actionMentionField(target)])) }),
         kind, recordId: record?.id ?? null, schema: state.schema, scope: noteDraftScope, signature };
       meetingComposer.setPending(plan);
     }
@@ -4348,7 +4425,9 @@
         let v = el.value;
         const target = links[k]?.[f];
         if (target) {
-          const ids = multi.has(f)
+          if (k === "actions" && multiActionLinks() && /^Ref/.test(m.type) && m.type.split(":")[1] !== cfg(target).table)
+            throw Error("Le rattachement « " + fieldLabel(k, f) + " » pointe vers une autre table.");
+          const ids = isMultiLink(k, f)
             ? [...el.selectedOptions].map((o) => o.value).filter(Boolean)
             : v
               ? [v]
@@ -4367,7 +4446,7 @@
             ? ["L", ...converted]
             : /^Ref:/.test(m?.type || "")
               ? converted[0] || 0
-              : multi.has(f)
+              : isMultiLink(k, f)
                 ? converted.join(", ")
                 : converted[0] || "";
         } else if (/^Ref(List)?:/.test(m?.type || ""))
@@ -4438,7 +4517,7 @@
         }
       }
       // A precise target determines its ancestors, avoiding contradictory links.
-      if (k === "actions")
+      if (k === "actions" && !multiActionLinks())
         for (const [child, target, parent] of [
           ["Tache", "tasks", "Chantier"],
           ["Chantier", "streams", "Projet"],
@@ -4484,9 +4563,17 @@
             throw Error("Les points reportés ont changé dans Grist. Rouvrez la réunion avant de les modifier.");
         }
       }
-      if (!composed && r && (["notes", "points"].includes(k) || k === "actions" && meetingComposer)) {
+      const actionLinksToCheck = k === "actions" && multiActionLinks()
+        ? [...Object.values(actionDirectFields), ...Object.values(actionRefFields)].filter(field => Object.hasOwn(fields, cfg(k).fields?.[field]))
+        : [];
+      if (!composed && r && (["notes", "points"].includes(k) || k === "actions" && (meetingComposer || actionLinksToCheck.length))) {
         const fresh = rows(await grist.docApi.fetchTable(targetTable)).find(row => row.id === r.id);
         if (!fresh) throw Error("Cet élément n’existe plus. Le brouillon local est conservé.");
+        for (const field of actionLinksToCheck) {
+          const column = cfg(k).fields[field];
+          if (JSON.stringify(fresh[column] ?? "") !== JSON.stringify(r[column] ?? ""))
+            throw Error("Les rattachements de cette action ont changé dans Grist. Rouvrez l’action avant de les modifier.");
+        }
         for (const field of ["Titre", "Nom", "Contenu", "Decision", "Commentaire"]) {
           const column = cfg(k).fields?.[field];
           if (column && Object.hasOwn(fields, column) && JSON.stringify(fresh[column] ?? "") !== JSON.stringify(r[column] ?? ""))

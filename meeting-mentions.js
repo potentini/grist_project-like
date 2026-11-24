@@ -24,7 +24,7 @@ window.MeetingMentions = (() => {
     hint.className = 'mention-hint';
     hint.textContent = ctx.kind === 'notes'
       ? 'Tapez @ pour rattacher un paragraphe à un projet, un chantier ou une tâche. Cliquez sur une mention pour la modifier. À l’enregistrement, chaque paragraphe marqué devient un point. Une ligne vide sépare les paragraphes.'
-      : ctx.kind === 'actions' ? 'Tapez @ puis quelques lettres pour chercher un projet, un chantier ou une tâche. La mention reste modifiable au clic jusqu’à Enregistrer.'
+      : ctx.kind === 'actions' ? 'Tapez @ puis quelques lettres pour rattacher l’action à un projet, un chantier ou une tâche. La mention reste modifiable au clic jusqu’à Enregistrer.'
       : 'Tapez @ dans les échanges pour ajouter un rattachement à ce point, sans créer de nouveau point.';
     if (ctx.kind === 'actions') {
       hint.id = 'actionMentionHelp';
@@ -134,8 +134,9 @@ window.MeetingMentions = (() => {
       trigger = { textarea, block, ...p, at, caret: current ? current.end : p.caret, marker, current };
       const forwarding = marker === '#';
       const source = forwarding ? meetingIndex : indexed;
-      const scopeStart = block ? 0 : p.start;
-      const scopeEnd = block ? p.value.length : p.end;
+      const whole = block || ctx.kind === "actions";
+      const scopeStart = whole ? 0 : p.start;
+      const scopeEnd = whole ? p.value.length : p.end;
       const occupied = mentionsIn(p.value.slice(scopeStart, scopeEnd)).filter(mention => mention.start + scopeStart !== current?.start);
       const words = searchWords(query);
       const matches = source.filter(candidate => matchesQuery(candidate, words) &&
@@ -181,7 +182,7 @@ window.MeetingMentions = (() => {
       positionMenu();
     }
     function linkFull(ref, block, occupied) {
-      const base = block ? block.refs : ctx.kind === 'points' ? ctx.readRefs() : [];
+      const base = block ? block.refs : ctx.kind === 'points' ? ctx.readRefs() : ctx.occupiedRefs?.() || [];
       const refs = [...base, ...occupied.filter(mention => mention.ref).map(mention => mention.ref)];
       return !refs.some(r => r.kind === ref.kind && r.id === ref.id) &&
         refs.filter(r => r.kind === ref.kind).length >= (ctx.linkLimit?.(ref.kind) ?? Infinity);
@@ -206,7 +207,7 @@ window.MeetingMentions = (() => {
         t = { ...t, ...p, at: p.caret - match[2].length - 1 };
       }
       if (ref && !t.current) {
-        const scope = t.block ? t.value : t.value.slice(t.start, t.end);
+        const scope = t.block || ctx.kind === "actions" ? t.value : t.value.slice(t.start, t.end);
         if (linkFull(ref, t.block, mentionsIn(scope))) { showMenu(t.textarea, t.block); return; }
       }
       if (['notes', 'actions'].includes(ctx.kind) && (ref || destination)) {
