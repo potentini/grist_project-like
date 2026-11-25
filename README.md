@@ -49,7 +49,7 @@ Les liens acceptent :
 - les vraies colonnes **Référence** / **Liste de références** Grist ;
 - les codes métier des CSV, si la colonne **Code** est mappée dans la table cible. Les listes de codes sont séparées par des virgules.
 
-Les codes doivent être uniques et stables dans chaque table. Le formulaire propose un code libre pour les nouvelles lignes et protège le code des lignes existantes. Les colonnes de formule sont lisibles et exclues des formulaires d’écriture. Les références dans Responsable/Participants se modifient depuis la table Grist ; la V1 privilégie ici les colonnes Texte des CSV.
+Les codes doivent être uniques et stables dans chaque table. Le formulaire propose un code libre pour les nouvelles lignes et protège le code des lignes existantes. Les colonnes de formule sont lisibles et exclues des formulaires d’écriture. Les colonnes Texte des CSV restent utilisables. Les champs Responsable et Participants internes peuvent aussi utiliser des références Grist.
 
 Une action liée à une tâche retrouve automatiquement son chantier et son projet à l’enregistrement ; une action liée à un chantier retrouve son projet. Aucun pourcentage du projet n’est recalculé en terminant une action. Avancement utilise une valeur de 0 à 1 (0,5 = 50 %). Les échéances libres restent du texte et les filtres de retard utilisent seulement DateFin. Sans date précise, aucune date n’est supposée.
 
@@ -317,6 +317,12 @@ En mode **Édition**, ouvrir un point enregistré ou sa réunion et cliquer sur 
 Dans l’éditeur d’une réunion, tapez aussi **`#` suivi de quelques lettres** pour chercher une réunion existante par titre, instance, date ou code. La réunion choisie reste dans le texte sous forme `#[Réunion]`. Dans les notes générales, les mentions `@` et `#` du même paragraphe s’appliquent au même point. Dans les échanges d’un bloc, le renvoi concerne ce point. Cliquer sur une mention pour la remplacer ou la retirer. La réunion d’origine et les points reportés sont enregistrés en une seule opération au bouton **Enregistrer**.
 
 La réunion destinataire et le suivi affichent le point reporté. Ouvrir le point donne accès à sa réunion d’origine, à ses échanges, à ses décisions et à ses actions. Un même point reste une seule ligne et peut être lié à plusieurs réunions. Pour retirer un renvoi, enlever le point du champ **Points reportés** de la réunion destinataire et enregistrer. Le renvoi manuel peut servir de base à la reprise automatique par instance.
+
+## Participants aux réunions
+
+Dans **Mapping → Notes et réunions**, mappez **Participants internes** vers une liste de références de la table **Équipe** et **Participants externes** vers une colonne Texte. Les deux champs s’affichent dans la fiche et dans **Suivi** et sont inclus dans sa recherche.
+
+Quand l’ancien champ **Participants** est mappé, le widget reprend son mapping selon le type de la colonne. Une référence va dans les participants internes et une colonne Texte dans les participants externes. Les nouveaux champs déjà configurés gardent la priorité. Cette reprise laisse les colonnes et leurs valeurs en place dans Grist.
 
 ## Suivi des notes et réunions
 

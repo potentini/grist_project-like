@@ -120,7 +120,7 @@
       const query=ctx.normalize(search.value);
       if(query)selected=selected.filter(entry=>ctx.normalize([
         ctx.title(entry.kind,entry.row),entry.content,entry.decision,entry.note?ctx.title('notes',entry.note):'',dateInfo(entry.note).label,
-        entry.note?metadata('notes',entry.note,['Code','Instance','Participants','Type','Etat']):'',
+        entry.note?metadata('notes',entry.note,['Code','Instance','ParticipantsInternes','ParticipantsExternes','Type','Etat']):'',
         metadata(entry.kind,entry.row,entry.kind==='notes'?['Chantiers','Taches']:['Projets','Chantiers','Taches']),
         ...entry.projects.map(p=>ctx.title('projects',p)),
       ].join(' ')).includes(query));
@@ -141,7 +141,7 @@
       }
       body.innerHTML=[...meetings.values()].sort(compareMeetings).map(meeting=>{
           const note=meeting.note, when=dateInfo(note);
-          const meetingMeta=note?metadata('notes',note,['Code','Instance','Type','Participants','Etat']):'Réunion d’origine non renseignée ou introuvable';
+          const meetingMeta=note?metadata('notes',note,['Code','Instance','Type','ParticipantsInternes','ParticipantsExternes','Etat']):'Réunion d’origine non renseignée ou introuvable';
           const groups=[...meeting.groups.values()].sort((a,b)=>a.label===null?0:a.label.localeCompare(b.label,'fr',{numeric:true})).map(group=>{
           const cards=group.entries.sort((a,b)=>(a.kind==='notes'?-1:b.kind==='notes'?1:Number(ctx.value('points',a.row,'Ordre')||a.row.id)-Number(ctx.value('points',b.row,'Ordre')||b.row.id))).map(entry=>{
             const heading=entry.kind==='notes'?'Notes de réunion':ctx.title('points',entry.row);

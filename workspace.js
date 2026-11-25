@@ -112,7 +112,8 @@
         "PointsReportes",
         "Instance",
         "Responsable",
-        "Participants",
+        "ParticipantsInternes",
+        "ParticipantsExternes",
         "Contenu",
         "Etat",
         "Projet",
@@ -185,6 +186,8 @@
     DateDebut: ["DateDebut", "Debut", "StartDate"],
     DateFin: ["DateFin", "Deadline", "Fin", "DueDate"],
     Contenu: ["Contenu", "CompteRendu", "Notes", "Texte"],
+    ParticipantsInternes: ["Participants internes", "ParticipantsEquipe"],
+    ParticipantsExternes: ["Participants externes"],
     PointEtape: ["PointEtape", "PointDEtape"],
     NoteOrigine: ["NoteOrigine", "Reunion", "Note"],
     Echeance: ["Echeance", "DeadlineTexte"],
@@ -340,6 +343,8 @@
         : custom) ||
       {
         ResponsableDiPSi: "Responsable externe",
+        ParticipantsInternes: "Participants internes",
+        ParticipantsExternes: "Participants externes",
         DateFin: "Date de fin (date précise)",
         Echeance: "Échéance (texte libre)",
       }[f] ||
@@ -970,6 +975,7 @@
     }
     reconcileMappingTables(normalized);
     reconcileMappingColumns(normalized);
+    if (loaded) reconcileMeetingParticipants(normalized);
     if(mappingSignature(normalized)===mappingSignature(mapping))return false;
     mapping=normalized;
     applyLabels();
@@ -1952,7 +1958,8 @@
       );
     }
     if (rich && k === "notes")
-      add("Participants", displayValue(k, r, "Participants"));
+      for (const field of ["ParticipantsInternes", "ParticipantsExternes"])
+        add(field, displayValue(k, r, field));
     if (k === "actions" && overdue(r))
       facts.push('<span class="badge late">Échéance : en retard</span>');
     let html = facts.length
@@ -3096,7 +3103,8 @@
         "Nature",
         "Responsable",
         "ResponsableDiPSi",
-        "Participants",
+        "ParticipantsInternes",
+        "ParticipantsExternes",
         "Instance",
         "Date",
         ...(k === "notes" ? ["Nom"] : []),
@@ -3308,6 +3316,28 @@
       message("Chargement impossible : " + e.message, true);
     }
   }
+  function reconcileMeetingParticipants(config) {
+    const note = config.notes;
+    if (!note?.table || !note.fields) return;
+    const { fields, columnRefs, fieldLabels } = note;
+    // Classify the old field by its Grist type, without moving or rewriting any values.
+    const hasLegacy = Object.hasOwn(fields, "Participants");
+    const legacy = hasLegacy ? meta.find(column => column.table === note.table && column.colId === fields.Participants) :
+      meta.find(column => column.table === note.table && norm(column.colId) === "participants");
+    if (hasLegacy && fields.Participants && !legacy) return;
+    const internal = legacy && /^Ref(List)?:/.test(legacy.type || "");
+    const destination = internal ? "ParticipantsInternes" : "ParticipantsExternes";
+    if (legacy && !Object.hasOwn(fields, destination) &&
+        !Object.entries(fields).some(([field, id]) => field !== "Participants" && id === legacy.colId)) {
+      fields[destination] = legacy.colId;
+      if (columnRefs) columnRefs[destination] = legacy.id;
+    }
+    if (hasLegacy) {
+      delete fields.Participants;
+      if (columnRefs) delete columnRefs.Participants;
+      if (fieldLabels) delete fieldLabels.Participants;
+    }
+  }
   function detect(d, force = false) {
     const copy = structuredClone(d);
     for (const [k, s] of Object.entries({ ...schemas, team: teamSchema })) {
@@ -3346,6 +3376,7 @@
           c.fields[f] = found[0].colId;
       }
     }
+    reconcileMeetingParticipants(copy);
     return copy;
   }
   function mappingUI() {
@@ -3377,7 +3408,7 @@
             s.fields
               .map(
                 (f) =>
-                  `<label>${esc(f === "ResponsableDiPSi" ? "Responsable externe" : f)}${f === "Titre" ? " *" : ""}<select data-map="${k}" data-field="${f}">${options(
+                  `<label>${esc(["ResponsableDiPSi", "ParticipantsInternes", "ParticipantsExternes"].includes(f) ? fieldLabel(k, f) : f)}${f === "Titre" ? " *" : ""}<select data-map="${k}" data-field="${f}">${options(
                     meta
                       .filter(
                         (x) =>
@@ -3724,7 +3755,7 @@
           type.startsWith("Date")
         )
           input = `<input type="date" name="${f}" value="${esc(dateText(v))}">`;
-        else if (textareas.has(f))
+        else if (textareas.has(f) || f === "ParticipantsExternes" && ["Text", "Any"].includes(type))
           input = `<textarea name="${f}">${esc(v)}</textarea>`;
         else if (type === "Choice" || type === "ChoiceList") {
           let choices = [];
@@ -4734,6 +4765,14 @@
       }
       reconcileMappingTables(mapping);
       reconcileMappingColumns(mapping);
+      if (mappingWasSaved && mapping.notes?.table) {
+        const detected = detect({ notes: mapping.notes }).notes;
+        for (const field of ["ParticipantsInternes", "ParticipantsExternes"]) {
+          if (!Object.hasOwn(mapping.notes.fields, field) && detected.fields[field])
+            mapping.notes.fields[field] = detected.fields[field];
+        }
+      }
+      reconcileMeetingParticipants(mapping);
       if(mappingWasSaved && beforeTableRefs!==JSON.stringify(mapping)) {
         mappingSaving=true;
         try { mapping=await persistMapping(mapping); }
@@ -5433,6 +5472,21 @@
             if (external && !["Text", "Any"].includes(external.type))
               throw Error(`${schemas[kind].label} : mappez Responsable externe vers une colonne Texte.`);
           }
+        }
+        const notes = saved.notes;
+        const internal = notes?.fields?.ParticipantsInternes;
+        const external = notes?.fields?.ParticipantsExternes;
+        if (internal && internal === external)
+          throw Error("Les participants internes et externes doivent utiliser deux colonnes différentes.");
+        for (const [field, name] of [["ParticipantsInternes", internal], ["ParticipantsExternes", external]]) {
+          if (!name || name === cfg("notes").fields?.[field]) continue;
+          const column = meta.find(m => m.table === notes.table && m.colId === name);
+          if (!column) continue;
+          if (field === "ParticipantsInternes" && (!/^Ref(List)?:/.test(column.type) ||
+              saved.team?.table && column.type.split(":")[1] !== saved.team.table))
+            throw Error("Mappez Participants internes sur une liste de références vers Équipe.");
+          if (field === "ParticipantsExternes" && !["Text", "Any"].includes(column.type))
+            throw Error("Mappez Participants externes sur une colonne Texte.");
         }
         const used = Object.values(saved)
           .map((c) => c.table)

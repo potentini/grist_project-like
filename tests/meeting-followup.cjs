@@ -117,7 +117,7 @@ async function setup({fixture,refs}) {
       const dates=await popup.locator('.followup-meeting h4').allTextContents();
       assert.ok(dates[0].includes('20/11/2026'),JSON.stringify(dates));
       await popup.getByText('Instance : Codir',{exact:false}).waitFor();
-      assert.ok((await popup.innerText()).includes('Participants : Amandine, moi'));
+      assert.ok((await popup.innerText()).includes('Participants externes : Amandine, moi'));
       assert.equal(await popup.getByRole('heading',{name:/Bilat archivée/}).count(),0);
       await page.locator('#meetingFollowupArchived').check();await popup.getByRole('heading',{name:/Bilat archivée/}).waitFor();
       await popup.getByText('Point archivé',{exact:true}).waitFor();
