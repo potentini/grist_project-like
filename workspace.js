@@ -111,6 +111,7 @@
         "DateSource",
         "PointsReportes",
         "Instance",
+        "Responsable",
         "Participants",
         "Contenu",
         "Etat",
@@ -160,6 +161,17 @@
       schemas[k].fields.push("Avancement");
   }
   for (const schema of Object.values(schemas)) schema.fields.push("Archive");
+  const teamSchema = {
+    label: "Équipe",
+    aliases: ["Équipe", "Equipe", "Collaborateurs", "Collaborateur"],
+    fields: ["Nom", "Prenom", "Email", "Service"],
+    fieldAliases: {
+      Nom: ["Nom", "Nom de famille"],
+      Prenom: ["Prénom", "Prénom usuel"],
+      Email: ["Email", "E-mail", "Adresse email", "Adresse e-mail", "Courriel"],
+      Service: ["Service"],
+    },
+  };
   const aliases = {
     Titre: ["Titre", "Nom", "Name", "Title", "Tache"],
     Nom: ["Nom", "NomReunion", "TitreReunionLibre"],
@@ -311,6 +323,7 @@
   window.addEventListener("online", scheduleNativeResume);
   window.addEventListener("pageshow", scheduleNativeResume);
   const refRows = new Map();
+  const teamLabels = new Map();
   const referenceIndexes = new Map();
   let scopeAllowed = new WeakMap(),
     advancedSets = null;
@@ -357,11 +370,50 @@
       });
     return referenceIndexes.get(table).byId.get(Number(id));
   }
+  function isTeamReference(column) {
+    return !!cfg("team").table && /^Ref(List)?:/.test(column?.type || "") &&
+      column.type.split(":")[1] === cfg("team").table;
+  }
+  function teamName(row) {
+    return String(val("team", row, "Prenom")).trim() || String(val("team", row, "Nom")).trim();
+  }
+  function teamChoice(row) {
+    if (teamLabels.has(row.id)) return teamLabels.get(row.id);
+    const groups = new Map();
+    for (const person of tableRows(cfg("team").table)) {
+      const key = norm(teamName(person)) || "member:" + person.id;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(person);
+    }
+    for (const group of groups.values()) {
+      const labels = group.map(person => {
+        const first = teamName(person) || "Membre #" + person.id;
+        if (group.length === 1) return first;
+        const full = [...new Set([first, val("team", person, "Nom")].filter(Boolean))].join(" ");
+        return [full, displayValue("team", person, "Service")].filter(Boolean).join(" · ");
+      });
+      const counts = new Map();
+      for (const label of labels) counts.set(norm(label), (counts.get(norm(label)) || 0) + 1);
+      group.forEach((person, i) => {
+        const label = labels[i];
+        teamLabels.set(person.id, counts.get(norm(label)) > 1 ? label + " · #" + person.id : label);
+      });
+    }
+    return teamLabels.get(row.id) || "Membre #" + row.id;
+  }
+  function teamSearch(row) {
+    return [teamName(row), val("team", row, "Nom"), displayValue("team", row, "Service")].filter(Boolean).join(" ");
+  }
   function refText(m, value, row, depth = 0) {
     if (!m || !/^Ref(List)?:/.test(m.type || "") || depth > 5)
       return Array.isArray(value)
         ? values(value).join(", ")
         : String(value ?? "");
+    if (isTeamReference(m) && (cfg("team").fields?.Prenom || cfg("team").fields?.Nom))
+      return values(value).filter(id => Number(id) > 0).map(id => {
+        const person = referenceRow(cfg("team").table, id);
+        return person ? teamName(person) || "Membre #" + person.id : "[Référence indisponible]";
+      }).join(", ");
     const display = meta.find((c) => c.id === Number(m.displayCol));
     if (display && row && row[display.colId] != null)
       return values(row[display.colId]).join(", ");
@@ -383,11 +435,23 @@
   }
   async function loadReferences() {
     const missing=[];
+    teamLabels.clear();
     referenceWarning="";
     let frontier = Object.keys(schemas)
       .flatMap((k) => Object.keys(cfg(k).fields || {}).map((f) => col(k, f)))
       .filter((c) => /^Ref(List)?:/.test(c?.type || ""));
-    const doneTables = new Set(),
+    const team = cfg("team").table;
+    if (team) {
+      try {
+        refRows.set(team, rows(await grist.docApi.fetchTable(team)));
+      } catch {
+        refRows.delete(team);
+        missing.push("Équipe → " + team);
+      }
+      frontier.push(col("team", "Service"));
+      frontier = frontier.filter(column => /^Ref(List)?:/.test(column?.type || ""));
+    }
+    const doneTables = new Set(team ? [team] : []),
       doneColumns = new Set();
     for (let depth = 0; frontier.length && depth < 5; depth++) {
       const columns = frontier.filter((c) => !doneColumns.has(c.id));
@@ -403,7 +467,7 @@
             missing.push(...columns.filter(c=>c.type.split(':')[1]===table).map(c=>`${c.table}.${c.colId} → ${table}`));
             return;
           }
-          if (!Object.values(mapping).some((c) => c.table === table))
+          if (!Object.keys(schemas).some(k => cfg(k).table === table))
             refRows.set(table, rows(await grist.docApi.fetchTable(table)));
         }),
       );
@@ -519,6 +583,15 @@
   }
   function filterValues(k, r, f) {
     return fieldValues(col(k, f), val(k, r, f), r);
+  }
+  function ownerOptions(kind, row) {
+    const column = col(kind, "Responsable");
+    if (!isTeamReference(column))
+      return filterValues(kind, row, "Responsable").filter(Boolean).map(name => [name, name]);
+    return values(val(kind, row, "Responsable")).filter(value => Number(value) > 0).map(id => {
+      const person = referenceRow(cfg("team").table, id);
+      return ["team:" + id, person ? teamChoice(person) : "Membre indisponible #" + id];
+    });
   }
   function quickChoice(id) {
     return quickSelections[id] || [];
@@ -1786,7 +1859,7 @@
           : p.includes(String(projectOf(k, r)?.id)) || k === "actions" && multiActionLinks() &&
             (data.projects || []).some(project => p.includes(String(project.id)) && actionAssociatedWith("projects", project, r)))) &&
       (!o.length ||
-        filterValues(k, r, "Responsable").some((v) => o.includes(v))) &&
+        ownerOptions(k, r).some(([id]) => o.includes(id))) &&
       (!s.length ||
         filterValues(k, r, k === "notes" ? "Etat" : "Statut").some((v) =>
           s.includes(v),
@@ -1938,15 +2011,8 @@
       ],
       [
         "ownerFilter",
-        [
-          ...new Set(
-            scope
-              .flatMap(([kind, row]) => filterValues(kind, row, "Responsable"))
-              .filter(Boolean),
-          ),
-        ]
-          .sort()
-          .map((v) => [v, v]),
+        [...new Map(scope.flatMap(([kind, row]) => ownerOptions(kind, row))).entries()]
+          .sort((a, b) => a[1].localeCompare(b[1], "fr", {numeric:true})),
       ],
       [
         "statusFilter",
@@ -3244,7 +3310,7 @@
   }
   function detect(d, force = false) {
     const copy = structuredClone(d);
-    for (const [k, s] of Object.entries(schemas)) {
+    for (const [k, s] of Object.entries({ ...schemas, team: teamSchema })) {
       copy[k] ||= { table: "", fields: {} };
       const c = copy[k];
       if (!c.table && (!Object.hasOwn(d[k] || {}, "table") || force)) {
@@ -3258,7 +3324,7 @@
       c.fields ||= {};
       for (const f of s.fields) {
         if (c.fields[f] || (!force && Object.hasOwn(c.fields, f))) continue;
-        const names = aliases[f] || [f];
+        const names = s.fieldAliases?.[f] || aliases[f] || [f];
         const columns = meta.filter(
           (x) => x.table === c.table && !x.colId.startsWith("gristHelper_"),
         );
@@ -3292,6 +3358,12 @@
             `<option value="${esc(id)}" ${v === id ? "selected" : ""}>${esc(label)}</option>`,
         )
         .join("");
+    const team = draft.team || { fields: {} };
+    const teamMapping = `<fieldset><legend>Équipe</legend><p>Annuaire commun pour les responsables internes. Reliez chaque champ Responsable à une Référence vers cette table. Responsable externe reste en Texte. Le prénom sert à l’affichage et l’e-mail prépare les futures vues « Mes… ».</p>
+      <label>Table<select data-map="team" data-field="table">${options(tables.map(table => [table.tableId, table.label || table.tableId]), team.table)}</select></label>
+      ${teamSchema.fields.map(field => `<label>${{Prenom:"Prénom",Email:"E-mail"}[field] || field}
+        <select data-map="team" data-field="${field}">${options(meta.filter(column => column.table === team.table && !column.colId.startsWith("gristHelper_"))
+          .map(column => [column.colId, column.label || column.colId]), team.fields?.[field])}</select></label>`).join("")}</fieldset>`;
     $("mapping").innerHTML =
       '<h2>Tables et champs</h2><p>La réouverture conserve tous vos choix, y compris les champs non mappés. La détection est relancée uniquement avec le bouton dédié. Un champ vide est facultatif, sauf Titre. Mappez les parents pour construire la hiérarchie. Les colonnes de formule sont lisibles et restent protégées en édition.</p><p>DateFin est une date précise pour le calendrier et les retards. Echeance est un texte libre (ex. « avant le Codir »). Vous pouvez ne mapper qu’un seul des deux.</p><div class="actions"><button id="detect">Détecter les champs manquants</button><button id="applyMapping">Enregistrer le mapping</button></div><div class="grid">' +
       Object.entries(schemas)
@@ -3351,7 +3423,7 @@
           );
         })
         .join("") +
-      "</div>";
+      teamMapping + "</div>";
   }
   function linkValue(target, r, sourceKind, field) {
     const type = col(sourceKind, field)?.type || "";
@@ -3675,12 +3747,13 @@
           const refTable = type.split(":")[1],
             rows = tableRows(refTable),
             selected = values(v).map(Number);
+          const directory = isTeamReference(m);
           input =
             `<select name="${f}" ${type.startsWith("RefList:") ? "multiple" : ""}><option value="">— Aucun —</option>` +
             rows
               .map(
                 (row) =>
-                  `<option value="${row.id}" ${selected.includes(row.id) ? "selected" : ""}>${esc(refText(m, row.id, null))}</option>`,
+                  `<option value="${row.id}" ${selected.includes(row.id) ? "selected" : ""} ${directory ? `data-search="${esc(teamSearch(row))}"` : ""}>${esc(directory ? teamChoice(row) : refText(m, row.id, null))}</option>`,
               )
               .join("") +
             "</select>";
@@ -3881,7 +3954,7 @@
         const options = [...select.options].filter(
           (o) =>
             !o.disabled &&
-            (!query || norm(o.textContent).includes(norm(query))),
+            (!query || norm(o.textContent + " " + (o.dataset.search || "")).includes(norm(query))),
         );
         list.replaceChildren();
         for (const [i, option] of options.entries()) {
@@ -4650,6 +4723,15 @@
       await refreshMetadata();
       mapping = mappingWasSaved ? mapping : detect(mapping);
       const beforeTableRefs=JSON.stringify(mapping);
+      if (mappingWasSaved && !mapping.team) {
+        const detectedTeam = detect({}).team;
+        if (detectedTeam.table && !Object.values(mapping).some(entry => entry.table === detectedTeam.table))
+          mapping.team = detectedTeam;
+      }
+      if (mapping.team?.table && mapping.notes?.table && !Object.hasOwn(mapping.notes.fields || {}, "Responsable")) {
+        const detectedOwner = detect({ notes: mapping.notes }).notes.fields.Responsable;
+        if (detectedOwner) mapping.notes.fields = { ...mapping.notes.fields, Responsable: detectedOwner };
+      }
       reconcileMappingTables(mapping);
       reconcileMappingColumns(mapping);
       if(mappingWasSaved && beforeTableRefs!==JSON.stringify(mapping)) {
@@ -5332,7 +5414,7 @@
       try {
         for (const [kind, c] of Object.entries(saved)) {
           const table=tables.find(t=>t.tableId===c.table);
-          if(c.table && !table)throw Error(`La table « ${c.table} » pour ${schemas[kind].label} est introuvable. Sélectionnez sa table actuelle.`);
+          if(c.table && !table)throw Error(`La table « ${c.table} » pour ${(schemas[kind] || teamSchema).label} est introuvable. Sélectionnez sa table actuelle.`);
           if(table)c.tableRef=table.id;else delete c.tableRef;
           c.columnRefs={};
           for(const [field,name] of Object.entries(c.fields||{})) {
@@ -5346,6 +5428,11 @@
             throw Error(
               `${schemas[kind].label} : Responsable et Responsable externe doivent utiliser deux colonnes différentes. Laissez Responsable externe non mappé si nécessaire.`,
             );
+          if (saved.team?.table && c.fields?.ResponsableDiPSi && c.fields.ResponsableDiPSi !== cfg(kind).fields?.ResponsableDiPSi) {
+            const external = meta.find(column => column.table === c.table && column.colId === c.fields.ResponsableDiPSi);
+            if (external && !["Text", "Any"].includes(external.type))
+              throw Error(`${schemas[kind].label} : mappez Responsable externe vers une colonne Texte.`);
+          }
         }
         const used = Object.values(saved)
           .map((c) => c.table)

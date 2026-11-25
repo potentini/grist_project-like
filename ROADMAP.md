@@ -131,14 +131,15 @@ Proposition de conception discutée le 23 novembre 2026, à valider avant dével
 
 ## Utilisateur courant et filtres « Mes… »
 
-Statut : explicitement reporté le 17 novembre 2026. Aucune implémentation à ce stade.
+Statut : le mapping Équipe (Nom, Prénom, E-mail, Service) et les références Responsable sont disponibles dans le preview. Les vues personnelles et la détection de l’utilisateur connecté restent à développer.
 
-Objectif : retrouver le collaborateur correspondant à l’utilisateur connecté à Grist, puis proposer **Mes projets**, **Mes actions** et **Mes prochaines échéances**.
+Objectif : retrouver le collaborateur correspondant à l’utilisateur connecté à Grist, puis proposer **Mes projets**, **Mes chantiers**, **Mes tâches**, **Mes actions**, **Mes notes et réunions** et **Mes prochaines échéances**.
 
 - Vérifier l’API disponible pour obtenir l’identité de l’utilisateur connecté (la piste `grist.getUserProfile()` évoquée dans la discussion reste à confirmer sur la version de Grist utilisée).
-- Rapprocher l’adresse e-mail du compte de la colonne **Adresse email** de **COLLABORATEURS**, puis filtrer les champs Responsable par référence à cette ligne, sans se baser sur le nom affiché.
+- Comparer l’adresse e-mail du compte à la valeur du champ **E-mail** mappé dans **Équipe**, puis filtrer les champs Responsable par référence à cette ligne, sans se baser sur le nom affiché.
 - Prévoir les cas sans utilisateur identifié, sans correspondance ou avec plusieurs correspondances ; ne pas sélectionner arbitrairement un collaborateur.
-- Mes actions : actions attribuées au collaborateur courant.
+- Mes actions, chantiers et tâches : éléments dont le champ Responsable référence le collaborateur courant.
+- Mes notes et réunions : le champ Responsable est disponible. Décider si la participation à une réunion doit également la faire apparaître.
 - Mes prochaines échéances : éléments attribués, non terminés, classés par date ; préciser l’horizon et le traitement des dates absentes lors de la reprise.
 - Question métier ouverte : Mes projets vise-t-il seulement les projets dont le collaborateur est responsable, ou aussi ceux contenant ses tâches et actions ?
 - Préserver les filtres applicables et les comportements PC, tablette et téléphone. Ces raccourcis d’affichage ne remplacent pas les règles d’accès Grist.

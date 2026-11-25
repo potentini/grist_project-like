@@ -290,6 +290,14 @@ La vue générale À faire suit la même règle transverse : les filtres Grist d
 
 Les notifications de configuration Grist ne réinitialisent plus un mapping en cours de saisie après renommage. Les sauvegardes d’options du widget (mapping, largeur des volets, tri et synchronisation de la timeline) sont sérialisées. Une révision du mapping empêche une ancienne notification de remplacer une sauvegarde plus récente. Le démarrage lit explicitement le mapping enregistré avant toute détection ; l’enregistrement capture également les libellés et cases à cocher dont l’événement de changement est encore en attente. Les champs volontairement non mappés sont conservés.
 
+## Équipe et responsables
+
+Dans **Mapping → Équipe**, sélectionnez la table existante et associez **Nom**, **Prénom**, **E-mail** et **Service**. Le widget détecte les noms courants, dont Équipe et Collaborateurs, et conserve ce mapping entre les sessions. Le prénom s’affiche sur les fiches. Dans les sélecteurs, une recherche peut porter sur le prénom, le nom ou le service. Les homonymes sont distingués dans les listes et le filtre Responsable.
+
+Pour les projets, chantiers, tâches, actions, notes et réunions, mappez **Responsable** sur une colonne **Référence vers Équipe**. Le champ **Responsable externe** reste en texte libre. Les champs Responsable déjà textuels continuent à fonctionner. Le widget ne convertit pas les données, ne crée pas de membres et conserve les valeurs que Grist initialise à la création.
+
+L’e-mail est mappé pour un futur rapprochement avec l’utilisateur connecté. Les vues « Mes… » restent décrites dans la [feuille de route](ROADMAP.md).
+
 ## Rattacher une action à plusieurs éléments
 
 Dans la table **Actions**, configurez les champs habituels **Projet**, **Chantier** et **Tâche** selon le nombre de liens souhaité. Une **Liste de références** vers la table correspondante accepte plusieurs liens. Une référence simple en accepte un seul. Dès qu’un de ces champs est une liste de références, le widget traite les trois niveaux comme des rattachements indépendants, à la manière des points de discussion.

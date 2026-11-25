@@ -46,7 +46,7 @@ function setup(fixture) {
     getDocName:async()=>doc,
     fetchTable:async table=>{
       window.reads++;
-      const kind=kinds[db.tables.findIndex(t=>t.tableId===table)];
+      const kind=kinds[db.tables.findIndex(t=>t.tableId===table)] || (table === fixture.teamTable ? 'team' : '');
       return structuredClone(table==='_grist_Tables'?db.tables:table==='_grist_Tables_column'?db.meta:db.data[kind]||[]);
     },
     applyUserActions:async actions=>{
