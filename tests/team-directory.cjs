@@ -38,7 +38,7 @@ const fixture = require('./mentions-fixture.cjs');
     page.setDefaultTimeout(10000);
     const errors = [];
     page.on('pageerror', error=>errors.push(error.message));
-    await page.goto(process.env.TEST_ORIGIN || 'http://127.0.0.1:8806/');
+    await page.goto(process.env.TEST_ORIGIN || 'http://127.0.0.1:8766/');
     await page.locator('#list > *').first().waitFor();
     await page.locator('#mappingButton').click();
     for(const [field, col] of Object.entries({table:'Equipe',Nom:'Nom',Prenom:'Prenom',Email:'Courriel',Service:'Service'}))

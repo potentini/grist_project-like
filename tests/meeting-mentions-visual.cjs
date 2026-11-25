@@ -1,10 +1,10 @@
 const {chromium}=require('playwright');const assert=require('node:assert/strict');const fs=require('node:fs');const fixture=require('./mentions-fixture.cjs');
-const origin=process.env.TEST_ORIGIN||'http://127.0.0.1:8771';
+const origin=process.env.TEST_ORIGIN||'http://127.0.0.1:8766';
 async function audit(p){return p.evaluate(()=>{
  const rgb=s=>(s.match(/[\d.]+/g)||[]).map(Number),blend=(a,b)=>a.slice(0,3).map((v,i)=>v*(a[3]??1)+b[i]*(1-(a[3]??1)));
  const lum=c=>c.map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4}).reduce((a,v,i)=>a+v*[.2126,.7152,.0722][i],0);
  const failures=[];
- for(const el of document.querySelectorAll('.meeting-mentions button,.meeting-mentions label,.mention-menu button,.mention-menu small,.preview-banner')){
+ for(const el of document.querySelectorAll('.meeting-mentions button,.meeting-mentions label,.mention-menu button,.mention-menu small')){
   const s=getComputedStyle(el),r=el.getBoundingClientRect();if(!r.width||!r.height||s.visibility==='hidden'||el.closest(':disabled')||!el.textContent.trim())continue;
   const chain=[];for(let p=el;p;p=p.parentElement)chain.unshift(p);let bg=[255,255,255];for(const p of chain)bg=blend(rgb(getComputedStyle(p).backgroundColor),bg);
   const fg=blend(rgb(s.webkitTextFillColor||s.color),bg),a=lum(fg),b=lum(bg),ratio=(Math.max(a,b)+.05)/(Math.min(a,b)+.05);

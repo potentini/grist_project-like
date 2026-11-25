@@ -5,7 +5,7 @@ const fixture=require('./mentions-fixture.cjs');
 for(const width of [1440,768,390]){
  const db=fixture.make(true);db.meta.find(m=>m.table==='Points'&&m.colId==='Projets').type='Ref:Projets';db.data.points[0].Projets=0;
  const ctx=await b.newContext({viewport:{width,height:1000},hasTouch:width<1000,isMobile:width<1000});const p=await ctx.newPage();
- await p.route('https://docs.getgrist.com/**',r=>r.fulfill({body:''}));await p.addInitScript(fixture.setup,db);await p.goto('http://127.0.0.1:8771/');await p.locator('#list > *').first().waitFor();
+ await p.route('https://docs.getgrist.com/**',r=>r.fulfill({body:''}));await p.addInitScript(fixture.setup,db);await p.goto('http://127.0.0.1:8766/');await p.locator('#list > *').first().waitFor();
  if(await p.locator('#phoneNav').isVisible()){await p.locator('#phoneNav summary').click();await p.locator('#phoneNav [data-view=notes]').click()}else await p.locator('nav [data-view=notes]').click();
  await p.locator('#list [data-kind=notes][data-id="1"]').first().click();await p.locator('#editionButton').click();await p.locator('#detail [data-edit]').click();
  const block=p.locator('.mention-block').first(),menu=p.locator('.mention-menu');

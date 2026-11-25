@@ -1,8 +1,23 @@
 # Projets, notes et actions — widget Grist V1
 
-Ce dépôt **grist_project-like-preview** est une copie de travail indépendante du [widget d’origine](https://github.com/potentini/grist_project-like). La saisie `@` et le renvoi des points sont disponibles dans cette prévisualisation. La tester sur une **copie du document Grist**, avec un widget pointant vers l’URL Pages de ce dépôt. Aucun changement de schéma Grist n’est effectué automatiquement.
+Ce widget Grist réunit le suivi des projets, les comptes rendus et les actions. Les libellés de la hiérarchie sont configurables sur trois niveaux.
 
-## Prévisualisation : notes de réunion avec `@`
+## Vérifier le mapping après une mise à jour
+
+Le mapping est propre à chaque instance du widget dans Grist. Si vous passez de l’URL de prévisualisation à l’URL principale dans la même instance, vérifiez les sélections existantes dans **Mapping** avant de les enregistrer. Une nouvelle instance peut nécessiter de renseigner ces choix de nouveau. Le widget ne crée ni ne convertit automatiquement les colonnes du document.
+
+| Où vérifier | Champs attendus |
+| --- | --- |
+| **Équipe** | Sélectionner la table de collaborateurs et mapper **Nom**, **Prénom**, **E-mail** et **Service**. |
+| **Projets, chantiers, tâches, actions et réunions** | Mapper **Responsable** sur une référence vers l’équipe. **Responsable externe**, lorsqu’il est utilisé, reste en texte libre. |
+| **Notes et réunions** | **Titre** pour le titre affiché, **Nom** pour le titre libre, **Instance**, **Date** et **Contenu**. **Participants internes** vers une liste de références à l’équipe et **Participants externes** vers une colonne Texte. |
+| **Notes et réunions · renvois** | **Points reportés** sur une liste de références vers **Points**. |
+| **Points de discussion** | Table **Points**, avec **Titre** et **Contenu** modifiables, **NoteOrigine** vers les réunions, **Projets**, **Chantiers** et **Tâches** vers les tables respectives. **Décision** et **Ordre** sont facultatifs. |
+| **Actions** | **Commentaire** Texte modifiable pour `@`, **Projet**, **Chantier**, **Tâche**, **NoteOrigine** et **PointOrigine**. Au moins un des trois champs de rattachement doit être une liste de références pour le modèle à liens multiples et les mentions. |
+
+Un ancien champ **Participants** est repris selon son type si le champ correspondant n’a pas déjà été configuré. Les anciennes colonnes complémentaires d’actions sont disponibles dans Grist pour transférer leurs valeurs vers les champs habituels. Les colonnes `ACL_Reunions` et `ACL_Lecteurs`, si vous configurez des restrictions de lecture, sont utilisées par les règles d’accès de Grist et ne font pas partie du mapping du widget.
+
+## Notes de réunion avec `@`
 
 Prérequis : table Points distincte de la table des réunions ; mapping de Points.Titre et Points.Contenu vers des colonnes Texte modifiables, et de Points.NoteOrigine vers la réunion source. Pour les associations, mapper Projets, Chantiers et Taches vers des références ou listes de références de leurs tables respectives. Une référence simple accepte un seul lien de ce niveau : retirer son étiquette avant d’en choisir un autre ; une liste permet plusieurs liens. Les liens par codes Texte sont aussi acceptés lorsque les codes cibles sont uniques et mappés. Decision et Ordre sont facultatifs. La saisie `@` seule ne nécessite aucun champ de continuité.
 
@@ -24,7 +39,7 @@ Une tentative d’enregistrement est conservée avant son envoi. Après une rép
 
 Ne sont **pas** inclus : autosave dans Grist, reprise automatique des réunions récurrentes, création d’action depuis un paragraphe ou transformation automatique des anciennes notes. Les identifiants locaux et les identifiants Grist préparent cette continuité sans l’activer.
 
-Vérifications dédiées avec API Grist simulée : `python -m http.server 8771 --bind 127.0.0.1`, puis `node tests/meeting-mentions.cjs` et `node tests/meeting-mentions-ux.cjs`. Les parcours couvrent PC, tablette, téléphone, références natives et codes Texte, récupération, permissions, conflits et erreurs réseau.
+Vérifications dédiées avec API Grist simulée : `python -m http.server 8766 --bind 127.0.0.1`, puis `node tests/meeting-mentions.cjs` et `node tests/meeting-mentions-ux.cjs`. Les parcours couvrent PC, tablette, téléphone, références natives et codes Texte, récupération, permissions, conflits et erreurs réseau.
 
 Une page d’accueil rassemble trois vues : **Projets**, **Notes et réunions**, **À faire**. La hiérarchie est Projet → Chantier → Tâche. Les notes restent du texte multiligne dans les tables Grist. Les actions peuvent être autonomes, issues d’une note et/ou rattachées à un élément du projet.
 
@@ -82,9 +97,9 @@ Le bouton **Édition** est désactivé à l’ouverture. En lecture, les flèche
 - **À faire** : les actions sont regroupées dans la hiérarchie projet / chantier / tâche, avec une zone pour les actions sans rattachement au projet.
 - Dans le panneau droit, les éléments dépendants et les actions des notes associées sont dépliables (repliés par défaut). Les liens vers les parents restent des liens simples.
 
-En mode Édition, glisser un chantier sur un projet, une tâche sur un chantier, ou une action sur un projet, chantier, tâche ou réunion. La cible compatible est mise en évidence. Le bouton **Déplacer** fournit la même opération au clavier ou sur écran tactile. Un déplacement est enregistré immédiatement, sans passer par le bouton Enregistrer du formulaire.
+En mode Édition, glisser un chantier sur un projet, une tâche sur un chantier, ou une action à rattachement unique sur un projet, chantier, tâche ou réunion. Pour une action à rattachements multiples, la flèche ouvre le formulaire pour modifier les liens. La cible compatible est mise en évidence. Le bouton **Déplacer** fournit la même opération au clavier ou sur écran tactile. Un déplacement est enregistré immédiatement, sans passer par le bouton Enregistrer du formulaire.
 
-Changer le parent d’un chantier ou d’une tâche conserve ses descendants et met à jour les rattachements redondants des actions liées dans une seule opération Grist. Déplacer une action sur une réunion change seulement sa réunion d’origine : son lien au projet est conservé. La destination **Sans rattachement au projet** conserve aussi la réunion d’origine. Aucun réordonnancement manuel entre frères n’est ajouté.
+Changer le parent d’un chantier ou d’une tâche conserve ses descendants. Les rattachements redondants des actions dans le modèle à parent unique sont actualisés dans la même opération Grist. Les liens explicites d’une action à rattachements multiples sont conservés. Déplacer une action sur une réunion change seulement sa réunion d’origine : son lien au projet est conservé. La destination **Sans rattachement au projet** conserve aussi la réunion d’origine. Aucun réordonnancement manuel entre frères n’est ajouté.
 
 Le dernier choix du bouton de déplacement, **Aucun rattachement**, détache le chantier de son projet ou la tâche de son chantier. Pour une action, il retire les liens Projet, Chantier, Tâche, NoteOrigine et PointOrigine. Une confirmation permet d’annuler avant toute écriture. Les descendants restent liés à l’élément détaché ; les rattachements redondants des actions sont actualisés. Les éléments détachés restent accessibles parmi les éléments sans parent reconnu ou les actions sans rattachement au projet.
 
@@ -310,7 +325,7 @@ Si vous avez utilisé les anciennes colonnes complémentaires dans le preview, r
 
 ## Renvoyer un point vers une réunion
 
-Dans la table des réunions, ajouter une colonne **PointsReportes** de type **Liste de références**, vers la table **Points**. Dans le widget, vérifier son association au champ **Points reportés** du mapping des réunions. Cette colonne facultative peut être ajoutée à la copie du document utilisée pour tester le preview.
+Dans la table des réunions, ajouter une colonne **PointsReportes** de type **Liste de références**, vers la table **Points**. Dans le widget, vérifier son association au champ **Points reportés** du mapping des réunions. Cette colonne est facultative lorsque les renvois ne sont pas utilisés.
 
 En mode **Édition**, ouvrir un point enregistré ou sa réunion et cliquer sur **Renvoyer vers une réunion…**. Rechercher une réunion existante, ou cliquer sur **Créer une réunion destinataire…**. Le formulaire de création présélectionne le point et, si elle existe, l’instance d’origine. Pour une réunion ponctuelle, effacer l’instance et renseigner le titre libre. Le point est associé à la nouvelle réunion à l’enregistrement.
 

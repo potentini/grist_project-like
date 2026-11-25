@@ -16,7 +16,7 @@ const {make, setup} = require('./mentions-fixture.cjs');
       fixture.data.notes[1].Instance = 'Comité';
       const context = await browser.newContext({viewport:{width,height:900},screen:{width,height:900},hasTouch:width<1000,isMobile:width===390});
       const errors = [];
-      const url = process.env.TEST_ORIGIN || 'http://127.0.0.1:8771/';
+      const url = process.env.TEST_ORIGIN || 'http://127.0.0.1:8766/';
       await context.route('https://docs.getgrist.com/**', route => route.fulfill({body:''}));
       await context.addInitScript(setup, fixture);
       async function openWidget(configure = false) {

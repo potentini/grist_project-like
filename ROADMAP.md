@@ -1,6 +1,6 @@
 # Feuille de route du widget de suivi
 
-Cette feuille conserve les évolutions discutées et reportées. La première version `@` est développée uniquement dans ce dépôt de prévisualisation ; le renvoi manuel est également disponible dans cette prévisualisation et les autres sujets restent reportés et leur présence ne vaut pas autorisation de développement. Ajouter ici les nouveaux sujets explicitement laissés pour plus tard, avec les décisions déjà prises et les questions ouvertes.
+Cette feuille conserve les évolutions discutées et reportées. La saisie `@`, le renvoi manuel et le mapping Équipe sont disponibles dans le widget principal. La présence d’un sujet reporté ne vaut pas autorisation de développement. Ajouter ici les nouveaux sujets explicitement laissés pour plus tard, avec les décisions déjà prises et les questions ouvertes.
 
 ## Enregistrement automatique des notes dans Grist
 
@@ -12,7 +12,7 @@ Limiter initialement cette sauvegarde aux textes de réunions et points, après 
 
 ## Prise de notes de réunion et rattachements rapides
 
-Statut : première version expérimentale développée le 23 novembre 2026 dans `grist_project-like-preview` uniquement. Le dépôt stable `grist_project-like` n’est pas modifié. Voir README pour les prérequis et essais. La création d’action depuis un paragraphe et la reprise automatique des séances restent reportées.
+Statut : disponible dans `grist_project-like` après validation dans le dépôt de prévisualisation. Voir README pour les prérequis et essais. La création d’action depuis un paragraphe et la reprise automatique des séances restent reportées.
 
 Objectif : écrire les notes de réunion avec un minimum d’interruptions, tout en produisant des points de discussion structurés, lisibles dans le widget et dans les tables Grist.
 
@@ -71,7 +71,7 @@ Questions ouvertes : conversions entre projets différents ; choix détaillés d
 
 ## Réunions récurrentes et continuité des points de discussion
 
-Statut : le renvoi manuel est disponible dans le preview. La reprise automatique et les échanges propres à chaque séance restent à concevoir.
+Statut : le renvoi manuel est disponible. La reprise automatique et les échanges propres à chaque séance restent à concevoir.
 
 ### Modèle proposé
 
@@ -131,7 +131,7 @@ Proposition de conception discutée le 23 novembre 2026, à valider avant dével
 
 ## Utilisateur courant et filtres « Mes… »
 
-Statut : le mapping Équipe (Nom, Prénom, E-mail, Service) et les références Responsable sont disponibles dans le preview. Les vues personnelles et la détection de l’utilisateur connecté restent à développer.
+Statut : le mapping Équipe (Nom, Prénom, E-mail, Service) et les références Responsable sont disponibles. Les vues personnelles et la détection de l’utilisateur connecté restent à développer.
 
 Objectif : retrouver le collaborateur correspondant à l’utilisateur connecté à Grist, puis proposer **Mes projets**, **Mes chantiers**, **Mes tâches**, **Mes actions**, **Mes notes et réunions** et **Mes prochaines échéances**.
 

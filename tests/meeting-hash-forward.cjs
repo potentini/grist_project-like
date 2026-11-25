@@ -27,7 +27,7 @@ const { make, setup } = require('./mentions-fixture.cjs');
         if (await page.locator('#editionButton').getAttribute('aria-pressed') !== 'true') await page.locator('#editionButton').click();
         await page.locator('#detail [data-edit]').click();
       }
-      const origin = process.env.TEST_ORIGIN || 'http://127.0.0.1:8771/';
+      const origin = process.env.TEST_ORIGIN || 'http://127.0.0.1:8766/';
       await page.goto(origin);
       await openEditor();
       const notes = page.locator('#editForm [name=Contenu]');

@@ -1,4 +1,4 @@
-/* Preview-only text editor: explicit save, native controls, no rich-text HTML. */
+/* Meeting text editor: explicit save, native controls, no rich-text HTML. */
 .meeting-mentions { margin: 10px 0 18px; font-size: 14px; white-space: normal; }
 .mention-hint { color: #52647b; font-size: 12px; margin: 7px 0; }
 .mention-message { color: #23334a; font-size: 13px; }
@@ -45,7 +45,6 @@
 .mention-menu small { color: #52647b; }
 body.phone-mode .mention-menu button, body.phone-mode .meeting-mentions button { min-height: 44px; }
 body.phone-mode .meeting-mentions input, body.phone-mode .meeting-mentions textarea { font-size: 16px; }
-.preview-banner { padding: 6px 16px; color: #664300; background: #fff4d6; font-size: 12px; }
 .meeting-point-reading { margin: 0 0 18px 32px; padding-left: 10px; border-left: 2px solid #bfd2cb; }
 .meeting-point-reading h4 { margin: 8px 0 5px; font-size: 13px; }
 .meeting-point-reading p { font-size: 12px; overflow-wrap: anywhere; }

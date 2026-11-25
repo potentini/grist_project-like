@@ -25,7 +25,7 @@ const fixture = require('./mentions-fixture.cjs');
       const errors = [];
       page.on('pageerror', error => errors.push(error.message));
       page.setDefaultTimeout(10000);
-      await page.goto(process.env.TEST_ORIGIN || 'http://127.0.0.1:8799/');
+      await page.goto(process.env.TEST_ORIGIN || 'http://127.0.0.1:8766/');
       await page.locator('#list > *').first().waitFor();
       async function view(name) {
         if (width === 390) {

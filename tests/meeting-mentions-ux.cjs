@@ -1,5 +1,5 @@
 const{chromium}=require('playwright');const assert=require('node:assert/strict');const path=require('node:path');const fixture=require('./mentions-fixture.cjs');
-const origin=process.env.TEST_ORIGIN||'http://127.0.0.1:8771';
+const origin=process.env.TEST_ORIGIN||'http://127.0.0.1:8766';
 (async()=>{const b=await chromium.launch({executablePath:'/usr/bin/chromium',args:['--no-sandbox']});try{
 for(const phone of [false,true]){
  const ctx=await b.newContext({viewport:{width:phone?390:1440,height:phone?844:1000},screen:{width:phone?390:1440,height:phone?844:1000},hasTouch:phone,isMobile:phone});

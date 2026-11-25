@@ -1,4 +1,4 @@
-/* Pure transaction planning for the preview meeting editor. No network or DOM. */
+/* Pure transaction planning for the meeting and action editors. No network or DOM. */
 window.MeetingPointPlan = (() => {
   const same = (a, b) => JSON.stringify(a ?? '') === JSON.stringify(b ?? '');
   const values = v => Array.isArray(v) ? v.filter((x, i) => !(i === 0 && x === 'L')) : v == null || v === '' ? [] : [v];

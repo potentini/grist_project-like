@@ -1,7 +1,7 @@
 const {chromium}=require('playwright');
 const assert=require('node:assert/strict');
 const fixture=require('./mentions-fixture.cjs');
-const origin=process.env.TEST_ORIGIN||'http://127.0.0.1:8771';
+const origin=process.env.TEST_ORIGIN||'http://127.0.0.1:8766';
 async function boot(browser,width,refs=true){
  const context=await browser.newContext({viewport:{width,height:1000},screen:{width,height:1000},hasTouch:width<1000,isMobile:width<1000,colorScheme:width===768?'dark':'light'});
  const page=await context.newPage(),errors=[];page.setDefaultTimeout(15000);page.on('pageerror',e=>errors.push(e.message));

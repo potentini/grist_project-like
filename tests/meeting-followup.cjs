@@ -67,7 +67,7 @@ async function setup({fixture,refs}) {
       page.setDefaultTimeout(10000);page.on('pageerror',e=>errors.push(e.message));
       await page.route('https://docs.getgrist.com/**',r=>r.fulfill({body:''}));
       await page.addInitScript(setup,{fixture,refs});
-      await page.goto((process.env.TEST_ORIGIN||'http://127.0.0.1:8769')+'/');
+      await page.goto((process.env.TEST_ORIGIN||'http://127.0.0.1:8766')+'/');
       await page.locator('#list > *').first().waitFor();
       assert.equal(await page.locator('[data-meeting-followup]').count(),0);
       if(phone){
