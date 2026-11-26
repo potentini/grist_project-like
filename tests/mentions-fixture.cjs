@@ -37,6 +37,8 @@ function setup(fixture) {
   const doc=new URLSearchParams(location.search).get('doc')||'mentions-doc';
   const db=JSON.parse(sessionStorage.getItem('mentions-db:'+doc)||'null')||structuredClone(fixture);
   const mapping=Object.fromEntries(kinds.map((k,i)=>[k,{table:db.tables[i].tableId,fields:Object.fromEntries(db.meta.filter(c=>c.parentId===i+1).map(c=>[c.colId,c.colId]))}]));
+  const kindForTable = table => kinds[db.tables.findIndex(t=>t.tableId===table)] ||
+    (table === fixture.teamTable ? 'team' : table === fixture.instanceTable ? 'instances' : undefined);
   const optionStore = fixture.persistOptions ? 'mentions-options:'+doc : null;
   if (fixture.unmappedNoteColumn) delete mapping.notes.fields[fixture.unmappedNoteColumn];
   let opts = (optionStore && JSON.parse(localStorage.getItem(optionStore))) || {projectWorkspaceMappingV1:mapping}, cb;
@@ -46,7 +48,7 @@ function setup(fixture) {
     getDocName:async()=>doc,
     fetchTable:async table=>{
       window.reads++;
-      const kind=kinds[db.tables.findIndex(t=>t.tableId===table)] || (table === fixture.teamTable ? 'team' : '');
+      const kind=kindForTable(table);
       return structuredClone(table==='_grist_Tables'?db.tables:table==='_grist_Tables_column'?db.meta:db.data[kind]||[]);
     },
     applyUserActions:async actions=>{
@@ -54,7 +56,7 @@ function setup(fixture) {
       if(window.beforeApply){const fn=window.beforeApply;window.beforeApply=null;fn(actions)}
       const next=structuredClone(db.data),retValues=[];
       for(const [op,table,id,fields]of actions){
-        const rows=next[kinds[db.tables.findIndex(t=>t.tableId===table)]];
+        const rows=next[kindForTable(table)];
         if(!rows)throw Error('Table introuvable');
         for(const column of Object.keys(fields)){
           const m=db.meta.find(c=>c.table===table&&c.colId===column);

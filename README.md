@@ -343,6 +343,25 @@ Quand l’ancien champ **Participants** est mappé, le widget reprend son mappin
 
 Les formulaires de réunion placent **Instance** avant **Date**, puis **Titre de la réunion (si pas une instance)**, en création comme en modification. Le titre libre possède son propre mapping **Nom**, affiché **Titre de la réunion (si pas une instance)** : le relier à la colonne Texte de saisie libre (par exemple Nom). Conserver le mapping **Titre** sur la colonne calculée ; elle reste en lecture seule et sert au titre affiché de la réunion. Ces deux mappings sont distincts. Les champs supplémentaires mappés sont également éditables selon leur type et les droits Grist. Dans la barre supérieure PC/tablette, **Table/Timeline** rejoint les boutons de navigation ; un séparateur distingue les vues des commandes Édition, Mapping et Actualiser. L’accès aux timelines reste masqué sur téléphone.
 
+### Créer une instance depuis une réunion
+
+Sous **Instance**, cliquez sur **Créer une instance…**, saisissez un nom et cliquez sur **Enregistrer l’instance**. Le widget sélectionne la nouvelle instance et conserve le formulaire de réunion. Un nom déjà présent et unique est sélectionné. L’instance est enregistrée immédiatement dans Grist, même si vous annulez ensuite la réunion.
+
+Cette commande utilise la table dédiée ciblée par le champ **Instance**. Le champ doit être une référence Grist vers cette table, dont le libellé affiché est une colonne Texte modifiable. Pour un champ Instance en texte libre, saisissez directement le nom dans la réunion.
+
+### Travailler depuis le widget quand les vues de tables sont masquées
+
+Masquer les vues dans la navigation permet de privilégier le widget. Ses commandes appliquent les droits Grist de l’utilisateur sur les tables et les colonnes concernées. Un masquage dans le menu peut coexister avec des droits de lecture et d’écriture sur les données.
+
+| Opération | Droits Grist à prévoir |
+| --- | --- |
+| Choisir ou créer une instance | Lecture (`R`) dans la table des instances et création (`C`) pour **Créer une instance**. |
+| Créer ou modifier une réunion, un point ou une action | Lecture des données autorisées, création (`C`) ou modification (`U`) des champs nécessaires. Un enregistrement avec `@` qui crée un point nécessite aussi `C` sur Points. |
+| Renvoyer un point | Modification (`U`) de **Points reportés** dans la réunion destinataire. Réserver ce droit aux personnes autorisées à partager le point. |
+| Gérer l’annuaire, les participants et les responsables | Attribuer ces opérations aux personnes habilitées, car ces données peuvent déterminer les droits de lecture. |
+
+Les projets, chantiers, tâches, réunions, points et actions ont déjà des formulaires dans le widget. Pour éviter un retour aux tables, les prochains besoins à examiner sont la correction du nom d’une instance, l’ajout de membres à l’équipe par les administrateurs et les autres listes nécessaires à la saisie. Les choix de permission et les champs à saisir dépendent du rôle métier de chaque personne.
+
 ### Brouillons locaux des textes
 
 En création et en modification d’une réunion ou d’un point, les champs Texte modifiables **Titre**, **Nom** (titre libre de réunion), **Contenu** et, pour un point, **Decision**, sont conservés localement pendant la saisie. L’indicateur précise que le brouillon est stocké sur ce navigateur et n’est pas enregistré dans Grist. Aucun enregistrement automatique dans Grist n’est déclenché : **Enregistrer** reste nécessaire.

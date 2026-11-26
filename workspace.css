@@ -1338,3 +1338,8 @@ body.phone-mode .quick-picker::after { top: 6px; }
 }
 #pointForwardDialog .actions { flex-wrap: wrap; }
 #pointForwardError { color: #9a2633; }
+
+.instance-creator { margin: 3px 0 8px; font-size: 13px; }
+.instance-creator #instanceCreatorFields { margin-top: 6px; }
+.instance-creator [role="status"] { margin: 3px 0 0; }
+.instance-creator [role="status"]:empty { display: none; }

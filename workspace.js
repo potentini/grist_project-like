@@ -422,8 +422,9 @@
     const display = meta.find((c) => c.id === Number(m.displayCol));
     if (display && row && row[display.colId] != null)
       return values(row[display.colId]).join(", ");
-    const visible = meta.find((c) => c.id === Number(m.visibleCol)),
-      table = m.type.split(":")[1];
+    const visible = meta.find((c) => c.id === Number(m.visibleCol)) ||
+      (m.id === col("notes", "Instance")?.id ? instanceNameColumn(m) : null);
+    const table = m.type.split(":")[1];
     return values(value)
       .filter((id) => Number(id) !== 0)
       .map((id) => {
@@ -3625,6 +3626,110 @@
     }
     return composer;
   }
+  function instanceNameColumn(reference) {
+    if (!reference || reference.isFormula || !/^Ref(List)?:/.test(reference.type)) return null;
+    const table = reference.type.split(":")[1];
+    if (!tables.some(item => item.tableId === table) || Object.values(mapping).some(item => item.table === table))
+      return null;
+    const columns = meta.filter(column => column.table === table && column.type === "Text" && !column.isFormula);
+    const visible = columns.find(column => column.id === Number(reference.visibleCol));
+    if (visible) return visible;
+    if (Number(reference.visibleCol)) return null;
+    const names = columns.filter(column => ["nom", "titre", "libelle", "intitule", "instance"].includes(norm(column.colId)));
+    return names.length === 1 ? names[0] : null;
+  }
+  function addInstanceCreator() {
+    const select = $("editForm").elements.namedItem("Instance");
+    if (!select || !/^Ref(List)?:/.test(col("notes", "Instance")?.type || "")) return;
+    const picker = select.closest(".reference-picker");
+    if (!picker) return;
+    const column = instanceNameColumn(col("notes", "Instance"));
+    const block = document.createElement("div");
+    block.className = "instance-creator";
+    (picker.closest("label") || picker).after(block);
+    if (!column) {
+      block.textContent = "Pour créer une instance ici, utilisez une table d’instances dédiée et affichez une colonne Texte modifiable dans la référence.";
+      return;
+    }
+    block.innerHTML = `
+      <button type="button" aria-expanded="false" aria-controls="instanceCreatorFields">Créer une instance…</button>
+      <div id="instanceCreatorFields" hidden>
+        <label>Nom de l’instance<input type="text" maxlength="200"></label>
+        <div class="actions"><button type="button" data-instance-save>Enregistrer l’instance</button><button type="button" data-instance-cancel>Annuler</button></div>
+        <small>L’instance sera enregistrée immédiatement. La réunion reste dans son formulaire.</small>
+      </div>
+      <p role="status"></p>`;
+    const toggle = block.querySelector("button");
+    const fields = block.querySelector("#instanceCreatorFields");
+    const input = fields.querySelector("input");
+    const submit = fields.querySelector("[data-instance-save]");
+    const cancel = fields.querySelector("[data-instance-cancel]");
+    const status = block.querySelector("[role=status]");
+    function show(open) {
+      fields.hidden = !open;
+      toggle.setAttribute("aria-expanded", String(open));
+      if (open) input.focus();
+      else toggle.focus();
+    }
+    toggle.onclick = () => { if (!busy) show(fields.hidden); };
+    cancel.onclick = () => { if (!busy) { input.value = ""; status.textContent = ""; show(false); } };
+    submit.onclick = async () => {
+      if (busy || !editionEnabled || demo) return;
+      const name = input.value.trim();
+      if (!name) {
+        status.textContent = "Saisissez un nom d’instance.";
+        input.focus();
+        return;
+      }
+      busy = true;
+      toggle.disabled = submit.disabled = cancel.disabled = input.disabled = $("save").disabled = true;
+      status.textContent = "Enregistrement de l’instance…";
+      let success = false;
+      try {
+        await refreshMetadata();
+        const current = instanceNameColumn(col("notes", "Instance"));
+        if (!current || current.id !== column.id || current.table !== column.table || current.colId !== column.colId)
+          throw Error("Le mapping de l’instance a changé. Rouvrez le formulaire de réunion.");
+        const instances = rows(await grist.docApi.fetchTable(column.table));
+        const nameKey = value => String(value ?? "").trim().toLocaleLowerCase("fr");
+        const matches = instances.filter(row => nameKey(row[column.colId]) === nameKey(name));
+        if (matches.length > 1) throw Error("Plusieurs instances portent ce nom. Sélectionnez la bonne instance dans la liste.");
+        let instance = matches[0];
+        if (!instance) {
+          const result = await grist.docApi.applyUserActions([["AddRecord", column.table, null, { [column.colId]: name }]]);
+          const id = result?.retValues?.[0] ?? (Array.isArray(result) ? result[0] : null);
+          if (!Number.isInteger(id) || id <= 0)
+            throw Error("Grist n’a pas confirmé l’identifiant. Réessayez pour retrouver l’instance par son nom.");
+          instance = { id, [column.colId]: name };
+          instances.push(instance);
+        }
+        refRows.set(column.table, instances);
+        const label = String(instance[column.colId] || name);
+        const option = [...select.options].find(item => item.value === String(instance.id));
+        if (!option) select.add(new Option(label, String(instance.id)));
+        else option.textContent = label;
+        if (select.multiple) [...select.options].find(item => item.value === String(instance.id)).selected = true;
+        else select.value = String(instance.id);
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+        input.value = "";
+        success = true;
+        status.textContent = matches.length ? "Instance existante sélectionnée." : "Instance créée et sélectionnée.";
+      } catch (error) {
+        status.textContent = "Création impossible : " + error.message;
+      } finally {
+        busy = false;
+        toggle.disabled = submit.disabled = cancel.disabled = input.disabled = $("save").disabled = false;
+        if (success) show(false);
+        else input.focus();
+      }
+    };
+    input.addEventListener("keydown", event => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        submit.click();
+      }
+    });
+  }
   function openEditor(k, r = null, forwardedPoint = null) {
     if (r && archived(k, r)) {
       message("Restaurez cet élément avant de le modifier.");
@@ -3864,6 +3969,7 @@
       );
     syncHierarchy("", !r);
     searchableEditorFields(k);
+    if (k === "notes" && !r) addInstanceCreator();
     const origin = $("editForm").elements.namedItem("PointOrigine");
     if (k === "actions" && origin?.value)
       origin.dispatchEvent(new Event("change", { bubbles: true }));
