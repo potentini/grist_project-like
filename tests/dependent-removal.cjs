@@ -77,7 +77,7 @@ function fixture(refs, formula) {
 
         // The generic delete keeps its original strict rule.
         await page.locator('#detail [data-kind=tasks][data-id="2"]').first().click();
-        await page.locator('#detail > .actions [data-removal=delete]').click();
+        await page.locator('#detail .detail-item-actions [data-removal=delete]').click();
         await page.getByText(/Suppression bloquée/).waitFor();
         assert.equal(await page.locator('#removalSubmit').isDisabled(),true);
         await page.locator('#removalCancel').click();
