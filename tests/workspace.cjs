@@ -1885,17 +1885,14 @@ const fixture = require("../demo.json");
   await popup.locator("#popupTableToggle").click();
   assert.equal(await popup.locator("#tableView").isVisible(), false);
   await page.locator("#timelineClose").click();
-  const titleBox = await page.locator("[data-project-timeline]").boundingBox();
-  const headingBox = await page
-    .locator("[data-project-timeline]")
-    .locator("..")
-    .locator(":scope > details > summary")
-    .boundingBox();
-  assert.ok(
-    Math.abs(
-      titleBox.y + titleBox.height / 2 - headingBox.y - headingBox.height / 2,
-    ) < 2,
-  );
+  await page.waitForFunction(() => {
+    const button = document.querySelector("[data-project-timeline]");
+    const heading = button?.parentElement.querySelector(":scope > details > summary");
+    if (!button?.getClientRects().length || !heading?.getClientRects().length) return false;
+    const titleBox = button.getBoundingClientRect();
+    const headingBox = heading.getBoundingClientRect();
+    return Math.abs(titleBox.y + titleBox.height / 2 - headingBox.y - headingBox.height / 2) < 2;
+  });
   await page.locator("#editionButton").click();
   await page.locator("[data-project-timeline]").click();
   await popup.locator(".hierarchy-table").waitFor({ state: "attached" });

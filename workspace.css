@@ -226,12 +226,6 @@ progress {
   width: 100%;
   accent-color: #4338ca;
 }
-.meta {
-  display: grid;
-  grid-template-columns: 110px 1fr;
-  gap: 8px;
-  overflow-wrap: anywhere;
-}
 #mapping {
   flex: 0 1 auto;
   display: flex;
@@ -568,13 +562,32 @@ select[multiple] {
   gap: 4px;
 }
 .detail-item-actions { margin-left: auto; }
-.meeting-notes-reading {
+.meeting-notes-reading,
+.detail-properties {
   padding: 12px 14px;
   margin: 12px 0;
   border: 1px solid #b8c7db;
   border-radius: 8px;
 }
 .meeting-notes-reading h3 { margin-top: 0; }
+.detail-properties {
+  display: grid;
+  grid-template-columns: min(36%, 9rem) minmax(0, 1fr);
+  align-items: start;
+  gap: 8px 12px;
+  overflow-wrap: anywhere;
+}
+.detail-properties dt { font-weight: 700; }
+.detail-properties dd {
+  margin: 0;
+  white-space: pre-wrap;
+}
+#detail #editForm input[type="date"] {
+  width: min(100%, 12rem);
+}
+#detail #editForm .reference-picker {
+  width: min(100%, 24rem);
+}
 .inline-content .detail-navigation {
   display: none;
 }
@@ -1330,7 +1343,7 @@ body.phone-mode #detail #editForm .dialoghead {
   padding-bottom: 5px;
 }
 body.phone-mode #editForm .dialoghead h2 { margin: 2px 0; }
-body.phone-mode #editForm .meta { gap: 5px 8px; }
+body.phone-mode .detail-properties { gap: 5px 8px; }
 body.phone-mode #editForm h3 { margin-top: 12px; margin-bottom: 7px; }
 body.phone-mode #detail #editForm details { margin: 10px 0; }
 body.phone-mode #detail #editForm [data-slot="Titre"] :is(input, textarea) { font-size: 16px; }

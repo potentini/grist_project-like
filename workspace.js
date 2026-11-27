@@ -132,8 +132,9 @@
         "Code",
         "Titre",
         "Responsable",
-        "Statut",
+        "DateDebut",
         "DateFin",
+        "Statut",
         "Echeance",
         "Commentaire",
         "NoteOrigine",
@@ -172,8 +173,8 @@
       "ResponsableDiPSi",
       "Responsable DiPSi",
     ],
-    DateDebut: ["DateDebut", "Debut", "StartDate"],
-    DateFin: ["DateFin", "Deadline", "Fin", "DueDate"],
+    DateDebut: ["DateDebut", "Date de début", "Debut", "StartDate"],
+    DateFin: ["DateFin", "Date de fin", "Deadline", "Fin", "DueDate"],
     Contenu: ["Contenu", "CompteRendu", "Notes", "Texte"],
     ParticipantsInternes: ["Participants internes", "ParticipantsEquipe"],
     ParticipantsExternes: ["Participants externes"],
@@ -332,7 +333,8 @@
         ResponsableDiPSi: "Responsable externe",
         ParticipantsInternes: "Participants internes",
         ParticipantsExternes: "Participants externes",
-        DateFin: "Date de fin (date précise)",
+        DateDebut: "Date de début",
+        DateFin: "Date de fin",
         Echeance: "Échéance (texte libre)",
       }[f] ||
       (links[k]?.[f] && cfg(links[k][f]).label) ||
@@ -3092,44 +3094,42 @@
         conversionTarget(k, r)
           .map(([kind, row]) => item(kind, row))
           .join("");
-    } else if (["actions", "tasks"].includes(k))
+    }
+    const properties = [
+      "Responsable",
+      "ResponsableDiPSi",
+      "ParticipantsInternes",
+      "ParticipantsExternes",
+      "Instance",
+      "Date",
+      ...(k === "notes" ? ["Nom"] : []),
+      "DateDebut",
+      "DateFin",
+      "Statut",
+      "Echeance",
+      "Etat",
+      ...(cfg(k).extraFields || []).map(extra => extra.id),
+      "Description",
+    ].filter(visibleField);
+    if (properties.length) {
+      html += '<dl class="detail-properties">' + properties.map(field => {
+        const isDate = field.startsWith("Date") || col(k, field)?.type === "Date";
+        const value = isDate ? dateText(val(k, r, field)) : displayValue(k, r, field);
+        return `<dt>${esc(fieldLabel(k, field))}</dt><dd data-slot="${field}">${esc(value)}</dd>`;
+      }).join("") + "</dl>";
+    }
+    if (editable && ["actions", "tasks"].includes(k))
       html += `<button type="button" data-convert="${k}" data-convert-id="${r.id}">Faire évoluer en ${k === "actions" ? "tâche" : "chantier"}…</button>`;
-    html +=
-      '<dl class="meta">' +
-      [
-        "Responsable",
-        "ResponsableDiPSi",
-        "ParticipantsInternes",
-        "ParticipantsExternes",
-        "Instance",
-        "Date",
-        ...(k === "notes" ? ["Nom"] : []),
-        "DateDebut",
-        "DateFin",
-        "Echeance",
-        "Statut",
-        "Etat",
-      ]
-        .filter(visibleField)
-        .map(
-          (f) =>
-            `<dt>${esc(fieldLabel(k, f))}</dt><dd data-slot="${f}">${esc(f.startsWith("Date") ? dateText(val(k, r, f)) : displayValue(k, r, f))}</dd>`,
-        )
-        .join("") +
-      "</dl>";
     for (const [f, target] of Object.entries(links[k] || {})) {
       if (!visibleField(f)) continue;
       const rs = targets(k, r, f);
       const empty = showMapped ? "Aucun rattachement" : "Rattachement indisponible";
       html += `<section class="relation-field"><h3>${esc(fieldLabel(k, f))}</h3><div data-slot="${f}">${rs.length ? rs.map((x) => item(target, x)).join("") : `<span class="muted">${empty}</span>`}</div></section>`;
     }
-    for (const extra of cfg(k).extraFields || [])
-      if (visibleField(extra.id))
-        html += `<section class="extra-field"><h3>${esc(fieldLabel(k, extra.id))}</h3><div data-slot="${extra.id}" class="text">${esc(displayValue(k, r, extra.id)) || '<span class="muted">Non renseigné</span>'}</div></section>`;
     const percent = progressPercent(k, r);
     if (cfg(k).fields?.Avancement && (showMapped || percent !== null))
       html += `<section><label>${esc(fieldLabel(k, "Avancement"))} : <span data-slot="Avancement">${percent === null ? "Non renseigné" : progressText(percent) + " %"}</span></label>${percent === null ? "" : `<progress max="100" value="${Math.max(0, Math.min(100, percent))}"></progress>`}</section>`;
-    for (const f of ["Description", "Contenu", "Decision", "Commentaire"]) {
+    for (const f of ["Contenu", "Decision", "Commentaire"]) {
       if (!visibleField(f)) continue;
       const content = `<h3>${esc(cfg(k).fieldLabels?.[f] || (f === "Contenu" ? "Notes et décisions" : f))}</h3><div class="text" data-slot="${f}">${esc(displayValue(k, r, f))}</div>`;
       html += k === "notes" && f === "Contenu" && !showMapped
@@ -4845,6 +4845,13 @@
           if (!Object.hasOwn(mapping.notes.fields, field) && detected.fields[field])
             mapping.notes.fields[field] = detected.fields[field];
         }
+      }
+      const actionConfig = mapping.actions;
+      if (mappingWasSaved && actionConfig?.table && !Object.hasOwn(actionConfig.fields || {}, "DateDebut")) {
+        const start = detect({ actions: actionConfig }).actions.fields.DateDebut;
+        const column = meta.find(entry => entry.table === actionConfig.table && entry.colId === start);
+        if (column?.type === "Date" && !Object.values(actionConfig.fields || {}).includes(start))
+          actionConfig.fields = { ...actionConfig.fields, DateDebut: start };
       }
       reconcileMeetingParticipants(mapping);
       if(mappingWasSaved && beforeTableRefs!==JSON.stringify(mapping)) {
