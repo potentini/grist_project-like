@@ -1,5 +1,6 @@
 const { chromium } = require("playwright");
 const assert = require("node:assert/strict");
+const gristFixture = require("./mentions-fixture.cjs");
 (async () => {
   const browser = await chromium.launch({
     executablePath: "/usr/bin/chromium",
@@ -52,8 +53,32 @@ const assert = require("node:assert/strict");
       assert.deepEqual(errors, []);
       await context.close();
     }
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    await page.route("https://docs.getgrist.com/**", route => route.fulfill({ body: "" }));
+    const model = gristFixture.make(true);
+    model.data.tasks[0].Titre = "Vérification initiale";
+    await page.addInitScript(gristFixture.setup, model);
+    await page.goto("http://127.0.0.1:8766/");
+    await page.locator('#list [data-kind=projects][data-id="1"]').click();
+    await page.locator("#detail h2").evaluate(heading => { heading.dataset.searchTest = "original"; });
+    const search = page.locator("#search");
+    await search.fill("verification");
+    const task = page.locator('#list [data-kind=tasks][data-id="1"]');
+    assert.equal(await task.isVisible(), true);
+    assert.equal(await page.locator("#detail h2").getAttribute("data-search-test"), "original");
+    await page.evaluate(() => Object.assign(testDb.data.tasks[0], {
+      Titre: "Étude actualisée",
+      Chantier: 2,
+    }));
+    await page.locator("#refresh").click();
+    await task.waitFor({ state: "detached" });
+    await search.fill("etude actualisee");
+    await page.locator('#list [data-tree-kind=projects][data-tree-id="2"] [data-kind=tasks][data-id="1"]').waitFor();
+    assert.equal(await page.locator('#list [data-kind=projects][data-id="1"]').count(), 0);
+    await page.close();
+
     console.log(
-      "PASS search reveals folded descendants, preserves manual folding after clearing, and hides unmatched rows in edit mode on desktop/phone",
+      "PASS search reveal and folding, stable detail during typing, refreshed labels and relationships on desktop/phone",
     );
   } finally {
     await browser.close();

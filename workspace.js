@@ -1051,10 +1051,18 @@
   function cfg(k) {
     return mapping[k] || { fields: {} };
   }
+  let indexedMetadata, columnsByTable;
   function col(k, f) {
-    return meta.find(
-      (c) => c.table === cfg(k).table && c.colId === cfg(k).fields?.[f],
-    );
+    if (indexedMetadata !== meta) {
+      indexedMetadata = meta;
+      columnsByTable = new Map();
+      for (const column of meta) {
+        if (!columnsByTable.has(column.table)) columnsByTable.set(column.table, new Map());
+        columnsByTable.get(column.table).set(column.colId, column);
+      }
+    }
+    const config = cfg(k);
+    return columnsByTable.get(config.table)?.get(config.fields?.[f]);
   }
   function val(k, r, f) {
     return r?.[cfg(k).fields?.[f]] ?? "";
@@ -1088,22 +1096,77 @@
         ? []
         : [v];
   }
+  let trackingIndex;
+  function currentTrackingIndex() {
+    if (trackingIndex?.data !== data || trackingIndex.mapping !== mapping || trackingIndex.meta !== meta)
+      trackingIndex = { data, mapping, meta, tables: new Map(), searchText: new Map() };
+    return trackingIndex;
+  }
+  function addIndexedRow(index, key, row) {
+    if (!index.has(key)) index.set(key, []);
+    index.get(key).push(row);
+  }
+  function targetIndex(kind) {
+    const { tables } = currentTrackingIndex();
+    if (!tables.has(kind)) {
+      const byId = new Map(), byCode = new Map(), positions = new Map();
+      for (const [position, row] of (data[kind] || []).entries()) {
+        addIndexedRow(byId, row.id, row);
+        addIndexedRow(byCode, String(val(kind, row, "Code")), row);
+        positions.set(row, position);
+      }
+      tables.set(kind, { byId, byCode, positions });
+    }
+    return tables.get(kind);
+  }
   function targets(k, r, f) {
     const target = links[k]?.[f];
     if (!target) return [];
-    const raw = values(val(k, r, f)).flatMap((x) =>
-      isMultiLink(k, f) && typeof x === "string"
-        ? x.split(",").map((s) => s.trim())
-        : [x],
+    const raw = values(val(k, r, f));
+    if (!raw.length) return [];
+    const entries = raw.flatMap(value =>
+      isMultiLink(k, f) && typeof value === "string"
+        ? value.split(",").map(part => part.trim())
+        : [value],
     );
     const ref = /^Ref(List)?:/.test(col(k, f)?.type || "");
-    return (data[target] || []).filter((row) =>
-      raw.some((x) =>
-        ref
-          ? Number(x) === row.id
-          : String(x) === String(val(target, row, "Code")),
-      ),
-    );
+    const { byId, byCode, positions } = targetIndex(target);
+    const rows = entries.flatMap(value => (ref ? byId.get(Number(value)) : byCode.get(String(value))) || []);
+    if (entries.length === 1) return rows;
+    // Preserve table order for multi-value links and legacy duplicate codes.
+    return [...new Set(rows)].sort((a, b) => positions.get(a) - positions.get(b));
+  }
+  function hierarchyRelations() {
+    const index = currentTrackingIndex();
+    if (!index.relations) {
+      const streams = new Map(), tasks = new Map(), actions = new Map();
+      const noteActions = new Map(), pointActions = new Map();
+      for (const stream of data.streams || [])
+        for (const project of targets("streams", stream, "Projet"))
+          addIndexedRow(streams, project.id, stream);
+      for (const task of data.tasks || [])
+        for (const stream of targets("tasks", task, "Chantier"))
+          addIndexedRow(tasks, stream.id, task);
+      for (const action of data.actions || []) {
+        for (const [kind, parent] of actionPlacements(action))
+          addIndexedRow(actions, kind + ":" + parent.id, action);
+        const points = targets("actions", action, "PointOrigine");
+        for (const point of points) addIndexedRow(pointActions, point.id, action);
+        if (!points.length)
+          for (const note of targets("actions", action, "NoteOrigine"))
+            addIndexedRow(noteActions, note.id, action);
+      }
+      index.relations = { streams, tasks, actions, noteActions, pointActions };
+    }
+    return index.relations;
+  }
+  function searchableText(k, r) {
+    const index = currentTrackingIndex().searchText;
+    if (!index.has(k)) index.set(k, new WeakMap());
+    const byRow = index.get(k);
+    if (!byRow.has(r))
+      byRow.set(r, norm(Object.keys(cfg(k).fields || {}).map(field => displayValue(k, r, field)).join(" ")));
+    return byRow.get(r);
   }
   function has(k, r, f, target) {
     return !!target && targets(k, r, f).some((x) => x.id === target.id);
@@ -1522,8 +1585,8 @@
   function inactive(k, r) {
     return archived(k, r) || transformed(k, r);
   }
-  function outlineRows(k) {
-    return (data[k] || [])
+  function outlineRows(k, source = data[k] || []) {
+    return source
       .filter(
         (r) =>
           !transformed(k, r) &&
@@ -1795,26 +1858,12 @@
     const children = [];
     const childKind =
       kind === "projects" ? "streams" : kind === "streams" ? "tasks" : null;
+    const relations = hierarchyRelations();
     if (childKind)
-      for (const child of data[childKind] || [])
-        if (
-          !inactive(childKind, child) &&
-          has(
-            childKind,
-            child,
-            kind === "projects" ? "Projet" : "Chantier",
-            row,
-          )
-        )
-          children.push(sortDescriptor(childKind, child));
-    if (kind !== "actions")
-      for (const action of data.actions || []) {
-        if (
-          !inactive("actions", action) &&
-          actionPlacements(action).some(([type, parent]) => type === kind && parent.id === row.id)
-        )
-          children.push(sortDescriptor("actions", action));
-      }
+      for (const child of relations[childKind].get(row.id) || [])
+        if (!inactive(childKind, child)) children.push(sortDescriptor(childKind, child));
+    for (const action of relations.actions.get(key) || [])
+      if (!inactive("actions", action)) children.push(sortDescriptor("actions", action));
     const dates = (field) =>
       children.map((c) => c[field]).filter((v) => v !== null);
     const ends = dates("end"),
@@ -1883,8 +1932,8 @@
       Number(val(k, a, "Ordre") || a.id) - Number(val(k, b, "Ordre") || b.id)
     );
   }
-  function ordered(k) {
-    return [...(data[k] || [])]
+  function ordered(k, source = data[k] || []) {
+    return source
       .filter(
         (r) =>
           !transformed(k, r) && (!archived(k, r) || $("showArchived").checked),
@@ -1907,7 +1956,7 @@
   function matches(k, r) {
     const o = quickChoice("ownerFilter"),
       s = quickChoice("statusFilter"),
-      q = norm($("search").value);
+      q = treeSearch;
     return (
       nativeMatch(k, r) &&
       advancedMatch(k, r) &&
@@ -1919,12 +1968,7 @@
         filterValues(k, r, k === "notes" ? "Etat" : "Statut").some((v) =>
           s.includes(v),
         )) &&
-      (!q ||
-        norm(
-          Object.keys(cfg(k).fields || {})
-            .map((f) => displayValue(k, r, f))
-            .join(" "),
-        ).includes(q)) &&
+      (!q || searchableText(k, r).includes(q)) &&
       (view !== "actions" ||
         ((!$("unlinked").checked ||
           (!targets(k, r, "Projet").length &&
@@ -2103,51 +2147,22 @@
   }
   function children(k, r) {
     const result = [];
+    const relations = hierarchyRelations();
     if (k === "projects")
-      result.push(
-        ...outlineRows("streams")
-          .filter((x) => has("streams", x, "Projet", r))
-          .map((x) => ["streams", x]),
-      );
+      result.push(...outlineRows("streams", relations.streams.get(r.id) || []).map(row => ["streams", row]));
     if (k === "streams")
-      result.push(
-        ...outlineRows("tasks")
-          .filter((x) => has("tasks", x, "Chantier", r))
-          .map((x) => ["tasks", x]),
-      );
+      result.push(...outlineRows("tasks", relations.tasks.get(r.id) || []).map(row => ["tasks", row]));
     if (["projects", "streams", "tasks"].includes(k))
-      result.push(
-        ...ordered("actions")
-          .filter(action => actionPlacements(action).some(([type, parent]) => type === k && parent.id === r.id))
-          .map((x) => ["actions", x]),
-      );
+      result.push(...ordered("actions", relations.actions.get(k + ":" + r.id) || []).map(row => ["actions", row]));
     if (k === "notes")
-      result.push(
-        ...outlineRows("points")
-          .filter((x) => meetingContainsPoint(r, x))
-          .map((x) => ["points", x]),
-      );
-    if (k === "points")
-      result.push(
-        ...(data.actions || [])
-          .filter(
-            (x) =>
-              has("actions", x, "PointOrigine", r) &&
-              (!archived("actions", x) || $("showArchived").checked),
-          )
-          .map((x) => ["actions", x]),
-      );
-    if (k === "notes")
-      result.push(
-        ...(data.actions || [])
-          .filter(
-            (x) =>
-              has("actions", x, "NoteOrigine", r) &&
-              (!archived("actions", x) || $("showArchived").checked) &&
-              !targets("actions", x, "PointOrigine").length,
-          )
-          .map((x) => ["actions", x]),
-      );
+      result.push(...outlineRows("points")
+        .filter(point => meetingContainsPoint(r, point))
+        .map(point => ["points", point]));
+    const actions = k === "points" ? relations.pointActions.get(r.id) :
+      k === "notes" ? relations.noteActions.get(r.id) : null;
+    for (const action of actions || [])
+      if (!archived("actions", action) || $("showArchived").checked)
+        result.push(["actions", action]);
     return result;
   }
   function tree(k, r, filtered = false) {
@@ -2294,34 +2309,36 @@
               ))),
       );
   }
-  function render() {
+  function render({ searchOnly = false } = {}) {
     const query = norm($("search").value);
     if (query !== treeSearch) {
       searchFolded.clear();
       treeSearch = query;
     }
     sortDescriptors.clear();
-    sortUI();
     scopeAllowed = new WeakMap();
     advancedSets = null;
-    document.body.dataset.currentView = view;
-    $("phoneViewLabel").textContent =
-      view === "streams"
-        ? cfg("streams").label || "Chantiers"
-        : view === "actions"
-          ? "Actions"
-          : cfg(view).label || schemas[view].label;
-    advancedUI();
+    if (!searchOnly) {
+      sortUI();
+      document.body.dataset.currentView = view;
+      $("phoneViewLabel").textContent =
+        view === "streams"
+          ? cfg("streams").label || "Chantiers"
+          : view === "actions"
+            ? "Actions"
+            : cfg(view).label || schemas[view].label;
+      advancedUI();
+      document
+        .querySelectorAll("[data-view]")
+        .forEach((b) => b.classList.toggle("active", b.dataset.view === view));
+      $("unlinked").closest("label").hidden = view !== "actions";
+      $("overdue").closest("label").hidden = view !== "actions";
+    }
     $("resetFilters").disabled = !(
       Object.values(quickSelections).some(values => values.length) ||
       $("search").value || activeFilterFlags().some(id => $(id).checked) ||
       advancedRules.length || advancedSelected.length || $("advancedValue").value
     );
-    document
-      .querySelectorAll("[data-view]")
-      .forEach((b) => b.classList.toggle("active", b.dataset.view === view));
-    $("unlinked").closest("label").hidden = view !== "actions";
-    $("overdue").closest("label").hidden = view !== "actions";
     const context = "left-" + view;
     let html = "";
     if (view === "notes")
@@ -2377,7 +2394,7 @@
         $("list").append(info);
       }
     }
-    renderDetail();
+    if (!searchOnly) renderDetail();
     syncEdition();
     scheduleWorkspaceLocationSave();
   }
@@ -2490,6 +2507,7 @@
         if (!updates.has(key)) updates.set(key, { k, r, fields: {} });
         updates.get(key).fields[column] = value;
         r[column] = value;
+        if (column === cfg(k).fields?.Code) currentTrackingIndex().tables.delete(k);
       };
       const normalizeAction = (r) => {
         const task = targets("actions", r, "Tache")[0];
@@ -2575,7 +2593,8 @@
           );
         if (destination.k !== "unassigned") normalizeAction(row);
       }
-      if (updates.size)
+      if (updates.size) {
+        trackingIndex = undefined;
         await grist.docApi.applyUserActions(
           [...updates.values()].map((u) => [
             "UpdateRecord",
@@ -2584,6 +2603,7 @@
             u.fields,
           ]),
         );
+      }
       let refreshWarning = "";
       if (updates.size) {
         try {
@@ -3414,6 +3434,7 @@
       sortDescriptors.clear();
       await loadReferences();
       if (token !== request) return;
+      currentTrackingIndex().searchText.clear();
       const saved = nativePending ? null : pendingWorkspaceLocation;
       const scroll = saved?.scroll || paneScroll();
       if (saved) {
@@ -3834,6 +3855,7 @@
           instances.push(instance);
         }
         refRows.set(column.table, instances);
+        currentTrackingIndex().searchText.clear();
         const label = String(instance[column.colId] || name);
         const option = [...select.options].find(item => item.value === String(instance.id));
         if (!option) select.add(new Option(label, String(instance.id)));
@@ -5129,7 +5151,7 @@
       persistFilters(true);
     };
   $("search").oninput = () => {
-    render();
+    render({ searchOnly: true });
     persistFilters();
   };
   $("advancedKind").onchange = () => {
