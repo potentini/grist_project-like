@@ -1214,6 +1214,21 @@
       (kind === "projects" && target !== "projects" && projectOf(target, related)?.id === parent.id) ||
       (kind === "streams" && target === "tasks" && has("tasks", related, "Chantier", parent))));
   }
+  function actionFollowupProjects(action) {
+    let projects = actionAssociations(action).map(([kind, row]) => projectOf(kind, row)).filter(Boolean);
+    if (!projects.length) {
+      const points = targets("actions", action, "PointOrigine");
+      projects = points.flatMap(pointProjects);
+      if (!projects.length) {
+        const meetings = [
+          ...targets("actions", action, "NoteOrigine"),
+          ...points.flatMap(point => targets("points", point, "NoteOrigine")),
+        ];
+        projects = meetings.flatMap(noteProjects);
+      }
+    }
+    return [...new Map(projects.map(project => [project.id, project])).values()];
+  }
   function noteProjects(note) {
     const all = [...targets("notes", note, "Projet")];
     for (const stream of targets("notes", note, "Chantiers"))
@@ -2371,7 +2386,7 @@
       html += `<section class="unassigned" data-drop-kind="unassigned" data-drop-id="0"><h3>Actions sans rattachement au projet</h3>${standalone || '<p class="muted">Aucune action autonome.</p>'}</section>`;
     }
     $("list").innerHTML =
-      `<div class="actions"><button data-new="${view === "projects" ? "projects" : view}">+ ${view === "projects" ? cfg("projects").label || "Projet" : view === "notes" ? cfg("notes").label || "Note / réunion" : view === "streams" ? cfg("streams").label || "Chantier" : cfg("actions").label || "Action"}</button>${view === "notes" ? '<button type="button" data-meeting-followup>Suivi</button>' : ''}<button data-fold-all="close">Tout plier</button><button data-fold-all="open">Tout déplier</button></div>` +
+      `<div class="actions"><button data-new="${view === "projects" ? "projects" : view}">+ ${view === "projects" ? cfg("projects").label || "Projet" : view === "notes" ? cfg("notes").label || "Note / réunion" : view === "streams" ? cfg("streams").label || "Chantier" : cfg("actions").label || "Action"}</button>${view === "notes" ? '<button type="button" data-meeting-followup>Suivi</button>' : view === "actions" ? '<button type="button" data-action-followup>Suivi</button>' : ""}<button data-fold-all="close">Tout plier</button><button data-fold-all="open">Tout déplier</button></div>` +
       (html ||
         '<p class="empty">Aucun élément. Vérifiez le mapping ou ajustez les filtres.</p>');
     if(view==='notes' && (data.notes||[]).length) {
@@ -5905,6 +5920,25 @@
     referenceText:refText, normalize:norm, archived, searchableSelect, selection:()=>selection,
     busy:()=>!!editing||moving, showArchived:()=>$("showArchived").checked,
     message, openRecord:(kind,id)=>selectRecord(kind,id,null),
+  });
+  window.createActionFollowup?.({
+    actions: () => (data.actions || []).filter(row => !transformed("actions", row) && nativeMatch("actions", row)),
+    projects: actionFollowupProjects,
+    owners: row => [
+      ...ownerOptions("actions", row).filter(([, label]) => label.trim()).map(([id, label]) => ["internal:" + id, label]),
+      ...filterValues("actions", row, "ResponsableDiPSi").filter(label => label.trim())
+        .map(label => ["external:" + label, label + " (externe)"]),
+    ],
+    title, display: (row, field) => displayValue("actions", row, field),
+    date: row => dateText(val("actions", row, "DateFin")).replace(/^(\d{4})-(\d{2})-(\d{2})$/, "$3/$2/$1"),
+    normalize: norm,
+    archived: row => archived("actions", row),
+    searchableSelect,
+    busy: () => !!editing || moving,
+    showArchived: () => $("showArchived").checked,
+    view: () => view,
+    message,
+    openRecord: id => selectRecord("actions", id, null),
   });
   init();
 })();

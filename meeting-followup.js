@@ -5,6 +5,7 @@
     const unique = rows => [...new Map(rows.map(row => [row.id,row])).values()];
     const dialog = document.createElement('dialog');
     dialog.id = 'meetingFollowup';
+    dialog.className = 'followup-dialog';
     dialog.setAttribute('aria-labelledby','meetingFollowupTitle');
     dialog.innerHTML = `
       <div class="followup-header"><h2 id="meetingFollowupTitle">Suivi des notes et réunions</h2><button id="meetingFollowupClose" type="button">Fermer</button></div>
@@ -16,8 +17,8 @@
         <label>Ordre<select id="meetingFollowupOrder"><option value="desc">Plus récent d’abord</option><option value="asc">Plus ancien d’abord</option></select></label>
         <label class="followup-archived"><input id="meetingFollowupArchived" type="checkbox" /> Inclure les archivés</label>
       </div>
-      <p id="meetingFollowupStatus" role="status" aria-live="polite"></p>
-      <div id="meetingFollowupBody" tabindex="0" aria-label="Échanges et points de discussion"></div>`;
+      <p id="meetingFollowupStatus" class="followup-status" role="status" aria-live="polite"></p>
+      <div id="meetingFollowupBody" class="followup-body" tabindex="0" aria-label="Échanges et points de discussion"></div>`;
     document.body.append(dialog);
     const $ = id => dialog.querySelector('#meetingFollowup'+id);
     const mode=$('Mode'), target=$('Target'), search=$('Search'), order=$('Order'), includeArchived=$('Archived'), body=$('Body'), status=$('Status');
