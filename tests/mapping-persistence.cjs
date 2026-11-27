@@ -14,7 +14,7 @@ try{
  await page.evaluate(()=>renameNotes('Sujets'));
  await page.locator('#refresh').click();await page.locator('#mappingButton').click();
  assert.equal(await page.locator('[data-map=notes][data-field=table]').inputValue(),'Sujets');
- await page.locator('[data-map=notes][data-field=Type]').selectOption('');
+ assert.equal(await page.locator('[data-map=notes][data-field=Type]').count(),0);
  await page.locator('[data-map=notes][data-field=Instance]').selectOption('Type');
  await page.locator('[data-map=notes][data-field=Date]').selectOption('');
  await page.locator('[data-kind-label=notes]').evaluate(e=>{e.value='Réunions personnalisées'});
@@ -28,7 +28,7 @@ try{
  await page.locator('#paneSeparator').focus();await page.keyboard.press('ArrowRight');
  await page.waitForFunction(()=>document.querySelector('#mapping').hidden);
  let saved=await page.evaluate(()=>grist.getOption('projectWorkspaceMappingV1'));
- assert.equal(saved.notes.table,'Sujets');assert.equal(saved.notes.fields.Date,'');assert.equal(saved.notes.fields.Type,'');assert.equal(saved.notes.fields.Instance,'Type');
+ assert.equal(saved.notes.table,'Sujets');assert.equal(saved.notes.fields.Date,'');assert.equal(Object.hasOwn(saved.notes.fields,'Type'),false);assert.equal(saved.notes.fields.Instance,'Type');
  assert.equal(saved.notes.label,'Réunions personnalisées');
  assert.ok(await page.evaluate(()=>grist.getOption('workspacePaneLayoutV1')));
  // A late notification from before this save cannot restore the old mapping.

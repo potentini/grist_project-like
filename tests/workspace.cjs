@@ -135,7 +135,7 @@ const fixture = require("../demo.json");
           Code: `C${i}`,
           Titre: `Chantier ${i}`,
         });
-      db.data.projects[0].PointEtape = Array.from(
+      db.data.projects[0].Description = Array.from(
         { length: 80 },
         (_, i) => `Point de suivi ${i + 1} : compte rendu détaillé.`,
       ).join("\n\n");
@@ -1171,7 +1171,7 @@ const fixture = require("../demo.json");
     await page.waitForFunction(() =>
       document
         .querySelector("#detail > .point-origin")
-        ?.textContent.includes("Autre réunion · Date à confirmer"),
+        ?.textContent.includes("Autre réunion · Date non renseignée"),
     );
 
     console.log(
@@ -2121,7 +2121,6 @@ const fixture = require("../demo.json");
       DateDebut: "",
       DateFin: "",
       Description: "",
-      PointEtape: "",
     }),
   );
   await page.locator("#refresh").click();
@@ -2134,7 +2133,6 @@ const fixture = require("../demo.json");
     "DateDebut",
     "DateFin",
     "Description",
-    "PointEtape",
   ]) {
     const fieldControl = page.locator(
       `#detail [data-slot="${field}"] [name="${field}"]`,
@@ -2180,7 +2178,7 @@ const fixture = require("../demo.json");
 
   assert.match(await card.innerText(), /avant Noël/);
   assert.equal(await card.locator("img").count(), 0);
-  assert.match(await card.locator(".card-excerpt").innerText(), /<img/);
+  assert.equal(await card.locator(".card-excerpt").count(), 0);
   await page.evaluate(() => (window.testDb.data.tasks[0].Avancement = 0.65));
   await page.locator("#refresh").click();
   await page.waitForFunction(
@@ -2230,7 +2228,7 @@ const fixture = require("../demo.json");
   );
   await page.setViewportSize({ width: 1440, height: 1000 });
   console.log(
-    "PASS populated/zero-progress cards, escaped previews, pointer and keyboard resizing, bounds, saved ratio and mobile stacking",
+    "PASS populated/zero-progress cards, retired card field hidden, pointer and keyboard resizing, bounds, saved ratio and mobile stacking",
   );
 
   await page.goto("http://127.0.0.1:8766/?resume=1");
@@ -2620,7 +2618,7 @@ const fixture = require("../demo.json");
   await page.locator("#mappingButton").click();
   assert.ok(
     await page
-      .locator("#mapping")
+      .locator("#mappingContent")
       .evaluate((el) => el.scrollHeight > el.clientHeight),
   );
   assert.equal(await page.evaluate(() => window.scrollY), 0);

@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Projets, notes et actions — Grist</title>
-    <link rel="stylesheet" href="workspace.css?v=20261126-instance" />
+    <link rel="stylesheet" href="workspace.css?v=20261127-detail" />
     <link rel="stylesheet" href="meeting-mentions.css?v=20261125-release" />
     <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
     <link rel="stylesheet" href="form-theme.css?v=20261117-shared-select" />
@@ -50,7 +50,12 @@
       id="mapping"
       hidden
       aria-label="Configuration des tables"
-    ></section>
+    >
+      <div id="mappingContent"></div>
+      <div id="mappingResize" role="separator" tabindex="0"
+        aria-label="Hauteur du mapping" aria-controls="mappingContent"
+        aria-orientation="horizontal"></div>
+    </section>
     <div id="filterPanel">
       <div class="filters">
         <label
@@ -227,10 +232,10 @@
       <button id="quickUpdateClose" type="button">Annuler</button>
     </dialog>
     <script src="hierarchy-sort.js?v=20261113-sorting"></script>
-    <script src="meeting-followup.js?v=20261125-release"></script>
+    <script src="meeting-followup.js?v=20261127-detail"></script>
     <script src="local-note-drafts.js?v=20261125-release"></script>
     <script src="meeting-mentions.js?v=20261125-release"></script>
     <script src="meeting-point-plan.js?v=20261125-release"></script>
-    <script src="workspace.js?v=20261126-instance"></script>
+    <script src="workspace.js?v=20261127-detail"></script>
   </body>
 </html>

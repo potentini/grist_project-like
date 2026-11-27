@@ -55,7 +55,6 @@
         "DateDebut",
         "DateFin",
         "Statut",
-        "PointEtape",
       ],
     },
     streams: {
@@ -65,17 +64,12 @@
         "Code",
         "Titre",
         "Projet",
-        "Volet",
-        "Nature",
         "Responsable",
         "DateDebut",
         "DateFin",
         "Echeance",
         "Statut",
-        "Vigilance",
         "Avancement",
-        "PointEtape",
-        "Ordre",
         "TacheOrigine",
       ],
     },
@@ -91,10 +85,7 @@
         "DateFin",
         "Echeance",
         "Statut",
-        "Vigilance",
         "Avancement",
-        "PointEtape",
-        "Ordre",
         "ActionOrigine",
         "Transforme",
       ],
@@ -105,12 +96,10 @@
       fields: [
         "Code",
         "Titre",
-        "Nom",
-        "Type",
-        "Date",
-        "DateSource",
-        "PointsReportes",
         "Instance",
+        "Date",
+        "Nom",
+        "PointsReportes",
         "Responsable",
         "ParticipantsInternes",
         "ParticipantsExternes",
@@ -188,7 +177,6 @@
     Contenu: ["Contenu", "CompteRendu", "Notes", "Texte"],
     ParticipantsInternes: ["Participants internes", "ParticipantsEquipe"],
     ParticipantsExternes: ["Participants externes"],
-    PointEtape: ["PointEtape", "PointDEtape"],
     NoteOrigine: ["NoteOrigine", "Reunion", "Note"],
     Echeance: ["Echeance", "DeadlineTexte"],
   };
@@ -219,7 +207,6 @@
     "Contenu",
     "Decision",
     "Description",
-    "PointEtape",
     "Commentaire",
   ]);
   let mapping = {},
@@ -968,12 +955,17 @@
     mappingWasSaved=true;
     const normalized=structuredClone(next);
     // Ignore obsolete option keys while keeping the actual Grist columns and values intact.
-    const actions = normalized.actions;
-    for (const field of ["ProjetsAssocies", "ChantiersAssocies", "TachesAssociees"]) {
-      if (actions?.fields) delete actions.fields[field];
-      if (actions?.columnRefs) delete actions.columnRefs[field];
-      if (actions?.fieldLabels) delete actions.fieldLabels[field];
-    }
+    const retired = {
+      projects: ["PointEtape"],
+      streams: ["Volet", "Nature", "Vigilance", "PointEtape", "Ordre"],
+      tasks: ["Vigilance", "PointEtape", "Ordre"],
+      notes: ["DateSource", "Type"],
+      actions: ["ProjetsAssocies", "ChantiersAssocies", "TachesAssociees"],
+    };
+    for (const [kind, fields] of Object.entries(retired))
+      for (const field of fields)
+        for (const key of ["fields", "columnRefs", "fieldLabels"])
+          if (normalized[kind]?.[key]) delete normalized[kind][key][field];
     reconcileMappingTables(normalized);
     reconcileMappingColumns(normalized);
     if (loaded) reconcileMeetingParticipants(normalized);
@@ -1253,9 +1245,7 @@
       ["DateFin", "DateFin"],
       ["Echeance", "Echeance"],
       ["Statut", "Statut"],
-      ["Vigilance", "Vigilance"],
       ["Avancement", "Avancement"],
-      [sourceKind === "actions" ? "Commentaire" : "PointEtape", "PointEtape"],
     ]) {
       const value = val(sourceKind, source, from);
       if (value === "" || value == null) continue;
@@ -1279,6 +1269,8 @@
         copied.push(to);
       } else skipped.push(from);
     }
+    if (sourceKind === "actions" && val("actions", source, "Commentaire"))
+      skipped.push("Commentaire");
     const newRow = { id: nextId, ...fields },
       updates = [];
     let actionCount = 0,
@@ -1900,7 +1892,7 @@
     const raw = dateText(val("notes", note, "Date"));
     const date = /^\d{4}-\d{2}-\d{2}$/.test(raw)
       ? raw.split("-").reverse().join("/")
-      : raw || val("notes", note, "DateSource") || "Date non renseignée";
+      : raw || "Date non renseignée";
     return title("notes", note) + " · " + date;
   }
   function cardFacts(k, r, rich = true) {
@@ -1922,13 +1914,9 @@
         ? iso.split("-").reverse().join("/")
         : iso;
     };
-    add("Volet", displayValue(k, r, "Volet"));
     add("Responsable", displayValue(k, r, "Responsable"));
     add("ResponsableDiPSi", displayValue(k, r, "ResponsableDiPSi"));
-    add(
-      "Date",
-      dateValue("Date") || (k === "notes" ? val(k, r, "DateSource") : ""),
-    );
+    add("Date", dateValue("Date"));
     add(
       "DateDebut",
       rich ? dateValue("DateDebut") : "",
@@ -1944,10 +1932,8 @@
       displayValue(k, r, "Echeance"),
       cfg(k).fieldLabels?.Echeance || "Échéance",
     );
-    if (rich) add("Nature", displayValue(k, r, "Nature"));
     add("Statut", displayValue(k, r, "Statut"));
     add("Etat", displayValue(k, r, "Etat"));
-    add("Vigilance", displayValue(k, r, "Vigilance"));
     if (rich)
       for (const extra of cfg(k).extraFields || [])
         if (extra.showInCard !== false)
@@ -1972,14 +1958,13 @@
       : "";
     if (rich) {
       const f = [
-        "PointEtape",
         "Decision",
         "Commentaire",
         ...(["notes", "points"].includes(k) ? ["Contenu"] : []),
       ].find((f) => displayValue(k, r, f));
       if (f) {
         const text = displayValue(k, r, f).replace(/\s+/g, " ");
-        html += `<small class="card-excerpt"><span class="card-field-label">${esc(cfg(k).fieldLabels?.[f] || { PointEtape: "Point d’étape", Decision: "Décision", Contenu: "Notes" }[f] || fieldLabel(k, f))} :</span> ${esc(text.length > 160 ? text.slice(0, 157) + "…" : text)}</small>`;
+        html += `<small class="card-excerpt"><span class="card-field-label">${esc(cfg(k).fieldLabels?.[f] || { Decision: "Décision", Contenu: "Notes" }[f] || fieldLabel(k, f))} :</span> ${esc(text.length > 160 ? text.slice(0, 157) + "…" : text)}</small>`;
       }
     }
     return html;
@@ -2907,8 +2892,11 @@
         (b) => (b.disabled = !nextLocations.length || !!editing || moving),
       );
   }
-  function historyToolbar() {
-    return '<nav class="detail-navigation" aria-label="Historique du panneau"><button type="button" data-history="back">← Retour</button><button type="button" data-history="forward">Suivant →</button></nav>';
+  function historyToolbar(itemActions = "") {
+    return `<div class="detail-navigation">
+      <nav aria-label="Historique du panneau"><button type="button" data-history="back">← Retour</button><button type="button" data-history="forward">Suivant →</button></nav>
+      ${itemActions ? `<div class="detail-item-actions">${itemActions}</div>` : ""}
+    </div>`;
   }
   function restoreLocation(location) {
     Object.assign(
@@ -3081,13 +3069,24 @@
       updateHistoryControls();
       return;
     }
-    let html =
-      historyToolbar() +
-      `<small>${esc(schemas[k].label)}</small><h2 data-slot="Titre">${esc(title(k, r))}</h2><button data-edit="1">Modifier</button>`;
+    const editable = !inactive(k, r);
+    const itemActions =
+      (editable ? '<button type="button" data-edit="1">Modifier</button>' : "") +
+      (transformed(k, r) ? "" : `<button type="button" data-removal="${archived(k, r) ? "restore" : "archive"}">${archived(k, r) ? "Restaurer" : "Archiver"}…</button>`) +
+      '<button type="button" data-removal="delete">Supprimer…</button>';
+    const visibleField = (field) => {
+      if (!cfg(k).fields?.[field]) return false;
+      if (showMapped) return true;
+      const reference = /^Ref(List)?:/.test(col(k, field)?.type || "") || links[k]?.[field];
+      return values(val(k, r, field)).some(value =>
+        String(value ?? "").trim() !== "" && !(reference && value === 0),
+      );
+    };
+    let html = historyToolbar(itemActions) +
+      `<small>${esc(schemas[k].label)}</small><h2 data-slot="Titre">${esc(title(k, r))}</h2>`;
     if (k === "points")
       html += `<p class="point-origin">${esc(pointMeetingContext(r))}</p>`;
-    if (inactive(k, r)) {
-      html = html.replace('<button data-edit="1">Modifier</button>', "");
+    if (!editable) {
       html +=
         `<p class="muted">${transformed(k, r) ? "Transformé" : "Archivé"} — conservé pour l’historique.</p>` +
         conversionTarget(k, r)
@@ -3095,13 +3094,9 @@
           .join("");
     } else if (["actions", "tasks"].includes(k))
       html += `<button type="button" data-convert="${k}" data-convert-id="${r.id}">Faire évoluer en ${k === "actions" ? "tâche" : "chantier"}…</button>`;
-    html += `<div class="actions">${!transformed(k, r) ? `<button type="button" data-removal="${archived(k, r) ? "restore" : "archive"}">${archived(k, r) ? "Restaurer" : "Archiver"}…</button>` : ""}<button type="button" data-removal="delete">Supprimer…</button></div>`;
     html +=
       '<dl class="meta">' +
       [
-        "Type",
-        "Volet",
-        "Nature",
         "Responsable",
         "ResponsableDiPSi",
         "ParticipantsInternes",
@@ -3109,50 +3104,38 @@
         "Instance",
         "Date",
         ...(k === "notes" ? ["Nom"] : []),
-        "DateSource",
         "DateDebut",
         "DateFin",
         "Echeance",
         "Statut",
         "Etat",
-        "Vigilance",
       ]
-        .filter((f) =>
-          showMapped ? !!cfg(k).fields?.[f] : val(k, r, f) !== "",
-        )
+        .filter(visibleField)
         .map(
           (f) =>
-            `<dt>${esc(fieldLabel(k, f))}</dt><dd data-slot="${f}">${esc(f.startsWith("Date") && f !== "DateSource" ? dateText(val(k, r, f)) : displayValue(k, r, f))}</dd>`,
+            `<dt>${esc(fieldLabel(k, f))}</dt><dd data-slot="${f}">${esc(f.startsWith("Date") ? dateText(val(k, r, f)) : displayValue(k, r, f))}</dd>`,
         )
         .join("") +
       "</dl>";
-    for (const f of Object.keys(links[k] || {})) {
-      const target = links[k][f],
-        rs = targets(k, r, f);
-      const emptyOrigin =
-        ["ActionOrigine", "TacheOrigine"].includes(f) &&
-        !values(val(k, r, f)).some(
-          (value) => value !== 0 && String(value ?? "").trim() !== "",
-        );
-      if (cfg(k).fields?.[f] && (!emptyOrigin || showMapped)) {
-        html += `<section class="relation-field"><h3>${esc(fieldLabel(k, f))}</h3><div data-slot="${f}">${rs.length ? rs.map((x) => item(target, x)).join("") : '<span class="muted">Aucun rattachement</span>'}</div></section>`;
-      }
+    for (const [f, target] of Object.entries(links[k] || {})) {
+      if (!visibleField(f)) continue;
+      const rs = targets(k, r, f);
+      const empty = showMapped ? "Aucun rattachement" : "Rattachement indisponible";
+      html += `<section class="relation-field"><h3>${esc(fieldLabel(k, f))}</h3><div data-slot="${f}">${rs.length ? rs.map((x) => item(target, x)).join("") : `<span class="muted">${empty}</span>`}</div></section>`;
     }
     for (const extra of cfg(k).extraFields || [])
-      if (cfg(k).fields?.[extra.id])
+      if (visibleField(extra.id))
         html += `<section class="extra-field"><h3>${esc(fieldLabel(k, extra.id))}</h3><div data-slot="${extra.id}" class="text">${esc(displayValue(k, r, extra.id)) || '<span class="muted">Non renseigné</span>'}</div></section>`;
     const percent = progressPercent(k, r);
-    if (cfg(k).fields?.Avancement)
+    if (cfg(k).fields?.Avancement && (showMapped || percent !== null))
       html += `<section><label>${esc(fieldLabel(k, "Avancement"))} : <span data-slot="Avancement">${percent === null ? "Non renseigné" : progressText(percent) + " %"}</span></label>${percent === null ? "" : `<progress max="100" value="${Math.max(0, Math.min(100, percent))}"></progress>`}</section>`;
-    for (const f of [
-      "Description",
-      "Contenu",
-      "Decision",
-      "PointEtape",
-      "Commentaire",
-    ])
-      if (val(k, r, f) || (showMapped && cfg(k).fields?.[f]))
-        html += `<h3>${esc(cfg(k).fieldLabels?.[f] || (f === "Contenu" ? "Notes et décisions" : f))}</h3><div class="text" data-slot="${f}">${esc(displayValue(k, r, f))}</div>`;
+    for (const f of ["Description", "Contenu", "Decision", "Commentaire"]) {
+      if (!visibleField(f)) continue;
+      const content = `<h3>${esc(cfg(k).fieldLabels?.[f] || (f === "Contenu" ? "Notes et décisions" : f))}</h3><div class="text" data-slot="${f}">${esc(displayValue(k, r, f))}</div>`;
+      html += k === "notes" && f === "Contenu" && !showMapped
+        ? `<section class="meeting-notes-reading">${content}</section>`
+        : content;
+    }
     if (["projects", "streams", "tasks"].includes(k))
       html += `<div class="actions">${k !== "tasks" ? `<button data-new="${k === "projects" ? "streams" : "tasks"}">+ ${k === "projects" ? cfg("streams").label || "Chantier" : cfg("tasks").label || "Tâche"}</button>` : ""}<button data-new="notes">+ Note</button><button data-new="actions">+ Action</button></div>`;
     if (k === "notes")
@@ -3250,13 +3233,6 @@
       );
     }
     $("detail").innerHTML = html;
-    const actionBar =
-      $("detail").querySelector("[data-removal]")?.parentElement;
-    if (actionBar)
-      for (const control of [
-        ...$("detail").querySelectorAll("[data-edit],[data-convert]"),
-      ].reverse())
-        actionBar.prepend(control);
     const timelineButton = $("detail").querySelector("[data-project-timeline]");
     if (timelineButton) {
       const summary =
@@ -3396,7 +3372,7 @@
       ${teamSchema.fields.map(field => `<label>${{Prenom:"Prénom",Email:"E-mail"}[field] || field}
         <select data-map="team" data-field="${field}">${options(meta.filter(column => column.table === team.table && !column.colId.startsWith("gristHelper_"))
           .map(column => [column.colId, column.label || column.colId]), team.fields?.[field])}</select></label>`).join("")}</fieldset>`;
-    $("mapping").innerHTML =
+    $("mappingContent").innerHTML =
       '<h2>Tables et champs</h2><p>La réouverture conserve tous vos choix, y compris les champs non mappés. La détection est relancée uniquement avec le bouton dédié. Un champ vide est facultatif, sauf Titre. Mappez les parents pour construire la hiérarchie. Les colonnes de formule sont lisibles et restent protégées en édition.</p><p>DateFin est une date précise pour le calendrier et les retards. Echeance est un texte libre (ex. « avant le Codir »). Vous pouvez ne mapper qu’un seul des deux.</p><div class="actions"><button id="detect">Détecter les champs manquants</button><button id="applyMapping">Enregistrer le mapping</button></div><div class="grid">' +
       Object.entries(schemas)
         .map(([k, s]) => {
@@ -3784,15 +3760,7 @@
     $("editError").textContent = "";
     const context =
       selection && (data[selection.k] || []).find((x) => x.id === selection.id);
-    const editorFields = fieldsFor(k);
-    if (k === "notes") {
-      for (const field of ["Instance", "Date", "Nom"]) {
-        const index = editorFields.indexOf(field);
-        if (index >= 0) editorFields.splice(index, 1);
-      }
-      editorFields.splice(editorFields.indexOf("Type") + 1, 0, "Instance", "Date", "Nom");
-    }
-    $("fields").innerHTML = editorFields
+    $("fields").innerHTML = fieldsFor(k)
       .filter(
         (f) =>
           cfg(k).fields?.[f] &&
@@ -3856,12 +3824,12 @@
               .join("") +
             "</select>";
         } else if (
-          (f.startsWith("Date") && f !== "DateSource") ||
+          (f.startsWith("Date")) ||
           type.startsWith("Date")
         )
           input = `<input type="date" name="${f}" value="${esc(dateText(v))}">`;
-        else if (textareas.has(f) || f === "ParticipantsExternes" && ["Text", "Any"].includes(type))
-          input = `<textarea name="${f}">${esc(v)}</textarea>`;
+        else if (!["Code", "Avancement", "Ordre"].includes(f) && (type === "Text" || type === "Any" && typeof v === "string" || !type && textareas.has(f)))
+          input = `<textarea rows="1" name="${f}" ${f === "Titre" ? "required" : ""}>\n${esc(v)}</textarea>`;
         else if (type === "Choice" || type === "ChoiceList") {
           let choices = [];
           try {
@@ -4620,7 +4588,7 @@
               ]
             : Number(v) || 0;
         else if (
-          (f.startsWith("Date") && f !== "DateSource") ||
+          (f.startsWith("Date")) ||
           m?.type?.startsWith("Date")
         )
           v = v
@@ -5420,6 +5388,59 @@
       syncHierarchy(e.target.name);
   };
   $("editForm").onsubmit = save;
+  if (!CSS.supports("field-sizing", "content")) {
+    const form = $("editForm");
+    const fit = (area) => {
+      if (!area.getClientRects().length) return;
+      area.style.height = "0";
+      area.style.height = area.scrollHeight + area.offsetHeight - area.clientHeight + "px";
+    };
+    const fitForm = () => form.querySelectorAll("textarea").forEach(fit);
+    form.addEventListener("input", (event) => {
+      if (event.target.matches("textarea")) fit(event.target);
+    });
+    // Draft recovery and the meeting composer can add or restore fields without typing.
+    new MutationObserver(fitForm).observe(form, { childList: true, subtree: true });
+    let width;
+    new ResizeObserver(([entry]) => {
+      if (width === entry.contentRect.width) return;
+      width = entry.contentRect.width;
+      fitForm();
+    }).observe(form);
+  }
+  const mappingResize = $("mappingResize");
+  function resizeMapping(height) {
+    $("mapping").style.setProperty("--mapping-height", height + "px");
+  }
+  new ResizeObserver(([entry]) => {
+    if (!entry.contentRect.height) return;
+    const style = getComputedStyle(entry.target);
+    mappingResize.setAttribute("aria-valuemin", Math.round(parseFloat(style.minHeight)));
+    mappingResize.setAttribute("aria-valuemax", Math.round(parseFloat(style.maxHeight)));
+    mappingResize.setAttribute("aria-valuenow", Math.round(entry.target.offsetHeight));
+  }).observe($("mapping"));
+  let mappingDrag = null;
+  mappingResize.onpointerdown = (event) => {
+    if (event.button !== 0 || mappingDrag) return;
+    event.preventDefault();
+    mappingResize.focus({ preventScroll: true });
+    mappingResize.setPointerCapture(event.pointerId);
+    mappingDrag = {
+      id: event.pointerId,
+      y: event.clientY,
+      height: $("mapping").offsetHeight,
+    };
+  };
+  mappingResize.onpointermove = (event) => {
+    if (mappingDrag?.id === event.pointerId)
+      resizeMapping(mappingDrag.height + event.clientY - mappingDrag.y);
+  };
+  mappingResize.onlostpointercapture = () => { mappingDrag = null; };
+  mappingResize.onkeydown = (event) => {
+    if (!["ArrowUp", "ArrowDown"].includes(event.key)) return;
+    event.preventDefault();
+    resizeMapping($("mapping").offsetHeight + (event.key === "ArrowUp" ? -24 : 24));
+  };
   $("mapping").onchange = (e) => {
     if (e.target.dataset.progressBase) {
       const k = e.target.dataset.progressBase;

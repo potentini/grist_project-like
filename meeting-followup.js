@@ -33,7 +33,7 @@
       }));
     }
     function dateInfo(note) {
-      const raw=note && (ctx.dateText(ctx.value('notes',note,'Date')) || ctx.display('notes',note,'DateSource'));
+      const raw=note && ctx.dateText(ctx.value('notes',note,'Date'));
       if(!raw)return {label:'Date non renseignée',time:null};
       const iso=String(raw).trim().match(/^(\d{4})-(\d{2})-(\d{2})/), fr=String(raw).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
       const parts=iso ? [iso[1],iso[2],iso[3]] : fr ? [fr[3],fr[2],fr[1]] : null;
