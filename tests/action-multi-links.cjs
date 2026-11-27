@@ -66,6 +66,24 @@ const fixture = require('./mentions-fixture.cjs');
       await second.waitFor();
       assert.equal(await first.count(), 1);
       assert.equal(await second.count(), 1);
+      if (width === 390) await page.locator('#phoneFilters').tap();
+      const projectFilter = page.locator('#projectFilter').locator('..').locator('.quick-picker');
+      const projectSearch = projectFilter.locator('.quick-search');
+      await projectSearch.fill('Auto-évaluation Hcéres');
+      const selectedProject = projectFilter.getByRole('option', { name: '☐ Auto-évaluation Hcéres', exact: true });
+      if (width === 390) await selectedProject.tap(); else await selectedProject.click();
+      await projectSearch.press('Escape');
+      assert.deepEqual(await left.locator('[data-kind=projects]').evaluateAll(
+        rows => rows.map(row => row.dataset.id),
+      ), ['1'], 'the project filter still applies in edit mode');
+      assert.equal(await first.count(), 1);
+      assert.equal(await second.count(), 0);
+      await projectSearch.click();
+      const allProjects = projectFilter.getByRole('option', { name: /Tous$/ });
+      if (width === 390) await allProjects.tap(); else await allProjects.click();
+      await projectSearch.press('Escape');
+      if (width === 390) await page.locator('#phoneFilters').tap();
+      await second.waitFor();
       await second.locator('..').locator('[data-move-kind="actions"]').click();
       await form.waitFor();
       assert.equal(await page.locator('#moveDialog').isVisible(), false);

@@ -48,6 +48,14 @@ const fixture=require('../demo.json');
    await input.click();assert.equal(await page.locator('.filters').evaluate(e=>e.offsetHeight),height,'dropdown floats without shifting filters');
    const r=await project.locator('.reference-options').boundingBox();assert.ok(r.x>=0&&r.x+r.width<=390);
   }
+  await input.press('Escape');
+  await page.locator('#editionButton').click();
+  assert.equal(await page.locator('#editionButton').getAttribute('aria-pressed'),'true');
+  await input.click();
+  const mobility=project.getByRole('option',{name:'☑ Projet Mobilité',exact:true});
+  if(phone)await mobility.tap();else await mobility.click();
+  await input.press('Escape');
+  assert.deepEqual(await page.locator('#list [data-kind=projects]').evaluateAll(rows=>rows.map(r=>r.dataset.id)),['1']);
   if(process.env.QUICK_SCREENSHOT&&colorScheme==='light')await page.screenshot({path:process.env.QUICK_SCREENSHOT+(phone?'-phone.png':'-desktop.png')});
   assert.equal(await page.evaluate(()=>writes.length),0);assert.deepEqual(errors,[]);await page.close();
  }

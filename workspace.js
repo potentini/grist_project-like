@@ -2097,7 +2097,14 @@
     return result;
   }
   function tree(k, r, filtered = false) {
-    if (filtered && !nativeMatch(k, r)) return null;
+    const hierarchy = ["projects", "streams", "tasks"].includes(k);
+    if (filtered) {
+      if (!nativeMatch(k, r)) return null;
+      const projects = quickChoice("projectFilter");
+      // A shared action can match the filter even under an excluded branch.
+      if (hierarchy && projects.length && !projects.includes(String(projectOf(k, r)?.id)))
+        return null;
+    }
     const kids = children(k, r)
       .map(([kind, row]) => tree(kind, row, filtered))
       .filter(Boolean);
@@ -2108,10 +2115,9 @@
       kids.length ||
       (filtered &&
         editionEnabled &&
+        hierarchy &&
         !norm($("search").value) &&
-        nativeMatch(k, r) &&
-        advancedMatch(k, r) &&
-        !["notes", "points", "actions"].includes(k))
+        advancedMatch(k, r))
       ? { k, r, kids }
       : null;
   }
