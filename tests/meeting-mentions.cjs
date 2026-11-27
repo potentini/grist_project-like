@@ -9,7 +9,8 @@ async function boot(browser,width,refs=true){
  return {context,page,errors};
 }
 async function notes(page){
- await page.locator('#list > *').first().waitFor();
+ await page.locator('#list > *').first().waitFor({ state: "attached" });
+ if (await page.locator('#phoneBack').isVisible()) await page.locator('#phoneBack').click();
  if(await page.locator('#phoneNav').isVisible()){await page.locator('#phoneNav summary').click();await page.locator('#phoneNav [data-view=notes]').click()}
  else await page.locator('nav [data-view=notes]').click();
 }

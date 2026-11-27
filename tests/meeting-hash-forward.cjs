@@ -18,7 +18,8 @@ const { make, setup } = require('./mentions-fixture.cjs');
       const errors = [];
       page.on('pageerror', error => errors.push(error.message));
       async function openEditor() {
-        await page.locator('#list > *').first().waitFor();
+        await page.locator('#list > *').first().waitFor({ state: "attached" });
+        if (await page.locator('#phoneBack').isVisible()) await page.locator('#phoneBack').click();
         if (width === 390) {
           await page.locator('#phoneNav summary').tap();
           await page.locator('#phoneNav [data-view=notes]').tap();

@@ -35,7 +35,8 @@ function setup(fixture){
   const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.route('https://docs.getgrist.com/**',r=>r.fulfill({body:''}));await page.addInitScript(setup,fixture);
   async function open(kind='notes',id=1){
-   await page.locator('#list > *').first().waitFor();
+   await page.locator('#list > *').first().waitFor({ state: "attached" });
+   if (await page.locator('#phoneBack').isVisible()) await page.locator('#phoneBack').click();
    if(width===390){await page.locator('#phoneNav summary').click();await page.locator('#phoneNav [data-view=notes]').click()}
    else await page.locator('nav [data-view=notes]').click();
    await page.locator('#list [data-kind=notes][data-id="1"]').first().click();
