@@ -1845,20 +1845,28 @@
       )
       .sort((a, b) => compareTrackingRows(k, a, b));
   }
+  function matchesProjectFilter(k, r) {
+    const selected = quickChoice("projectFilter");
+    if (!selected.length) return true;
+    if (k === "notes" || k === "points") {
+      const projects = k === "notes" ? noteProjects(r) : pointProjects(r);
+      return projects.some(project => selected.includes(String(project.id)));
+    }
+    if (selected.includes(String(projectOf(k, r)?.id))) return true;
+    return k === "actions" && multiActionLinks() &&
+      (data.projects || []).some(project =>
+        selected.includes(String(project.id)) && actionAssociatedWith("projects", project, r),
+      );
+  }
   function matches(k, r) {
-    const p = quickChoice("projectFilter"),
-      o = quickChoice("ownerFilter"),
+    const o = quickChoice("ownerFilter"),
       s = quickChoice("statusFilter"),
       q = norm($("search").value);
     return (
       nativeMatch(k, r) &&
       advancedMatch(k, r) &&
       (!archived(k, r) || $("showArchived").checked) &&
-      (!p.length ||
-        (k === "points"
-          ? pointProjects(r).some((x) => p.includes(String(x.id)))
-          : p.includes(String(projectOf(k, r)?.id)) || k === "actions" && multiActionLinks() &&
-            (data.projects || []).some(project => p.includes(String(project.id)) && actionAssociatedWith("projects", project, r)))) &&
+      matchesProjectFilter(k, r) &&
       (!o.length ||
         ownerOptions(k, r).some(([id]) => o.includes(id))) &&
       (!s.length ||
@@ -2100,10 +2108,8 @@
     const hierarchy = ["projects", "streams", "tasks"].includes(k);
     if (filtered) {
       if (!nativeMatch(k, r)) return null;
-      const projects = quickChoice("projectFilter");
       // A shared action can match the filter even under an excluded branch.
-      if (hierarchy && projects.length && !projects.includes(String(projectOf(k, r)?.id)))
-        return null;
+      if (hierarchy && !matchesProjectFilter(k, r)) return null;
     }
     const kids = children(k, r)
       .map(([kind, row]) => tree(kind, row, filtered))
