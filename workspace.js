@@ -42,6 +42,7 @@
       phoneListScroll = $("list").scrollTop;
     document.body.classList.toggle("phone-detail", show);
     if (!show) $("list").scrollTop = phoneListScroll;
+    scheduleWorkspaceLocationSave();
   }
   const norm = (s) =>
     String(s ?? "")
@@ -2378,6 +2379,7 @@
     }
     renderDetail();
     syncEdition();
+    scheduleWorkspaceLocationSave();
   }
   function canDrop(sourceKind, targetKind) {
     return (
@@ -2886,6 +2888,83 @@
       k === "notes" && kind === "actions" && has(kind, row, "NoteOrigine", r)
     );
   }
+  const panes = ["list", "detail"];
+  let workspaceLocationKey = null, pendingWorkspaceLocation = null, workspaceLocationFrame = 0;
+  function paneScroll() {
+    const detailOnPhone = document.body.classList.contains("phone-detail");
+    return Object.fromEntries(panes.map(id => [id, {
+      top: id === "list" && detailOnPhone ? phoneListScroll : $(id).scrollTop,
+      left: $(id).scrollLeft,
+    }]));
+  }
+  function restorePaneScroll(scroll) {
+    for (const id of panes) {
+      $(id).scrollTop = scroll?.[id]?.top ?? 0;
+      $(id).scrollLeft = scroll?.[id]?.left ?? 0;
+    }
+  }
+  function trackingTable(kind) {
+    const config = cfg(kind);
+    return config.tableRef || config.table;
+  }
+  function readWorkspaceLocation() {
+    if (!noteDraftScope) return;
+    workspaceLocationKey = "grist-project-like:location:v1:" +
+      JSON.stringify([noteDraftScope, location.pathname, location.search]);
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(workspaceLocationKey));
+      if (!["projects", "streams", "notes", "actions"].includes(saved?.view)) return;
+      pendingWorkspaceLocation = saved;
+      setTrackingView(saved.view === "streams" && !phoneMode ? "projects" : saved.view);
+      for (const [key, set] of [["folded", folded], ["known", knownBranches], ["searchFolded", searchFolded]]) {
+        if (Array.isArray(saved[key])) for (const value of saved[key]) set.add(value);
+      }
+      treeSearch = typeof saved.treeSearch === "string" ? saved.treeSearch : "";
+      hideCompletedDependents = saved.hideCompletedDependents === true;
+      $("advancedFilters").open = saved.advancedOpen === true;
+      $("hierarchySortSettings").open = saved.sortOpen === true;
+      if (phoneMode) setPhoneFiltersOpen(saved.phoneFiltersOpen === true);
+    } catch {
+      // A browser can block access to storage in an embedded widget.
+    }
+  }
+  function saveWorkspaceLocation() {
+    if (!workspaceLocationKey || pendingWorkspaceLocation || !Object.keys(data).length) return;
+    rememberDetailFolds();
+    try {
+      sessionStorage.setItem(workspaceLocationKey, JSON.stringify({
+        view,
+        selection: selection && { ...selection, table: trackingTable(selection.k) },
+        folded: [...folded],
+        known: [...knownBranches],
+        searchFolded: [...searchFolded],
+        treeSearch,
+        scroll: paneScroll(),
+        hideCompletedDependents,
+        phoneDetail: document.body.classList.contains("phone-detail"),
+        phoneFiltersOpen: document.body.classList.contains("phone-filters-open"),
+        advancedOpen: $("advancedFilters").open,
+        sortOpen: $("hierarchySortSettings").open,
+      }));
+    } catch {
+      // Resume is optional if browser storage is unavailable.
+    }
+  }
+  function scheduleWorkspaceLocationSave() {
+    if (!workspaceLocationKey || workspaceLocationFrame) return;
+    workspaceLocationFrame = requestAnimationFrame(() => {
+      workspaceLocationFrame = 0;
+      saveWorkspaceLocation();
+    });
+  }
+  for (const id of panes) $(id).addEventListener("scroll", scheduleWorkspaceLocationSave, { passive: true });
+  for (const id of ["advancedFilters", "hierarchySortSettings"])
+    $(id).addEventListener("toggle", scheduleWorkspaceLocationSave);
+  window.addEventListener("pagehide", saveWorkspaceLocation);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") saveWorkspaceLocation();
+  });
+
   const previousLocations = [],
     nextLocations = [];
   const filterIds = [
@@ -2897,7 +2976,7 @@
     "showArchived",
     "overdue",
   ];
-  function captureLocation(source = null) {
+  function rememberDetailFolds() {
     $("detail")
       .querySelectorAll("details[data-section-key]")
       .forEach((d) =>
@@ -2905,6 +2984,9 @@
           ? folded.delete(d.dataset.sectionKey)
           : folded.add(d.dataset.sectionKey),
       );
+  }
+  function captureLocation(source = null) {
+    rememberDetailFolds();
     let focus = null;
     if (source) {
       const pane = source.closest("#list, #detail");
@@ -2930,12 +3012,7 @@
       folded: [...folded],
       searchFolded: [...searchFolded],
       known: [...knownBranches],
-      scroll: Object.fromEntries(
-        ["list", "detail"].map((id) => [
-          id,
-          { top: $(id).scrollTop, left: $(id).scrollLeft },
-        ]),
-      ),
+      scroll: paneScroll(),
       focus,
     };
   }
@@ -3000,10 +3077,7 @@
       $(location.focus.pane)
         .querySelectorAll("[data-kind]")
         [location.focus.index]?.focus({ preventScroll: true });
-    for (const [id, position] of Object.entries(location.scroll)) {
-      $(id).scrollTop = position.top;
-      $(id).scrollLeft = position.left;
-    }
+    restorePaneScroll(location.scroll);
   }
   function travel(direction) {
     if (editing || moving) return;
@@ -3116,6 +3190,7 @@
         d.open
           ? folded.delete(d.dataset.sectionKey)
           : folded.add(d.dataset.sectionKey);
+        scheduleWorkspaceLocationSave();
       }
     },
     true,
@@ -3315,6 +3390,7 @@
     const scrollTop = $("detail").scrollTop;
     renderDetail();
     $("detail").scrollTop = scrollTop;
+    scheduleWorkspaceLocationSave();
   });
   function mappedTableId(k) {
     const c=cfg(k),table=tables.find(t=>t.tableId===c.table && (!c.tableRef || Number(t.id)===Number(c.tableRef)));
@@ -3337,9 +3413,25 @@
       scopeAllowed=new WeakMap();
       sortDescriptors.clear();
       await loadReferences();
+      if (token !== request) return;
+      const saved = nativePending ? null : pendingWorkspaceLocation;
+      const scroll = saved?.scroll || paneScroll();
+      if (saved) {
+        const record = saved.selection;
+        const row = Object.hasOwn(schemas, record?.k) &&
+          trackingTable(record.k) === record.table &&
+          data[record.k]?.find(item => item.id === record.id);
+        if (row && nativeMatch(record.k, row)) selection = { k: record.k, id: record.id };
+        pendingWorkspaceLocation = null;
+      }
       applyLabels();
       filterOptions();
       render();
+      restorePaneScroll(scroll);
+      if (phoneMode && saved?.phoneDetail && selection) {
+        phoneDetail(true);
+        restorePaneScroll(scroll);
+      }
       message(
         [referenceWarning,nativeWarning ||
           (demo
@@ -4890,6 +4982,7 @@
         const host = document.referrer ? new URL(document.referrer).origin : "";
         noteDraftScope = typeof docId === "string" && docId ? JSON.stringify([host, docId]) : null;
       } catch { noteDraftScope = null; }
+      readWorkspaceLocation();
       await refreshMetadata();
       mapping = mappingWasSaved ? mapping : detect(mapping);
       const beforeTableRefs=JSON.stringify(mapping);
@@ -4960,9 +5053,13 @@
       message(e.message, true);
     }
   }
-  $("phoneFilters").onclick = () => {
-    const open = document.body.classList.toggle("phone-filters-open");
+  function setPhoneFiltersOpen(open) {
+    document.body.classList.toggle("phone-filters-open", open);
     $("phoneFilters").setAttribute("aria-expanded", String(open));
+    scheduleWorkspaceLocationSave();
+  }
+  $("phoneFilters").onclick = () => {
+    setPhoneFiltersOpen(!document.body.classList.contains("phone-filters-open"));
   };
   $("phoneBack").onclick = () => {
     if (editing || moving) {
@@ -5345,6 +5442,7 @@
           ),
       );
       fold.textContent = open ? "▾" : "▸";
+      scheduleWorkspaceLocationSave();
       return;
     }
     const all = e.target.closest("[data-fold-all]");
