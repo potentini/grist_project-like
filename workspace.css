@@ -1044,11 +1044,13 @@ body.phone-mode #phoneNav button {
   margin: 2px 0;
 }
 body.phone-mode #editionButton,
-body.phone-mode #phoneFilters {
+body.phone-mode #phoneFilters,
+body.phone-mode #resetFilters {
   font-size: 12px;
   padding: 7px;
   white-space: nowrap;
 }
+body.phone-mode #resetFilters > span { display: none; }
 body.phone-mode #message {
   font-size: 11px;
   padding: 3px 9px;

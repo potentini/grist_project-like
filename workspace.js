@@ -25,9 +25,15 @@
   const searchLabel = $("search").closest("label"),
     searchHome = document.createComment("search position");
   searchLabel.before(searchHome);
+  const resetFilterHome = $("resetFilters").parentElement;
   function placePhoneSearch() {
-    if (phoneMode) $("phoneSearch").append(searchLabel);
-    else searchHome.after(searchLabel);
+    if (phoneMode) {
+      $("phoneSearch").append(searchLabel);
+      $("phoneFilters").after($("resetFilters"));
+    } else {
+      searchHome.after(searchLabel);
+      resetFilterHome.append($("resetFilters"));
+    }
   }
   placePhoneSearch();
   function phoneDetail(show) {
@@ -565,6 +571,22 @@
     ownerFilter: [],
     statusFilter: [],
   };
+  const filterFlags = ["unlinked", "overdue", "showArchived"];
+  const viewFilterKeys = ["ownerFilter", "statusFilter"];
+  const activeFilterFlags = () => view === "actions" ? filterFlags : ["showArchived"];
+  const viewFilters = {};
+  function rememberViewFilters() {
+    viewFilters[view] = Object.fromEntries(viewFilterKeys.map(id => [id, quickSelections[id]]));
+  }
+  function restoreViewFilters() {
+    for (const id of viewFilterKeys) quickSelections[id] = viewFilters[view]?.[id] || [];
+  }
+  function setTrackingView(next) {
+    if (next === view) return;
+    rememberViewFilters();
+    view = next;
+    restoreViewFilters();
+  }
   function fieldValues(m, value, row) {
     if (m?.type?.startsWith("RefList:"))
       return values(value).length
@@ -633,6 +655,7 @@
         quickSelections[id] = [...choices.selectedOptions].map(o => o.value).filter(Boolean);
         filterOptions();
         render();
+        persistFilters(true);
       };
     }
     const selected = quickChoice(id);
@@ -804,17 +827,26 @@
   function advancedFilterState() {
     return {rules:structuredClone(advancedRules),join:advancedJoin,draft:{kind:$("advancedKind").value,column:$("advancedField").value,columnRef:meta.find(c=>c.table===cfg($("advancedKind").value).table && c.colId===$("advancedField").value)?.id,value:$("advancedValue").value,values:[...advancedSelected]}};
   }
-  function persistAdvancedFilters(immediate=false) {
+  function persistFilters(immediate=false) {
     clearTimeout(advancedPersistTimer);
     if(demo||!loaded||!window.grist)return;
     const save=()=>{
-      const state=advancedFilterState();state.revision=Math.max(Date.now(),advancedRevision+1);advancedRevision=state.revision;
+      rememberViewFilters();
+      const state = advancedFilterState();
+      state.basic = {
+        projectFilter: quickSelections.projectFilter,
+        byView: viewFilters,
+        search: $("search").value,
+        flags: Object.fromEntries(filterFlags.map(id => [id, $(id).checked])),
+      };
+      state.revision = Math.max(Date.now(), advancedRevision + 1);
+      advancedRevision = state.revision;
       advancedSignature=mappingSignature(state);
       setWidgetOption(advancedOptionKey,state).catch(error=>message('Filtres appliqués, mais leur mémorisation a échoué : '+error.message,true));
     };
     if(immediate)save();else advancedPersistTimer=setTimeout(save,250);
   }
-  function receiveAdvancedFilters(state) {
+  function receiveFilters(state) {
     if(!state||typeof state!=='object'||(Number(state.revision)||0)<advancedRevision)return false;
     const signature=mappingSignature(state);if(signature===advancedSignature)return false;
     advancedSignature=signature;advancedRevision=Number(state.revision)||0;
@@ -824,6 +856,19 @@
     advancedDraftRestore={kind:schemas[draft.kind]?draft.kind:'',column:String(draft.column||''),columnRef:draft.columnRef,value:String(draft.value||''),values:Array.isArray(draft.values)?draft.values.map(String):[]};
     advancedSelected=[...advancedDraftRestore.values];
     $("advancedValue").value=advancedDraftRestore.value;
+    const basic = state.basic;
+    if (basic && typeof basic === "object") {
+      const choices = value => Array.isArray(value) ? value.map(String).filter(Boolean) : [];
+      quickSelections.projectFilter = choices(basic.projectFilter);
+      for (const kind of ["projects", "streams", "notes", "actions"]) {
+        viewFilters[kind] = Object.fromEntries(
+          viewFilterKeys.map(id => [id, choices(basic.byView?.[kind]?.[id])]),
+        );
+      }
+      restoreViewFilters();
+      $("search").value = typeof basic.search === "string" ? basic.search : "";
+      for (const id of filterFlags) $(id).checked = basic.flags?.[id] === true;
+    }
     return true;
   }
   const layoutKey = "workspacePaneLayoutV1";
@@ -2266,6 +2311,11 @@
           ? "Actions"
           : cfg(view).label || schemas[view].label;
     advancedUI();
+    $("resetFilters").disabled = !(
+      Object.values(quickSelections).some(values => values.length) ||
+      $("search").value || activeFilterFlags().some(id => $(id).checked) ||
+      advancedRules.length || advancedSelected.length || $("advancedValue").value
+    );
     document
       .querySelectorAll("[data-view]")
       .forEach((b) => b.classList.toggle("active", b.dataset.view === view));
@@ -2913,6 +2963,7 @@
     </div>`;
   }
   function restoreLocation(location) {
+    setTrackingView(location.view);
     Object.assign(
       quickSelections,
       structuredClone(
@@ -2927,7 +2978,6 @@
     advancedSelected = [...(location.advancedSelected || [])];
     advancedRules = structuredClone(location.advancedRules || []);
     selection = location.selection;
-    view = location.view;
     folded.clear();
     location.folded.forEach((key) => folded.add(key));
     searchFolded.clear();
@@ -2945,7 +2995,7 @@
       else $(id).value = value;
     }
     render();
-    persistAdvancedFilters(true);
+    persistFilters(true);
     if (location.focus?.index >= 0)
       $(location.focus.pane)
         .querySelectorAll("[data-kind]")
@@ -4818,7 +4868,10 @@
           paintSplit();
         }
         if(!mappingSaving && receiveMapping(opts?.[optionKey]) && loaded)await load();
-        if(receiveAdvancedFilters(opts?.[advancedOptionKey])&&loaded)render();
+        if (receiveFilters(opts?.[advancedOptionKey]) && Object.keys(data).length) {
+          filterOptions();
+          render();
+        }
       });
       // onOptions can arrive after initialization; read the saved mapping before
       // deciding whether automatic detection is appropriate.
@@ -4830,7 +4883,7 @@
       const filterRevision=advancedRevision;
       try {
         const storedFilters=await grist.getOption(advancedOptionKey);
-        if(filterRevision===advancedRevision)receiveAdvancedFilters(storedFilters);
+        if(filterRevision===advancedRevision)receiveFilters(storedFilters);
       }catch(error){console.warn('Lecture des filtres enregistrés indisponible',error);}
       try {
         const docId = await grist.docApi.getDocName();
@@ -4930,8 +4983,8 @@
     document.body.classList.remove("phone-detail", "phone-filters-open");
     $("phoneFilters").setAttribute("aria-expanded", "false");
     if (!editing) {
-      if (phoneMode) view = "actions";
-      else if (view === "streams") view = "projects";
+      if (phoneMode) setTrackingView("actions");
+      else if (view === "streams") setTrackingView("projects");
       filterOptions();
       render();
     } else syncEdition();
@@ -4953,14 +5006,9 @@
           return;
         }
         rememberLocation();
-        view = b.dataset.view;
-        $("phoneNav").open = false;
+        setTrackingView(b.dataset.view);
         phoneDetail(false);
         selection = null;
-        quickSelections.ownerFilter = [];
-        quickSelections.statusFilter = [];
-        $("ownerFilter").value = "";
-        $("statusFilter").value = "";
         filterOptions();
         render();
         if(!demo){await refreshNativeScope();await load();}
@@ -4981,32 +5029,36 @@
       }
       filterOptions();
       render();
+      persistFilters(true);
     };
-  $("search").oninput = render;
+  $("search").oninput = () => {
+    render();
+    persistFilters();
+  };
   $("advancedKind").onchange = () => {
     advancedSelected=[];$("advancedValue").value='';closeAdvancedChoices();
-    advancedUI(true);render();persistAdvancedFilters(true);
+    advancedUI(true);render();persistFilters(true);
   };
   $("advancedField").onchange = () => {
-    advancedSelected=[];$("advancedValue").value='';closeAdvancedChoices();render();persistAdvancedFilters(true);
+    advancedSelected=[];$("advancedValue").value='';closeAdvancedChoices();render();persistFilters(true);
   };
   $("advancedChoices").onchange = event => {
     if(!event.target.matches('[data-advanced-choice]'))return;
     const value=event.target.value;
     advancedSelected=[...$("advancedChoices").querySelectorAll('input:checked')].map(input=>input.value);
-    render();persistAdvancedFilters(true);
+    render();persistFilters(true);
     [...$("advancedChoices").querySelectorAll('input')].find(input=>input.value===value)?.focus({preventScroll:true});
   };
   $("advancedChoices").onclick = event=>{
-    if(event.target.closest('[data-clear-advanced-choices]')){advancedSelected=[];render();persistAdvancedFilters(true);}
+    if(event.target.closest('[data-clear-advanced-choices]')){advancedSelected=[];render();persistFilters(true);}
   };
   $("advancedValue").closest('.advanced-picker').addEventListener('focusout',event=>{
     if(event.relatedTarget&&!event.currentTarget.contains(event.relatedTarget))closeAdvancedChoices();
   });
   $("advancedValue").onfocus=openAdvancedChoices;
   $("advancedValue").onclick=openAdvancedChoices;
-  $("advancedValue").oninput=()=>{render();openAdvancedChoices();persistAdvancedFilters();};
-  $("advancedJoin").onchange=()=>{advancedJoin=$("advancedJoin").value==='or'?'or':'and';render();persistAdvancedFilters(true);};
+  $("advancedValue").oninput=()=>{render();openAdvancedChoices();persistFilters();};
+  $("advancedJoin").onchange=()=>{advancedJoin=$("advancedJoin").value==='or'?'or':'and';render();persistFilters(true);};
   const advancedKeys=event=>{
     if(event.key==='Escape') {
       event.preventDefault();closeAdvancedChoices();advancedClosing=true;$("advancedValue").focus({preventScroll:true});advancedClosing=false;
@@ -5027,14 +5079,33 @@
   document.addEventListener('scroll',positionAdvancedChoices,true);
   $("advancedAdd").onclick = () => {
     if(!$("advancedField").value||(!$("advancedValue").value.trim()&&!advancedSelected.length))return;
-    advancedRules.push(draftAdvancedRule());advancedSelected=[];$("advancedValue").value='';closeAdvancedChoices();render();persistAdvancedFilters(true);
+    advancedRules.push(draftAdvancedRule());advancedSelected=[];$("advancedValue").value='';closeAdvancedChoices();render();persistFilters(true);
   };
   $("advancedChips").onclick = event => {
     const button=event.target.closest('[data-remove-filter]');
-    if(button){advancedRules.splice(Number(button.dataset.removeFilter),1);render();persistAdvancedFilters(true);}
+    if(button){advancedRules.splice(Number(button.dataset.removeFilter),1);render();persistFilters(true);}
   };
+  function clearAdvancedFilters() {
+    $("advancedValue").value = "";
+    advancedRules = [];
+    advancedSelected = [];
+    advancedDraftRestore = null;
+    closeAdvancedChoices();
+  }
   $("advancedClear").onclick = () => {
-    $("advancedValue").value='';advancedRules=[];advancedSelected=[];closeAdvancedChoices();render();persistAdvancedFilters(true);
+    clearAdvancedFilters();
+    render();
+    persistFilters(true);
+  };
+  $("resetFilters").onclick = () => {
+    for (const id of Object.keys(quickSelections)) quickSelections[id] = [];
+    $("search").value = "";
+    for (const id of activeFilterFlags()) $(id).checked = false;
+    clearAdvancedFilters();
+    advancedJoin = "and";
+    filterOptions();
+    render();
+    persistFilters(true);
   };
   let popupProjectId = null,
     popupScroll = null;
